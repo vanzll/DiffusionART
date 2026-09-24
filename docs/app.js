@@ -53,6 +53,7 @@
   function selectVideo(entry) {
     generation++;
     pausePair();
+    correcting = false;
     status.textContent = '';
     videos.forEach((video, index) => {
       video.poster = entry.sides[index].poster;
@@ -69,6 +70,12 @@
     document.getElementById('image-benchmark').textContent = entry.benchmark;
     ['before', 'after'].forEach((side, index) => {
       const image = document.getElementById(`image-${side}`);
+      image.style.visibility = 'hidden';
+      image.onload = () => { image.style.visibility = 'visible'; };
+      image.onerror = () => {
+        image.style.visibility = 'visible';
+        image.alt = 'Image could not be loaded. Refresh the page or select another example.';
+      };
       image.src = entry.sides[index].image;
       image.alt = `${index === 0 ? 'Pretrained' : 'DiffusionART'}: ${entry.text}`;
     });
