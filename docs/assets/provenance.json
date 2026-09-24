@@ -1,0 +1,406 @@
+{
+  "media": {
+    "videos": [
+      {
+        "index": 94,
+        "text": "a mad ocean, boat is sinking",
+        "seed": 406,
+        "run": "7l6xk2na",
+        "label": "Ocean",
+        "sides": [
+          {
+            "step": 0,
+            "video": "assets/video-94-before.mp4",
+            "poster": "assets/video-94-before.jpg"
+          },
+          {
+            "step": 10,
+            "video": "assets/video-94-after.mp4",
+            "poster": "assets/video-94-after.jpg"
+          }
+        ]
+      },
+      {
+        "index": 113,
+        "text": "A white horse gallops through shallow water along a sunlit beach.",
+        "seed": 425,
+        "run": "7l6xk2na",
+        "label": "Coast",
+        "sides": [
+          {
+            "step": 0,
+            "video": "assets/video-113-before.mp4",
+            "poster": "assets/video-113-before.jpg"
+          },
+          {
+            "step": 20,
+            "video": "assets/video-113-after.mp4",
+            "poster": "assets/video-113-after.jpg"
+          }
+        ]
+      },
+      {
+        "index": 136,
+        "text": "A steam train crosses a stone viaduct through green hills.",
+        "seed": 448,
+        "run": "7l6xk2na",
+        "label": "Viaduct",
+        "sides": [
+          {
+            "step": 0,
+            "video": "assets/video-136-before.mp4",
+            "poster": "assets/video-136-before.jpg"
+          },
+          {
+            "step": 30,
+            "video": "assets/video-136-after.mp4",
+            "poster": "assets/video-136-after.jpg"
+          }
+        ]
+      },
+      {
+        "index": 139,
+        "text": "The camera approaches a glass pavilion surrounded by autumn trees.",
+        "seed": 451,
+        "run": "7l6xk2na",
+        "label": "Architecture",
+        "sides": [
+          {
+            "step": 0,
+            "video": "assets/video-139-before.mp4",
+            "poster": "assets/video-139-before.jpg"
+          },
+          {
+            "step": 20,
+            "video": "assets/video-139-after.mp4",
+            "poster": "assets/video-139-after.jpg"
+          }
+        ]
+      },
+      {
+        "index": 106,
+        "text": "The camera follows a winding river through a valley of autumn trees.",
+        "seed": 418,
+        "run": "7l6xk2na",
+        "label": "Autumn",
+        "sides": [
+          {
+            "step": 0,
+            "video": "assets/video-106-before.mp4",
+            "poster": "assets/video-106-before.jpg"
+          },
+          {
+            "step": 20,
+            "video": "assets/video-106-after.mp4",
+            "poster": "assets/video-106-after.jpg"
+          }
+        ]
+      },
+      {
+        "index": 144,
+        "text": "A floating island drifts above a sea of clouds, with waterfalls spilling from its edges.",
+        "seed": 456,
+        "run": "7l6xk2na",
+        "label": "Fantasy",
+        "sides": [
+          {
+            "step": 0,
+            "video": "assets/video-144-before.mp4",
+            "poster": "assets/video-144-before.jpg"
+          },
+          {
+            "step": 10,
+            "video": "assets/video-144-after.mp4",
+            "poster": "assets/video-144-after.jpg"
+          }
+        ]
+      }
+    ],
+    "images": [
+      {
+        "label": "Christmas",
+        "text": ". a snowy chicago street during christmas art by ludwig fahrenkrog",
+        "run": "mofumvbw",
+        "benchmark": "PickScore",
+        "index": 14,
+        "sides": [
+          {
+            "step": 0,
+            "image": "assets/image-chicago-before.jpg"
+          },
+          {
+            "step": 500,
+            "image": "assets/image-chicago-after.jpg"
+          }
+        ]
+      },
+      {
+        "label": "Jungle",
+        "text": "a photo of furry teddy bears looking at a rover 7 5 v 8 car that is in the jungle, wideangle mgzt,",
+        "run": "mofumvbw",
+        "benchmark": "PickScore",
+        "index": 6,
+        "sides": [
+          {
+            "step": 0,
+            "image": "assets/image-teddy-bears-before.jpg"
+          },
+          {
+            "step": 500,
+            "image": "assets/image-teddy-bears-after.jpg"
+          }
+        ]
+      },
+      {
+        "label": "Greenhouse",
+        "text": "huge domed greenhouse in a desert",
+        "run": "mofumvbw",
+        "benchmark": "PickScore",
+        "index": 5,
+        "sides": [
+          {
+            "step": 0,
+            "image": "assets/image-greenhouse-before.jpg"
+          },
+          {
+            "step": 500,
+            "image": "assets/image-greenhouse-after.jpg"
+          }
+        ]
+      },
+      {
+        "label": "Glass",
+        "text": "a photo of a wine glass",
+        "run": "3t35bwps",
+        "benchmark": "Multi-reward",
+        "index": 13,
+        "sides": [
+          {
+            "step": 0,
+            "image": "assets/image-13-before.jpg"
+          },
+          {
+            "step": 60,
+            "image": "assets/image-13-after.jpg"
+          }
+        ]
+      },
+      {
+        "label": "Suitcases",
+        "text": "a photo of three suitcases",
+        "run": "3t35bwps",
+        "benchmark": "Multi-reward",
+        "index": 0,
+        "sides": [
+          {
+            "step": 0,
+            "image": "assets/image-0-before.jpg"
+          },
+          {
+            "step": 60,
+            "image": "assets/image-0-after.jpg"
+          }
+        ]
+      },
+      {
+        "label": "Horse",
+        "text": "a photo of a horse",
+        "run": "3t35bwps",
+        "benchmark": "Multi-reward",
+        "index": 1,
+        "sides": [
+          {
+            "step": 0,
+            "image": "assets/image-1-before.jpg"
+          },
+          {
+            "step": 60,
+            "image": "assets/image-1-after.jpg"
+          }
+        ]
+      }
+    ]
+  },
+  "files": [
+    {
+      "asset": "assets/video-94-before.mp4",
+      "sha256": "65757b884e52c377af966b4369de3682fd1818ace43bc2359603214ead7b49de"
+    },
+    {
+      "asset": "assets/video-94-before.jpg",
+      "sha256": "2361f88e4176049063423f95311a5082b9ab3dec28a5e4810f5ef8766f4b4b21",
+      "transform": "JPEG poster, full frame, quality 92"
+    },
+    {
+      "asset": "assets/video-94-after.mp4",
+      "sha256": "11e6c95a5aba5ba4e33c62bd3880ea214e20096e435ad003894a47adc07ca56d"
+    },
+    {
+      "asset": "assets/video-94-after.jpg",
+      "sha256": "ba583c62387fc9d283de5bbe3795dfead988c4a5d87cc3d78b98d4028af07c01",
+      "transform": "JPEG poster, full frame, quality 92"
+    },
+    {
+      "asset": "assets/video-113-before.mp4",
+      "sha256": "4c484efff6af258fd58f2b921ab2c28b97ee3dae434f66d304f2a728ea5baf46"
+    },
+    {
+      "asset": "assets/video-113-before.jpg",
+      "sha256": "eadc07a28cd81b25e1e05aa538c272ef01a64594c4b97962add8909292be7343",
+      "transform": "JPEG poster, full frame, quality 92"
+    },
+    {
+      "asset": "assets/video-113-after.mp4",
+      "sha256": "e34968eed43af86a6a45e9765b3d313f69c334e7924d006854f1b05c4c6d8d19"
+    },
+    {
+      "asset": "assets/video-113-after.jpg",
+      "sha256": "0953a02171b325aacf36eb0ba3a98026430d4860b7a0d5bb4a8705a19ae01be1",
+      "transform": "JPEG poster, full frame, quality 92"
+    },
+    {
+      "asset": "assets/video-136-before.mp4",
+      "sha256": "fb754ac32c8c87f0adb2011cc706572ee3853da6ba9d187ba549e22693398a55"
+    },
+    {
+      "asset": "assets/video-136-before.jpg",
+      "sha256": "a28f546df74f10d3be5540d07ecbdec87422b6c3cc4d114a62bf78f9180680cc",
+      "transform": "JPEG poster, full frame, quality 92"
+    },
+    {
+      "asset": "assets/video-136-after.mp4",
+      "sha256": "69a4a558410605654780a7dc35d0e8c7ef7d1e70efbe5785a34b011eb34ffaa7"
+    },
+    {
+      "asset": "assets/video-136-after.jpg",
+      "sha256": "27ce16cefd068af5e37319cfabdcc19bf6b4e8cd4025e46969b366b6ccb90902",
+      "transform": "JPEG poster, full frame, quality 92"
+    },
+    {
+      "asset": "assets/video-139-before.mp4",
+      "sha256": "10568caf9e89d2bce3ef375e09bae47bf45caa14a928fbd26375087b5923318b"
+    },
+    {
+      "asset": "assets/video-139-before.jpg",
+      "sha256": "c6d3c3a758367cbe3e370ff8e6803cec290d6d102416841a92a48e0a9aaf178b",
+      "transform": "JPEG poster, full frame, quality 92"
+    },
+    {
+      "asset": "assets/video-139-after.mp4",
+      "sha256": "cd681b7b956aec8440ed448e06782829b1a90f2ccc1c53962948e9f81e6401b2"
+    },
+    {
+      "asset": "assets/video-139-after.jpg",
+      "sha256": "41e4e78b9eff48eb33ee2127af89155f646e3f4fb52fe31eeed9cea6e5c1b715",
+      "transform": "JPEG poster, full frame, quality 92"
+    },
+    {
+      "asset": "assets/video-106-before.mp4",
+      "sha256": "e46c85cec8c7fc1fd9b9e4a4c2e1ebba19aaf31a8249f84f049615ca31d78e47"
+    },
+    {
+      "asset": "assets/video-106-before.jpg",
+      "sha256": "680ba2b3bf0d48c8edcdaaff9f90d4256a309bfa4f2f32df307ae2f3faa23afb",
+      "transform": "JPEG poster, full frame, quality 92"
+    },
+    {
+      "asset": "assets/video-106-after.mp4",
+      "sha256": "d78ca3d0685f1086db3835acb7c64dbfeb9a755c4774a639d1b7d1af511f3a3a"
+    },
+    {
+      "asset": "assets/video-106-after.jpg",
+      "sha256": "c31808f70b5d2aa5bed4802fd63e51adc71bd253b84763c9dfee6b5408fb4277",
+      "transform": "JPEG poster, full frame, quality 92"
+    },
+    {
+      "asset": "assets/video-144-before.mp4",
+      "sha256": "858253d5a9c783bdf3be9e20fa638fb9d943af31481d1d38a003743ae518416e"
+    },
+    {
+      "asset": "assets/video-144-before.jpg",
+      "sha256": "e34217270ae7b9d1b484522d6b1876a542c315d58a40ec1f4a5abfb1bde81712",
+      "transform": "JPEG poster, full frame, quality 92"
+    },
+    {
+      "asset": "assets/video-144-after.mp4",
+      "sha256": "36f79c0bbb317f033e084b3fb5a286e6a6ffcf72c8780c258b8a0f300357063e"
+    },
+    {
+      "asset": "assets/video-144-after.jpg",
+      "sha256": "cd0da33627ec496144ad5a08d2e446be014d0afdbaa40a616c13466f588d5891",
+      "transform": "JPEG poster, full frame, quality 92"
+    },
+    {
+      "asset": "assets/hero.jpg",
+      "sha256": "9a3458bb3892c0c0664993082d540a0633dafc9e2cdf2d9bae29b57020c055d4",
+      "transform": "JPEG poster, full frame, quality 92"
+    },
+    {
+      "asset": "assets/image-chicago-before.jpg",
+      "sha256": "48a92b57ce8f820b02888f51ccc53f261be4b4695361ed8864fa73236110dde4"
+    },
+    {
+      "asset": "assets/image-chicago-after.jpg",
+      "sha256": "e3faecf5abd3171b3d8c9a97fa46523db2a8664bd71de27f2dc7f6d5e123e5d6"
+    },
+    {
+      "asset": "assets/image-teddy-bears-before.jpg",
+      "sha256": "414a5e21d1626155f875b2c22825f1f2af8b7eb8cac7ad8175a9f7f62a1963aa"
+    },
+    {
+      "asset": "assets/image-teddy-bears-after.jpg",
+      "sha256": "17121cc4ae71b97cc9311ec34a27bacdd0740c0589734fb44746bd022e8fd61e"
+    },
+    {
+      "asset": "assets/image-greenhouse-before.jpg",
+      "sha256": "d4badfa0d0393683d26117312088ef53b563cfa61647e33ea8a25f83ab6edea1"
+    },
+    {
+      "asset": "assets/image-greenhouse-after.jpg",
+      "sha256": "f6ab3673fbae3adf0412cfd5bee09e38354882e37d648eda5855976a315812d9"
+    },
+    {
+      "asset": "assets/image-13-before.jpg",
+      "sha256": "47afe85e3b64d96e51b62c89be5ea2bff962021507df0f8dee102acede3b712a"
+    },
+    {
+      "asset": "assets/image-13-after.jpg",
+      "sha256": "21c40e09daee2f6f30493603eb2f809a42735875f7ce12770710dd2a87738feb"
+    },
+    {
+      "asset": "assets/image-0-before.jpg",
+      "sha256": "5ea40fc70fec8f3824904e0f1cbabfda1be01fa68c3a5895a12025d73f94eaf7"
+    },
+    {
+      "asset": "assets/image-0-after.jpg",
+      "sha256": "3134741506d4dcf1ad0be0f102c8a8adb37d9fa036c9df2ef51fa767773a85ea"
+    },
+    {
+      "asset": "assets/image-1-before.jpg",
+      "sha256": "c5b9b5348901fd00e625a8b5b26b226c24ff1da9b07422524c8fe50815fb73b8"
+    },
+    {
+      "asset": "assets/image-1-after.jpg",
+      "sha256": "24b823364155701a143044833489404df8f96cc526dd0f86e8d7658ab9017b5f"
+    },
+    {
+      "asset": "assets/efficiency.png",
+      "sha256": "b2a466bbb1984d5aff65862b05e8ee254a24492e0325b194eb8baff2c1b9d66b"
+    },
+    {
+      "asset": "assets/efficiency.csv",
+      "sha256": "24f32d47efc90e515a9bfe817c793369be3398c45c3e1e83fa4fdee98ff0d54a"
+    },
+    {
+      "asset": "assets/pairwise.png",
+      "sha256": "1a369013f1a03a18dc32f5fe56aa704b7b3bb0c0f89a6e11cb0c3fadc26a1e0e"
+    },
+    {
+      "asset": "assets/i2v.png",
+      "sha256": "05276e663f9b055bc6a404d84bd7a247bc83adfeef22a3db1f8ef96c19ca7b4d"
+    }
+  ],
+  "note": "Curated qualitative examples. Videos are byte-identical to the retained evaluations; images are original JPEGs. Posters are full-frame JPEG previews.",
+  "video_identity": "Same run, prompt, seed and sampling protocol within each pair.",
+  "image_identity": "Same prompt and logged media index. Per-image seeds are not asserted."
+}
