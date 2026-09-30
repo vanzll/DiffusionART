@@ -6,3 +6,13 @@ __pycache__/
 node_modules/
 test-results/
 playwright-report/
+.venv/
+.venv-*/
+third_party/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+outputs/
+track.md

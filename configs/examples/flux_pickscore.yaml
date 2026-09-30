@@ -1,0 +1,95 @@
+# Native FLUX integration check; not a paper reproduction profile.
+name: flux-pickscore-integration
+task: t2i
+seed: 42
+algorithm:
+  name: diffusionart
+  options:
+    restore_zero_signal: false
+    covariance:
+      reduction: unbiased
+      direction_mode: historical
+      scale_mode: unit_normalized_covariance
+      guidance_gain: 1.0
+      zero_signal_mode: historical
+    loss:
+      loss_space: velocity_linear_sigma
+      direction_normalization: rms
+      mask_space: velocity
+      velocity_mask_metric: scheduler_reference_metric
+      corrective_mask_enabled: true
+      q2_reference_sde_noise_level: 0.8
+      q2_reference_kl_threshold: 0.00001
+model:
+  name: flux
+  checkpoint: black-forest-labs/FLUX.1-dev
+  revision: 3de623fc3c33e44ffbe2bad470d0f45bccf2eb21
+  options:
+    local_files_only: true
+    scaling_factor: 0.3611
+    shift_factor: 0.1159
+    latent_channels: 16
+    spatial_factor: 8
+    max_sequence_length: 128
+    gradient_checkpointing: true
+    decode_microbatch: 1
+    scheduler:
+      use_dynamic_shifting: true
+      shift: 1.0
+      base_image_seq_len: 256
+      max_image_seq_len: 4096
+      base_shift: 0.5
+      max_shift: 1.15
+    finetune:
+      mode: lora
+      rank: 32
+      alpha: 64
+      target_modules: [attn.to_q, attn.to_k, attn.to_v, attn.to_out.0]
+reward:
+  name: pickscore
+  checkpoint: yuvalkirstain/PickScore_v1
+  revision: a4e4367c6dfa7288a00c550414478f865b875800
+  normalization: fixed
+  weights: {pickscore: 1.0}
+  options:
+    local_files_only: true
+    processor: laion/CLIP-ViT-H-14-laion2B-s32B-b79K
+    processor_revision: 1c2b8495b28150b8a4922ee1c8edee224c284c0c
+    microbatch: 1
+data:
+  manifest: configs/examples/image_prompts.jsonl
+  sha256: 923ffe4cfbf8b780f896a491f3faeb024e1e85e2850a96a39ffb5dcd7a6cd233
+  shuffle: true
+sampling:
+  steps: 6
+  prompts_per_rollout: 2
+  samples_per_prompt: 2
+  microbatch: 1
+  guidance_scale: 3.5
+  height: 512
+  width: 512
+  frames: 1
+  fps: 1.0
+  options:
+    train_timesteps: [0, 1, 2, 3, 4, 5]
+training:
+  max_updates: 4
+  learning_rate: 0.0003
+  microbatch: 1
+  precision: bf16
+  grad_clip: 1.0
+evaluation:
+  every_updates: 2
+  manifest: configs/examples/image_prompts.jsonl
+  manifest_sha256: 923ffe4cfbf8b780f896a491f3faeb024e1e85e2850a96a39ffb5dcd7a6cd233
+  sampling_steps: 28
+  retain_all: true
+  fps: 1.0
+runtime:
+  output_dir: outputs/flux-pickscore-integration
+  device: cuda
+  distributed: none
+  checkpoint_every: 2
+  log: jsonl
+provenance:
+  kind: native_integration_example_not_paper_result

@@ -1,0 +1,8 @@
+recursive-include configs *.yaml *.jsonl
+recursive-include docs *.md *.json
+recursive-include environments *.txt *.lock
+recursive-include scripts *.sh
+recursive-include licenses *.txt
+recursive-include assets/readme *.jpg *.json
+include THIRD_PARTY_NOTICES.md
+include uv.lock

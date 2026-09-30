@@ -1,0 +1,4 @@
+{"sample_id":"geneval-example-0","prompt":"a photo of a cat","metadata":{"prompt":"a photo of a cat","tag":"single_object","include":[{"class":"cat","count":1}]}}
+{"sample_id":"geneval-example-1","prompt":"a photo of two dogs","metadata":{"prompt":"a photo of two dogs","tag":"counting","include":[{"class":"dog","count":2}],"exclude":[{"class":"dog","count":3}]}}
+{"sample_id":"geneval-example-2","prompt":"a photo of a red car","metadata":{"prompt":"a photo of a red car","tag":"colors","include":[{"class":"car","count":1,"color":"red"}]}}
+{"sample_id":"geneval-example-3","prompt":"a photo of a dog left of a cat","metadata":{"prompt":"a photo of a dog left of a cat","tag":"position","include":[{"class":"cat","count":1},{"class":"dog","count":1,"position":["left of",0]}]}}

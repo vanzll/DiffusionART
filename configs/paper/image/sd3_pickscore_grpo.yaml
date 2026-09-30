@@ -1,0 +1,152 @@
+# Full-budget training candidate; not certified historical reproduction.
+extends: ../../examples/sd3_grpo_pickscore.yaml
+name: paper-sd3_pickscore_grpo-candidate
+seed: 42
+algorithm:
+  name: flow_grpo
+  options:
+    loss:
+      ratio_clip: 1.0e-05
+      advantage_clip: 5
+    updates_per_rollout: 2
+    training_batches: 16
+    shuffle_rows: true
+    zero_advantage_mode: filter_pad
+    max_empty_rollouts: 100
+    evaluation_ema:
+      enabled: true
+      decay: 0.9
+      refresh: logical_batch
+model:
+  name: sd3
+  checkpoint: ${SD3_MODEL}
+  revision: b940f670f0eda2d07fbb75229e779da1ad11eb80
+reward:
+  name: pickscore
+  checkpoint: ${PICKSCORE_MODEL}
+  revision: a4e4367c6dfa7288a00c550414478f865b875800
+  normalization: fixed
+  weights:
+    pickscore: 1
+  options:
+    local_files_only: true
+    processor: ${PICKSCORE_PROCESSOR}
+    processor_revision: 1c2b8495b28150b8a4922ee1c8edee224c284c0c
+    microbatch: 1
+data:
+  manifest: ${PICKSCORE_TRAIN_MANIFEST}
+  sha256: ${PICKSCORE_TRAIN_SHA256}
+  shuffle: true
+sampling:
+  steps: 10
+  prompts_per_rollout: 48
+  samples_per_prompt: 24
+  microbatch: 9
+  guidance_scale: 1
+  height: 512
+  width: 512
+  options:
+    shift: 3
+    transition_kind: sde
+    likelihood: gaussian
+    noise_level: 0.8
+    selection: fixed
+    pool:
+    - 0
+    - 1
+    - 2
+    - 3
+    - 4
+    - 5
+    - 6
+    - 7
+    - 8
+    count: 9
+    logical_batch_size: 9
+    unselected_noise: all
+training:
+  max_updates: 1000
+  learning_rate: 0.0003
+  microbatch: 9
+  precision: fp16
+  allow_tf32: true
+  grad_clip: 1
+  optimizer: adamw
+  weight_decay: 0.0001
+  betas:
+  - 0.9
+  - 0.999
+  epsilon: 1.0e-08
+evaluation:
+  every_updates: 0
+  at_updates:
+  - 60
+  - 120
+  - 180
+  - 240
+  - 300
+  - 360
+  - 420
+  - 480
+  - 540
+  - 600
+  - 660
+  - 720
+  - 780
+  - 840
+  - 900
+  - 960
+  manifest: ${PICKSCORE_EVAL_MANIFEST}
+  manifest_sha256: ${PICKSCORE_EVAL_SHA256}
+  sampling_steps: 40
+  height: 512
+  width: 512
+  seed: 42
+runtime:
+  output_dir: ${PAPER_OUTPUT_ROOT}/sd3_pickscore_grpo
+  device: cuda
+  distributed: ddp
+  checkpoint_every: 0
+  checkpoint_at_updates:
+  - 100
+  - 200
+  - 300
+  - 400
+  - 500
+  - 600
+  - 700
+  - 800
+  - 900
+  - 1000
+provenance:
+  kind: training_candidate_not_fullhistorical_reproduction
+  source_run: dosfn01k
+  source_url: https://wandb.ai/stableNFT-baselines/baselines/runs/dosfn01k
+  runtime_commit: null
+  runtime_source_status: unresolved
+  research_reference_commit: 3ca2a36f6b20c53a06813013234666d9c033a660
+  archived_model: stabilityai/stable-diffusion-3.5-medium
+  archived_model_revision: main
+  source_world_size: 8
+  source_train_batch_size: 9
+  source_num_batches_per_epoch: 16
+  source_gradient_accumulation_steps: 8
+  source_updates_per_rollout: 2
+  candidate_updates_per_rollout: 2
+  source_timestep_fraction: 0.99
+  source_sde_type: sde
+  source_logprob_type: gaussian
+  source_global_std: true
+  source_same_latent: false
+  source_resume_global_step: 0
+  budget_basis: 1000_successful_updates_plotted_horizon_candidate
+  cadence_basis: archived_eval_freq_epochs_times_candidate_updates_per_rollout
+  semantic_gaps:
+  - Prompt-major local groups replace historical DistributedKRepeatSampler shuffled mixed rows; exact
+    order and RNG parity pending.
+  - Model/reward revisions and text/LoRA asset conventions are release example pins, not recovered historical
+    artifact hashes.
+  - 1000 successful optimizer updates are the plotted-horizon training candidate; historical W&B indexing/overflow/overshoot
+    parity is not certified.
+  - EMA decay/refresh defaults are mapped from research 3ca2a36f; historical runtime implementations remain
+    unresolved.

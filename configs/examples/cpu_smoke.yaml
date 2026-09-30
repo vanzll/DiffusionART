@@ -1,0 +1,30 @@
+# Software integration test only. This is not an image-generation experiment.
+schema_version: 1
+name: cpu-smoke
+task: t2i
+seed: 42
+algorithm: diffusionart
+model: tensor_fixture
+reward:
+  name: quadratic
+  weights: {quadratic: 1.0}
+  normalization: raw
+sampling:
+  steps: 4
+  prompts_per_rollout: 2
+  samples_per_prompt: 4
+  microbatch: 4
+  frames: 1
+  height: 8
+  width: 8
+training:
+  max_updates: 4
+  learning_rate: 0.001
+  microbatch: 3
+  precision: fp32
+evaluation:
+  every_updates: 0
+runtime:
+  device: cpu
+  output_dir: outputs/cpu-smoke
+  checkpoint_every: 2

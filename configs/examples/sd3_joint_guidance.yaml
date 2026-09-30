@@ -1,0 +1,12 @@
+# ART joint-advantage integration check, NOT the paper's four-reward profile.
+extends: sd3_composite.yaml
+name: sd35-joint-guidance-integration
+algorithm:
+  options:
+    multi_reward_advantage:
+      weights: {pickscore: 1.0, aesthetic: 1.0}
+      score_space: fixed_normalized
+      eps: 0.0001
+      renormalize_combined: false
+runtime:
+  output_dir: outputs/sd35-joint-guidance-integration

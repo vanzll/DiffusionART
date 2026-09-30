@@ -1,0 +1,43 @@
+# Four-update integration recipe, not a frozen paper reproduction profile.
+extends: hunyuan_art.yaml
+name: wan-art-integration
+task: i2v
+model:
+  name: wan_i2v_distilled
+  checkpoint: ${WAN_DISTILLED_TRANSFORMER}
+  revision: ${WAN_DISTILLED_REVISION}
+  options:
+    base_checkpoint: ${WAN_BASE_MODEL}
+    base_revision: ${WAN_BASE_REVISION}
+    reference_checkpoint: ${FLUX_REFERENCE_MODEL}
+    reference_revision: ${FLUX_REFERENCE_REVISION}
+    native_root: ${DANCEGRPO_ROOT}
+    finetune: {mode: full}
+    gradient_checkpointing: true
+    allow_tf32: false
+    ffmpeg: ffmpeg
+    ffprobe: ffprobe
+reward:
+  weights: {VQ: 0.5, MQ: 0.5, TA: 0.0}
+data:
+  manifest: ${WAN_TRAIN_MANIFEST}
+  sha256: ${WAN_TRAIN_SHA256}
+sampling:
+  steps: 4
+  microbatch: 8
+  height: 400
+  width: 640
+  options:
+    train_timestep_count: 3
+    train_timestep_pool: [0, 1, 2]
+training:
+  microbatch: 4
+  weight_decay: 0.0001
+evaluation:
+  manifest: ${WAN_EVAL_MANIFEST}
+  manifest_sha256: ${WAN_EVAL_SHA256}
+  sampling_steps: 4
+  height: 400
+  width: 640
+runtime:
+  output_dir: outputs/wan-art-integration

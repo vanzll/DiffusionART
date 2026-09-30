@@ -1,0 +1,8 @@
+extends: hunyuan_nft.yaml
+name: hunyuan-nft-onpolicy-integration
+algorithm:
+  options:
+    old_policy:
+      mode: no-ema
+runtime:
+  output_dir: outputs/hunyuan-nft-onpolicy-integration

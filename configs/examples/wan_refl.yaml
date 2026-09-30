@@ -1,0 +1,16 @@
+extends: wan_art.yaml
+name: wan-refl-integration
+algorithm:
+  name: refl
+  options:
+    reward_loss_scale: 1.0
+sampling:
+  samples_per_prompt: 1
+  microbatch: 1
+  options:
+    train_timestep_count: 1
+    train_timestep_pool: [3]
+training:
+  microbatch: 1
+runtime:
+  output_dir: outputs/wan-refl-integration

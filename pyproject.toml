@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "visual-diffusion-rl"
+version = "0.1.0.dev0"
+description = "Configurable reinforcement learning for visual generation"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["torch>=2.4,<3", "numpy>=1.24", "PyYAML>=6.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6"]
+diffusers = ["diffusers>=0.30", "transformers>=4.44", "accelerate>=1.0", "safetensors>=0.4", "sentencepiece>=0.2", "peft>=0.13", "Pillow>=10"]
+wandb = ["wandb>=0.18"]
+image-rewards = ["torchvision>=0.19"]
+ocr = ["rapidfuzz>=3.9", "Pillow>=10"]
+
+[project.scripts]
+visual-rl = "visual_rl.train:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]

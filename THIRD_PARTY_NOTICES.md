@@ -1,0 +1,96 @@
+# Third-Party Notices
+
+The release is in development. A project-wide license has not yet been chosen;
+this file does not grant rights over model weights or datasets. Review each
+asset's terms separately before downloading or redistributing it.
+
+## Flow-GRPO
+
+Flow transition equations and migrated research implementations trace to
+https://github.com/yifan123/flow_grpo. The source research tree retains this
+license, reproduced here for the derived portions:
+
+MIT License
+
+Copyright (c) 2025 Jie Liu
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+## Algorithm References
+
+- GenEval training scorer: https://github.com/yifan123/reward-server at
+  `8245af22b75fe640950a880ad31fe702a5d9a014`, `reward_server/gen_eval.py`.
+  Its MIT license (Copyright 2023 Jie Liu) is preserved in
+  `licenses/reward-server-MIT.txt`. `rewards/geneval_engine.py` is a
+  dependency-injected port preserving the scoring rules. Native model loading
+  follows the separately audited deployment changes documented in
+  `docs/geneval-migration.md`. Detector/CLIP weights and benchmark data are not
+  redistributed; their individual terms and original GenEval lineage still
+  require review before publishing a reproduction bundle.
+
+- DiffusionNFT: https://github.com/NVlabs/DiffusionNFT. Its Apache-2.0
+  license is preserved in `licenses/DiffusionNFT-APACHE-2.0.txt`; the upstream
+  license Git blob inspected for this snapshot is
+  `261eeb9e9f8b2b4b0d119366dda99c6fd7d35c64`.
+  The migrated deterministic sampler follows the research `nft_solver.py`,
+  which attributes its solver to MixGRPO. That provenance is retained in
+  `training/nft_sampling.py`; upstream solver/license lineage remains a release
+  audit item, not a blanket redistribution authorization.
+- DanceGRPO: https://github.com/XueZeyue/DanceGRPO, inspected at
+  `15cc71d53cc2e6e18a68ee607d5fb6ba9a99e344`. VideoReward's inference ABI,
+  uniform frame selection and resize geometry are referenced by
+  `rewards/video_reward.py`, through the research ReFL adapter. The source
+  `vision_process.py` attributes its origins to
+  https://github.com/kq-chen/qwen-vl-utils. The inspected DanceGRPO Apache-2.0
+  license is preserved in `licenses/DanceGRPO-APACHE-2.0.txt` (Git blob
+  `a7b8b5e6a6dc555ad43165aa5b8f65c120032468`). Qwen2-VL patch packing follows
+  the native processor layout; tests compare against the separately installed
+  Transformers implementation. The native model/inferencer code and weights
+  are not bundled; their dependency and model-license acceptance remains open.
+  The SD3 Dance adapter references the flow-SDE equations and final-x0 scoring
+  in `fastvideo/train_grpo_flux_lora.py` at that same revision. Its prompt-major
+  grouping and timestep selection adaptations are documented separately.
+- UniRL ReFL: https://github.com/Tencent-Hunyuan/UniRL/tree/main/experimental/refl
+- PickScore: https://github.com/yuvalkirstain/PickScore and
+  https://huggingface.co/yuvalkirstain/PickScore_v1. The native reward adapter
+  loads separately installed Transformers components; no model weights,
+  processor assets or Pick-a-Pic dataset are redistributed.
+- CLIP: https://github.com/openai/CLIP and
+  https://huggingface.co/openai/clip-vit-large-patch14. The CLIPScore adapter
+  follows the research wrapper's tensor preprocessing and logit/30 convention,
+  loading separately installed Transformers and torchvision implementations.
+  No CLIP source tree, model weights or processor assets are bundled.
+- PaddleOCR: https://github.com/PaddlePaddle/PaddleOCR, adapter reference
+  version `v2.9.1`. Recognition is delegated to a separately installed engine;
+  no PaddleOCR source, dictionaries or inference weights are redistributed.
+  The text reward follows the research wrapper and uses separately installed
+  RapidFuzz (https://github.com/rapidfuzz/RapidFuzz) for Levenshtein distance.
+- Improved Aesthetic Predictor: https://github.com/christophschuhmann/improved-aesthetic-predictor
+  at `fe88a163f4661b4ddabba0751ff645e2e620746e`. The native Aesthetic adapter
+  follows its scoring-head architecture through the research wrapper. The
+  upstream LICENSE is Apache-2.0, Git blob
+  `261eeb9e9f8b2b4b0d119366dda99c6fd7d35c64`, byte-identical to the Apache-2.0
+  text already preserved in `licenses/DiffusionNFT-APACHE-2.0.txt`.
+  Model/head weights are downloaded separately, not redistributed here.
+
+Kernel and model-contract documents identify adapted equations and source
+revisions. These links are not a blanket license to vendor further source.
+Model libraries remain separately installed dependencies; native DanceGRPO and
+UniRL modules have not been bundled. Their notices must be preserved if later
+vendored. The package itself is not yet licensed for a public release.

@@ -1,0 +1,7 @@
+# Short FP16 integration example, not a frozen paper reproduction profile.
+extends: sd3_pickscore.yaml
+name: sd35-pickscore-fp16-integration
+training:
+  precision: fp16
+runtime:
+  output_dir: outputs/sd35-pickscore-fp16-integration

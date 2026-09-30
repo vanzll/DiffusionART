@@ -1,0 +1,25 @@
+# Short integration recipe for the research FLUX KL-ADV transfer.
+# Full GenEval budget/data/order belong in the frozen paper profile.
+extends: flux_grpo_pickscore.yaml
+name: flux-dppo-pickscore-integration
+algorithm:
+  name: flow_dppo
+  options:
+    loss: {kl_mask_threshold: 0.00001, advantage_clip: 5.0}
+    updates_per_rollout: 2
+    training_batches: 4
+    shuffle_rows: true
+    zero_advantage_mode: filter_pad
+    max_empty_rollouts: 100
+    evaluation_ema: {enabled: false, decay: 0.9, refresh: logical_batch}
+sampling:
+  options:
+    transition_kind: sde
+    likelihood: gaussian
+    noise_level: 0.7
+    selection: fixed
+    pool: [0, 1, 2]
+    count: 3
+    unselected_noise: ode
+runtime:
+  output_dir: outputs/flux-dppo-pickscore-integration

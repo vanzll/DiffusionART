@@ -1,0 +1,11 @@
+# Binary/tie feedback from fixed-normalized VQ, not scalar magnitudes.
+# Short integration example; paper prompt ordering/profiles are separate.
+extends: hunyuan_art.yaml
+name: hunyuan-pairwise-k8-integration
+algorithm:
+  options:
+    pairwise: {seed: 42}
+reward:
+  weights: {VQ: 1.0, MQ: 0.0, TA: 0.0}
+runtime:
+  output_dir: outputs/hunyuan-pairwise-k8-integration

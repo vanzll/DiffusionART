@@ -1,0 +1,12 @@
+extends: wan_art.yaml
+name: wan-dance-integration
+algorithm:
+  name: dancegrpo
+  options:
+    advantage_epsilon: 0.00000001
+    loss: {ratio_clip: 0.0001, advantage_clip: 5.0}
+sampling:
+  options:
+    noise_level: 0.25
+runtime:
+  output_dir: outputs/wan-dance-integration

@@ -1,0 +1,14 @@
+extends: hunyuan_art_721.yaml
+name: paper-hunyuan-scalar-vq-k8
+reward:
+  weights: {VQ: 1.0, MQ: 0.0, TA: 0.0}
+runtime:
+  output_dir: ${PAPER_VIDEO_OUTPUT_ROOT}/hunyuan-scalar-vq-k8
+provenance:
+  inventory_group: t2v-pairwise
+  run_id: 1iwf5sj9
+  runtime_sha: 75778e7667c5399aaec49fa468bb087cf886bed4
+  runtime_sha_status: inspected_local_git_object
+  reference_sha: 75778e7667c5399aaec49fa468bb087cf886bed4
+  reference_location: runners/t2v_formal_batch_v1/flowart_scalar_vq_k8_eval8fps.json
+  historical_evaluation: video8_shift7_sparse_steps_retained32

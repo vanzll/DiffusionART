@@ -1,0 +1,6 @@
+extends: hunyuan_pairwise_k8.yaml
+name: hunyuan-pairwise-k2-integration
+sampling:
+  samples_per_prompt: 2
+runtime:
+  output_dir: outputs/hunyuan-pairwise-k2-integration

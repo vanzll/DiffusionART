@@ -1,0 +1,13 @@
+extends: hunyuan_nft_ema_721.yaml
+name: paper-cover-hunyuan-nft-ema-11
+reward:
+  weights: {VQ: 0.5, MQ: 0.5, TA: 0.0}
+runtime:
+  output_dir: ${PAPER_VIDEO_OUTPUT_ROOT}/cover-hunyuan-nft-ema-11
+provenance:
+  inventory_group: cover-t2v-vqmq11
+  run_id: njpjfulm
+  runtime_sha: 8b2f8a8d3a07f937221e3963b1e1dd1d21ec5da3
+  reference_sha: 8b2f8a8d3a07f937221e3963b1e1dd1d21ec5da3
+  reference_location: runners/t2v_formal_batch_v1/nft_slowema_vqmq11_curves.json
+  historical_evaluation: video18_shift7_sparse_steps_retained32

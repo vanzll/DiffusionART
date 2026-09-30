@@ -1,0 +1,122 @@
+# Full-budget training candidate; not certified historical reproduction.
+extends: ../../examples/flux_pickscore.yaml
+name: paper-flux_geneval_art-candidate
+seed: 42
+algorithm:
+  name: diffusionart
+  options:
+    restore_zero_signal: false
+    covariance:
+      reduction: unbiased
+      direction_mode: historical
+      scale_mode: unit_normalized_covariance
+      guidance_gain: 1
+      zero_signal_mode: historical
+    loss:
+      loss_space: velocity_linear_sigma
+      direction_normalization: rms
+      mask_space: velocity
+      velocity_mask_metric: scheduler_reference_metric
+      corrective_mask_enabled: true
+      q2_reference_sde_noise_level: 0.8
+      q2_reference_kl_threshold: 1.0e-05
+model:
+  name: flux
+  checkpoint: ${FLUX_MODEL}
+  revision: 3de623fc3c33e44ffbe2bad470d0f45bccf2eb21
+reward:
+  name: geneval
+  checkpoint: ${GENEVAL_MANIFEST}
+  revision: ${GENEVAL_MANIFEST_SHA256}
+  normalization: raw
+  weights:
+    geneval: 1
+  options:
+    worker_python: ${GENEVAL_PYTHON}
+    microbatch: 1
+    detector_microbatch: 1
+    color_workers: 0
+    startup_timeout: 300
+    request_timeout: 300
+data:
+  manifest: ${GENEVAL_TRAIN_MANIFEST}
+  sha256: ${GENEVAL_TRAIN_SHA256}
+  shuffle: true
+sampling:
+  steps: 6
+  prompts_per_rollout: 48
+  samples_per_prompt: 24
+  microbatch: 3
+  guidance_scale: 3.5
+  height: 512
+  width: 512
+  options:
+    train_timesteps:
+    - 0
+    - 1
+    - 2
+    - 3
+    - 4
+    - 5
+training:
+  max_updates: 1000
+  learning_rate: 0.0003
+  microbatch: 3
+  precision: bf16
+  allow_tf32: true
+  grad_clip: 1
+  optimizer: adamw
+  weight_decay: 0.0001
+  betas:
+  - 0.9
+  - 0.999
+  epsilon: 1.0e-08
+evaluation:
+  every_updates: 0
+  at_updates:
+  - 500
+  - 800
+  - 1000
+  manifest: ${GENEVAL_EVAL_MANIFEST}
+  manifest_sha256: ${GENEVAL_EVAL_SHA256}
+  sampling_steps: 28
+  height: 512
+  width: 512
+  seed: 42
+runtime:
+  output_dir: ${PAPER_OUTPUT_ROOT}/flux_geneval_art
+  device: cuda
+  distributed: ddp
+  checkpoint_every: 0
+  checkpoint_at_updates:
+  - 1000
+provenance:
+  kind: training_candidate_not_fullhistorical_reproduction
+  source_run: z9gkdemj
+  source_url: https://wandb.ai/vanzl3386-chinese-university-of-hong-kong-shenzhen/flow-grpo-algo/runs/z9gkdemj
+  runtime_commit: null
+  runtime_source_status: unresolved
+  research_reference_commit: 3ca2a36f6b20c53a06813013234666d9c033a660
+  archived_model: black-forest-labs/FLUX.1-dev
+  archived_model_revision: main
+  source_world_size: 8
+  source_train_batch_size: 3
+  source_num_batches_per_epoch: 48
+  source_gradient_accumulation_steps: 24
+  source_updates_per_rollout: 2
+  candidate_updates_per_rollout: 2
+  source_timestep_fraction: 1
+  source_sde_type: ode
+  source_logprob_type: gaussian
+  source_global_std: true
+  source_same_latent: false
+  source_resume_global_step: 0
+  budget_basis: archived_paper_max_wandb_step
+  cadence_basis: archived_explicit_update_steps
+  semantic_gaps:
+  - Prompt-major local groups replace historical DistributedKRepeatSampler shuffled mixed rows; exact
+    order and RNG parity pending.
+  - Model/reward revisions and text/LoRA asset conventions are release example pins, not recovered historical
+    artifact hashes.
+  - 1000 successful optimizer updates are the plotted-horizon training candidate; historical W&B indexing/overflow/overshoot
+    parity is not certified.

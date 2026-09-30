@@ -1,0 +1,31 @@
+{
+  "source": "DiffusionART project page curated qualitative assets",
+  "note": "Unmodified JPEG copies. Selected examples, not a reproduction acceptance test. Image seeds are not asserted.",
+  "samples": [
+    {
+      "task": "t2i",
+      "run_id": "mofumvbw",
+      "index": 14,
+      "prompt": ". a snowy chicago street during christmas art by ludwig fahrenkrog",
+      "before_step": 0,
+      "after_step": 500,
+      "before": "image-chicago-before.jpg",
+      "after": "image-chicago-after.jpg",
+      "before_sha256": "48a92b57ce8f820b02888f51ccc53f261be4b4695361ed8864fa73236110dde4",
+      "after_sha256": "e3faecf5abd3171b3d8c9a97fa46523db2a8664bd71de27f2dc7f6d5e123e5d6"
+    },
+    {
+      "task": "t2v",
+      "run_id": "7l6xk2na",
+      "index": 106,
+      "seed": 418,
+      "prompt": "The camera follows a winding river through a valley of autumn trees.",
+      "before_step": 0,
+      "after_step": 20,
+      "before": "video-106-before.jpg",
+      "after": "video-106-after.jpg",
+      "before_sha256": "680ba2b3bf0d48c8edcdaaff9f90d4256a309bfa4f2f32df307ae2f3faa23afb",
+      "after_sha256": "c31808f70b5d2aa5bed4802fd63e51adc71bd253b84763c9dfee6b5408fb4277"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+extends: wan_art.yaml
+name: wan-fast-integration
+algorithm:
+  name: flow_grpo_fast
+  options:
+    advantage_epsilon: 0.0001
+    loss: {ratio_clip: 0.00001, advantage_clip: 5.0}
+sampling:
+  options:
+    noise_level: 0.8
+    train_timestep_count: 1
+runtime:
+  output_dir: outputs/wan-fast-integration

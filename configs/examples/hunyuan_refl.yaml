@@ -1,0 +1,18 @@
+# Final-step ReFL. Continuous RGB for gradients, MP4 scores for comparison.
+extends: hunyuan_art.yaml
+name: hunyuan-refl-integration
+algorithm:
+  name: refl
+  options:
+    reward_loss_scale: 1.0
+reward:
+  weights: {VQ: 0.5, MQ: 0.5, TA: 0.0}
+sampling:
+  samples_per_prompt: 1
+  options:
+    train_timestep_count: 1
+    train_timestep_pool: [15]
+training:
+  weight_decay: 0.0001
+runtime:
+  output_dir: outputs/hunyuan-refl-integration
