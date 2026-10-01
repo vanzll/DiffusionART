@@ -108,7 +108,18 @@ export HUNYUAN_REVISION=e8c2aaa66fe3742a32c11a6766aecbf07c56e773
 export HUNYUAN_MODEL="$ASSET_ROOT/HunyuanVideo"
 huggingface-cli download hunyuanvideo-community/HunyuanVideo \
   --revision "$HUNYUAN_REVISION" --local-dir "$HUNYUAN_MODEL"
+
+export HUNYUAN_TEXT_MODEL="$ASSET_ROOT/hunyuan-native-text"
+python -m visual_rl.models.prepare_hunyuan \
+  --model-root "$HUNYUAN_MODEL" --output-dir "$HUNYUAN_TEXT_MODEL"
 ```
+
+The pinned native encoder expects tokenizer files beside encoder weights,
+whereas this snapshot stores them separately. The command creates a symlink
+view for conditioning preparation; it does not copy weights or modify the
+download. Keep its hidden sibling directory and original assets in place.
+Existing outputs are never replaced. Policy/VAE loading still uses
+`HUNYUAN_MODEL`; only conditioning preparation uses `HUNYUAN_TEXT_MODEL`.
 
 Prepare hashed train/eval manifests and cached text conditioning using the
 [Hunyuan guide](hunyuan-runner.md#cached-conditioning). The dataset schema and

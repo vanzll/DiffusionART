@@ -47,13 +47,15 @@ The preparer creates a new prompt manifest and per-prompt safetensors files:
 ```bash
 python -m visual_rl.models.hunyuan_assets \
   --manifest "$PROMPT_MANIFEST" --sha256 "$PROMPT_SHA256" \
-  --model-root "$HUNYUAN_MODEL" --native-root "$DANCEGRPO_ROOT" \
+  --model-root "$HUNYUAN_TEXT_MODEL" --native-root "$DANCEGRPO_ROOT" \
   --output "$CONDITIONING_OUTPUT" --device cuda
 ```
 
 Run this only in the compatible native GPU environment. The source manifest
-is unchanged. Bind the returned manifest path and checksum in the experiment
-config. Loading checks prompt identity, native revision, tensor file checksum
+is unchanged. Prepare `HUNYUAN_TEXT_MODEL` with the asset-layout command in
+[native video setup](video-installation.md#hunyuan). Bind the returned manifest
+path and checksum in the experiment config. Loading checks prompt identity,
+native revision, tensor file checksum
 and the pooled-token-plus-text-mask shape. Complete asset-bundle provenance
 is separate from the available [environment installer](video-installation.md).
 
