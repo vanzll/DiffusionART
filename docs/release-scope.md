@@ -1,8 +1,9 @@
 # Visual Diffusion RL: Release Scope
 
-Draft, 2026-09-29. Working framework name only; repository and published URLs
-remain unchanged. This document is a migration plan, not a claim that training
-code has already been released or validated.
+Development snapshot. The standalone training package and configuration-driven
+entrypoint are implemented; pretrained GPU acceptance and exact historical
+paper-result reproduction remain pending. This document tracks the intended
+coverage and release gates. Repository names and published URLs remain unchanged.
 
 ## Boundaries
 
