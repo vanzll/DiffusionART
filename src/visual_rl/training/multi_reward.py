@@ -28,20 +28,19 @@ def combined_group_advantages(
     *,
     eps=1e-4,
     renormalize_combined=False,
-) -> tuple[Tensor, dict[str, Tensor], dict[str, float]]:
-    """Return detached CPU FP64 combined/component advantages and diagnostics.
+) -> tuple[Tensor, dict[str, Tensor]]:
+    """Return detached CPU FP64 combined and component advantages.
 
     Each [B] or [B, T] reward is centered and population-std normalized within
     identical prompt texts, independently per column, with eps added AFTER std.
     Positive weights are normalized by their sum, unlike scalar reward reporting.
     Optional combined normalization uses global, per-column mean and std.
 
-    Formulas and diagnostic names follow train_sd3.py at canonical 3ca2a36.
+    Formulas follow train_sd3.py at canonical 3ca2a36.
     Sorted keys replace historical insertion-order accumulation (including the
     weight sum), so last-bit rounding can differ. Mathematically tied columns
     retain any FP64 mean/std rounding residual, matching canonical arithmetic.
-    Historical group_std diagnostics flatten columns; advantages never do.
-    Nonfinite inputs or calculated advantages/diagnostics are rejected.
+    Nonfinite inputs, normalization statistics or advantages are rejected.
     """
     eps = _positive_scalar(eps, "eps")
     if type(renormalize_combined) is not bool:
@@ -97,6 +96,8 @@ def combined_group_advantages(
             group_rewards = rewards[name][mask]
             mean = np.mean(group_rewards, axis=0, keepdims=True)
             std = np.std(group_rewards, axis=0, keepdims=True)
+            if not np.isfinite(mean).all() or not np.isfinite(std).all():
+                raise ValueError("calculated advantages must be finite")
             advantages[mask] = (group_rewards - mean) / (std + eps)
         per_component[name] = advantages
         combined += normalized_weights[name] * advantages
@@ -108,52 +109,7 @@ def combined_group_advantages(
     ):
         raise ValueError("calculated advantages must be finite")
 
-    stacked = np.stack([per_component[name] for name in names], axis=0)
-    conflict = (stacked > 0).any(axis=0) & (stacked < 0).any(axis=0)
-    metrics = {
-        "combined_mean": float(np.mean(combined)),
-        "combined_std": float(np.std(combined)),
-        "combined_abs_mean": float(np.mean(np.abs(combined))),
-        "conflict_fraction": float(np.mean(conflict)),
-        "all_zero_fraction": float(np.mean(np.all(stacked == 0, axis=0))),
-        "renormalized": float(renormalize_combined),
-    }
-    weighted_component_abs_mean = 0.0
-    for name, advantages in per_component.items():
-        raw = rewards[name]
-        group_stds = np.asarray([np.std(raw[mask]) for mask in masks])
-        metrics[f"{name}/mean"] = float(np.mean(advantages))
-        metrics[f"{name}/std"] = float(np.std(advantages))
-        metrics[f"{name}/abs_mean"] = float(np.mean(np.abs(advantages)))
-        metrics[f"{name}/zero_fraction"] = float(np.mean(advantages == 0))
-        metrics[f"{name}/weight"] = normalized_weights[name]
-        metrics[f"{name}/raw_mean"] = float(np.mean(raw))
-        metrics[f"{name}/raw_std"] = float(np.std(raw))
-        metrics[f"{name}/group_std_mean"] = float(np.mean(group_stds))
-        metrics[f"{name}/group_zero_std_fraction"] = float(np.mean(group_stds <= eps))
-        weighted_component_abs_mean += normalized_weights[name] * metrics[f"{name}/abs_mean"]
-    metrics["scalarization_retention"] = float(
-        np.mean(np.abs(combined)) / max(weighted_component_abs_mean, eps)
-    )
-    correlations = []
-    for left_index, left_name in enumerate(names):
-        for right_name in names[left_index + 1 :]:
-            left = per_component[left_name].reshape(-1)
-            right = per_component[right_name].reshape(-1)
-            correlation = (
-                float(np.corrcoef(left, right)[0, 1])
-                if np.std(left) > eps and np.std(right) > eps
-                else 0.0
-            )
-            metrics[f"correlation/{left_name}__{right_name}"] = correlation
-            correlations.append(correlation)
-    if correlations:
-        metrics["correlation_mean"] = float(np.mean(correlations))
-        metrics["correlation_min"] = float(np.min(correlations))
-    if any(not math.isfinite(value) for value in metrics.values()):
-        raise ValueError("calculated metrics must be finite")
     return (
         torch.from_numpy(combined),
         {name: torch.from_numpy(value) for name, value in per_component.items()},
-        metrics,
     )

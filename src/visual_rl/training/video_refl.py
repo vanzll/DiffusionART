@@ -64,7 +64,4 @@ def prepare_objective(c, parts, cache, predict, prompts, device):
         reward_loss_scale=c.algorithm.options["reward_loss_scale"], decode_fn=decode_fn,
         vae_precision="fp32" if wan else c.training.precision)
     objective = ReFLObjective(cache, predict, gradient, losses, device)
-    metrics.update({"train/refl/differentiable_steps": 1., "train/refl/guidance_normalized": 0.,
-                    "train/refl/update_index": float(c.sampling.steps - 1),
-                    "train/refl/update_sigma": float(cache.sigmas[-2])})
     return objective, (tuple(range(len(cache.endpoints))),), metrics

@@ -115,8 +115,9 @@ def test_staged_matches_direct_without_population_division():
     assert not gradients.requires_grad and not losses.requires_grad
     assert losses.shape == (2,)
     assert metrics["train/refl/loss"] == pytest.approx(expected_loss.mean().item())
-    assert metrics["train/refl/latent_grad_rms"] == pytest.approx(
-        expected_grad.double().square().mean().sqrt().item())
+    assert set(metrics) == {"train/refl/loss"} | {
+        f"train/refl/{space}_{key}" for space in ("raw", "normalized") for key in ("VQ", "MQ", "TA")
+    }
     for key in ("VQ", "MQ", "TA"):
         assert metrics[f"train/refl/raw_{key}"] == pytest.approx(scores.raw[key].mean().item())
         assert metrics[f"train/refl/normalized_{key}"] == pytest.approx(

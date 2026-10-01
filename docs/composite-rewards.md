@@ -108,9 +108,10 @@ when binding the four-reward paper recipe.
 `renormalize_combined: true` explicitly subtracts the global combined mean and
 divides by global population std plus epsilon after combining. The inspected
 paper four-reward config sets this to **false**. No such renormalization is
-implied when the option is absent. Algorithm diagnostics use
-`train/multi_reward/*`; `train/reward` and eval scores retain their ordinary
-scalar meaning. Other algorithms reject this ART-specific option.
+implied when the option is absent. `train/reward` and eval scores retain their
+ordinary scalar meaning; component rewards are logged separately. Research-only
+advantage conflict and correlation diagnostics are not computed.
+Other algorithms reject this ART-specific option.
 
 After preparing the same assets as the composite example:
 

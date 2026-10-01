@@ -54,15 +54,8 @@ def finalize(c, cache, predict, feedback, global_activity, device):
     any_preference, any_guidance, any_tie = global_activity.cpu().tolist()
     preference = feedback["row_preference_active"]
     anchors = ~preference & bool(any_preference)
-    metrics = {"train/pairwise/" + key + "_fraction": float(value.float().mean())
-               for key, value in {
-                   "row_preference_active": preference,
-                   "row_active": feedback["row_active"],
-                   "row_restore_anchor": anchors,
-                   "row_trainable": feedback["row_active"] | anchors,
-               }.items()}
     trainable = bool(any_guidance or (any_preference and any_tie))
-    metrics["train/pairwise/inactive_rollout"] = int(not trainable)
+    metrics = {"train/pairwise/inactive_rollout": int(not trainable)}
     if not trainable:
         return None, (), metrics
     rows = len(cache.endpoints)

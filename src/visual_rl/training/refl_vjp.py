@@ -1,7 +1,6 @@
 """Row-bounded ReFL VJPs; model placement only, never CPU activation offload."""
 
 from functools import partial
-from time import perf_counter
 from types import MethodType
 
 import torch
@@ -111,14 +110,10 @@ def _decode(adapter, latent, device, precision, decode_fn=None):
 def _row_vjp(endpoint, adapter, scorer, prompt, device, fps, precision, scale, decode_fn, vae_precision):
     metrics = {}
     vae = adapter.vae
-    start = perf_counter()
     vae.to(device)
     with torch.no_grad():
         preview = _decode(adapter, endpoint.to(device), device, vae_precision, decode_fn)
     vae.to("cpu")
-    metrics["preview_seconds"] = perf_counter() - start
-
-    start = perf_counter()
     scorer.to(device)
     with torch.enable_grad():
         pixels = preview.detach().requires_grad_(True)
@@ -150,9 +145,6 @@ def _row_vjp(endpoint, adapter, scorer, prompt, device, fps, precision, scale, d
     # This is not saved-activation offload: checkpoint activations stay on GPU.
     preview = preview.detach().cpu()
     pixel_grad = pixel_grad.detach().cpu()
-    metrics["reward_seconds"] = perf_counter() - start
-
-    start = perf_counter()
     vae.to(device)
     with torch.enable_grad():
         latent = endpoint.to(device).detach().requires_grad_(True)
@@ -167,7 +159,6 @@ def _row_vjp(endpoint, adapter, scorer, prompt, device, fps, precision, scale, d
         gradient_cpu = latent_grad.detach().cpu()
     del rematerialized, latent, latent_grad, pixel_grad
     vae.to("cpu")
-    metrics["vae_vjp_seconds"] = perf_counter() - start
     return gradient_cpu, loss_cpu, metrics
 
 
@@ -184,7 +175,6 @@ def staged_latent_vjp(endpoints, adapter, scorer, prompts, *, device, fps, preci
     BCTHW RGB. vae_precision can differ from reward precision (Wan VAE is FP32).
     """
     device = torch.device(device)
-    start = perf_counter()
     try:
         _assert_frozen(adapter.vae, "VAE")
         _assert_frozen(scorer, "scorer")
@@ -218,10 +208,9 @@ def staged_latent_vjp(endpoints, adapter, scorer, prompts, *, device, fps, preci
             for key, value in metrics.items():
                 totals[key] = totals.get(key, 0.) + value
         losses = torch.cat(losses)
-        metrics = {f"train/refl/{key}": value if key.endswith("_seconds") else value / len(prompts)
+        metrics = {f"train/refl/{key}": value / len(prompts)
                    for key, value in totals.items()}
         metrics["train/refl/loss"] = losses.double().mean().item()
-        metrics["train/refl/latent_grad_rms"] = gradients.double().square().mean().sqrt().item()
         _assert_frozen(adapter.vae, "VAE")
         _assert_frozen(scorer, "scorer")
     finally:
@@ -230,5 +219,4 @@ def staged_latent_vjp(endpoints, adapter, scorer, prompts, *, device, fps, preci
             scorer.to("cpu")
         finally:
             adapter.vae.to("cpu")
-    metrics["train/refl/total_seconds"] = perf_counter() - start
     return gradients, losses, metrics

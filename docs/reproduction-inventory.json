@@ -2,7 +2,7 @@
   "schema_version": 1,
   "created_date": "2026-09-29",
   "status": "draft_candidate_inventory_not_release_validation",
-  "scope_note": "Archived run/config evidence plus ledger amendments. Freeze live manuscript and validate runtime sources before promising reproduction. No live run-status refresh is implied.",
+  "scope_note": "Implement Experiments-section T2I/T2V/I2V train/eval recipes; preceding motivation and diagnostic variants are excluded. Archived run/config evidence plus ledger amendments; validate runtime sources before promising reproduction. No live run-status refresh is implied.",
   "evidence": [
     {
       "id": "ledger",
@@ -466,7 +466,8 @@
       "id": "main-motivation-branches",
       "task": "T2I",
       "model": "SD3.5-M",
-      "scope": "main_candidate_panel_membership_pending",
+      "scope": "historical_reference_out_of_scope",
+      "scope_note": "Retained for provenance only; no implementation or release-validation requirement.",
       "evidence": [
         "fig2-sources"
       ],
@@ -529,7 +530,8 @@
       "id": "main-motivation-updates",
       "task": "T2I",
       "model": "SD3.5-M",
-      "scope": "main_candidate_panel_membership_pending",
+      "scope": "historical_reference_out_of_scope",
+      "scope_note": "Retained for provenance only; no implementation or release-validation requirement.",
       "evidence": [
         "fig3-sources"
       ],

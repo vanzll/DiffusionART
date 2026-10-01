@@ -154,14 +154,14 @@ def test_native_hunyuan_fsdp_eval_and_resume(tmp_path, algorithm):
         if algorithm == "pairwise":
             assert metrics[0]["train/pairwise/inactive_rollout"] == 1
             assert metrics[1]["system/rollout_attempts"] == 2
-            assert metrics[1]["train/pairwise/row_restore_anchor_fraction"] == .5
-            assert metrics[2]["train/pairwise/row_restore_anchor_fraction"] == .5
+            assert metrics[1]["train/pairwise/inactive_rollout"] == 0
+            assert metrics[2]["train/pairwise/inactive_rollout"] == 0
             assert json.loads((root / "status.json").read_text())["attempts"] == 3
         if algorithm == "diffusionnft":
             assert [row["nft/old_policy_decay"] for row in metrics] == pytest.approx([0., .1, .2, .3])
             assert json.loads((root / "status.json").read_text())["completed_rollouts"] == 4
         if algorithm == "refl":
-            assert all(row["train/refl/differentiable_steps"] == 1 for row in metrics)
+            assert not any(key.startswith("train/refl/update_") for row in metrics for key in row)
             assert all(row["train/loss"] == pytest.approx(row["train/refl/loss"]) for row in metrics)
             assert json.loads((root / "status.json").read_text())["completed_rollouts"] == 4
 

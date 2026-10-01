@@ -225,7 +225,7 @@ def test_native_video_cli_encoding_eval_and_exact_resume(tmp_path, monkeypatch, 
         assert [row["nft/old_policy_decay"] for row in metrics] == pytest.approx([0., .1, .2, .3])
         assert "nft_old_policy" in expected["stateful"]
     if algorithm == "refl":
-        assert all(row["train/refl/differentiable_steps"] == 1 and row["train/refl/update_index"] == 3 for row in metrics)
+        assert not any(key.startswith("train/refl/update_") for row in metrics for key in row)
         assert all(row["train/loss"] == pytest.approx(row["train/refl/loss"]) for row in metrics)
         assert all(row["train/grad_norm/before_clip"] > 0 for row in metrics)
     save = hunyuan.save_checkpoint

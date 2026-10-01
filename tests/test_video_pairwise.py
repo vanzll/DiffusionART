@@ -60,7 +60,7 @@ def test_ties_have_restoration_only_and_global_activity_keeps_original_windows(t
     assert objective.row_anchors.tolist() == [True, True, False, False]
     assert objective.row_magnitudes[:2].tolist() == [0., 0.]
     assert windows == (((0, 0), (0, 1), (1, 0), (1, 1)), ((2, 0), (2, 1), (3, 0), (3, 1)))
-    assert metrics["train/pairwise/row_restore_anchor_fraction"] == .5
+    assert metrics == {"train/pairwise/inactive_rollout": 0}
     assert torch.allclose(objective(windows[0]), torch.zeros(4), atol=1e-12)
     with torch.no_grad():
         parameter.add_(.1)

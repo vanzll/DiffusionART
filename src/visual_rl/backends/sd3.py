@@ -275,14 +275,14 @@ def _art_guidance_scores(c, result, prompts):
     from ..training.multi_reward import combined_group_advantages
 
     values = getattr(result.scores, options["score_space"])
-    scores, _, metrics = combined_group_advantages(
+    scores, _ = combined_group_advantages(
         {name: values[name] for name in options["weights"]},
         prompts,
         options["weights"],
         eps=options["eps"],
         renormalize_combined=options["renormalize_combined"],
     )
-    return scores, {f"train/multi_reward/{key}": value for key, value in metrics.items()}
+    return scores, {}
 
 
 def _precision(c):

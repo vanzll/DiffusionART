@@ -157,7 +157,8 @@ and [reward composition](docs/composite-rewards.md).
 | I2V | [Video profiles](docs/paper-video.md) | [VQ:MQ = 1:1](https://wandb.ai/vanzl3386-chinese-university-of-hong-kong-shenzhen/flow-grpo-algo/runs/08ca4146a532752c473f1f37) |
 
 The [run inventory](docs/reproduction-inventory.json) includes baseline runs,
-source commits, and recipe provenance. W&B links may require access.
+source commits, and recipe provenance. Reproduction covers the Experiments
+section, not the preceding motivation probes. W&B links may require access.
 
 > **Development release.** CPU integration and distributed tests are in place;
 > pretrained GPU acceptance and exact paper-result reproduction remain pending.

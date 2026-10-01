@@ -543,7 +543,7 @@ def test_actual_local_asset_loaders_run_without_network(
     assert len(history) == 4
     assert ("grad_scaler" in payload(tmp_path / "run")["stateful"]) == (precision == "fp16")
     for row in history:
-        assert ("train/multi_reward/combined_std" in row) == joint
+        assert not any(key.startswith("train/multi_reward/") for key in row)
         if reward.startswith("composite"):
             expected = (
                 3 * (row["train/reward/raw/aesthetic"] - 0.2) / 2

@@ -10,8 +10,12 @@ coverage and release gates. Repository names and published URLs remain unchanged
 - Modify this code-release repository only. Read the research repository and
   paper sources without changing them or running experiments.
 - Build reusable T2I, T2V and I2V infrastructure, with DiffusionART as one method.
-- Reproduce every main-paper experiment, including motivation probes,
-  restoration ablations, cover comparisons and video pairwise K experiments.
+- Reproduce the Experiments section: full training and evaluation for each
+  reported algorithm, model and benchmark, with one configuration per recipe.
+- Exclude preceding motivation figures, branch/gradient probes and dedicated
+  diagnostic variants. They are not implementation or release requirements.
+- Preserve experiment-section ablations, cover comparisons and video pairwise
+  K recipes; appendix-only additions remain optional.
 - Include video ReFL explicitly, irrespective of its final paper placement.
 - Do not change repository visibility, names, published links or W&B permissions
   as part of this planning phase. Keep website development separate.
@@ -22,7 +26,6 @@ coverage and release gates. Repository names and published URLs remain unchanged
 | --- | --- | --- |
 | T2I | SD3.5-M; GenEval, OCR, PickScore | DiffusionART, Flow-GRPO, Fast/CPS, DanceGRPO, Flow-DPPO, NFT EMA and on-policy |
 | T2I | FLUX.1-dev; GenEval | DiffusionART, Fast, Flow-DPPO; NFT EMA implementation and pending result verification |
-| Mechanisms | Main-paper motivation and restoration figures | Branch, gradient and update-structure probes; final panel membership must be frozen against the live manuscript |
 | T2V | HunyuanVideo-13B | DiffusionART, Fast-SDE, DanceGRPO, NFT EMA and on-policy; matched-reward cover comparison |
 | T2V pairwise | HunyuanVideo-13B, VQ-only | Scalar K8 and pairwise K2/K4/K8; binary/tie feedback semantics |
 | I2V | Paper's distilled Wan-14B profile | DiffusionART, Fast-SDE, DanceGRPO, NFT EMA |
@@ -31,6 +34,7 @@ coverage and release gates. Repository names and published URLs remain unchanged
 `reproduction-inventory.json` records candidate run identities and known runtime
 commits. It does not assert that all runs are publicly accessible or that the
 listed code has passed a new reproduction test.
+Motivation entries remain historical references, explicitly marked out of scope.
 
 The available manuscript snapshot predates later ledger amendments. Freeze the
 live Arxiv manuscript and its actual figure/table inputs before declaring the
@@ -87,6 +91,13 @@ duplication without hiding algorithm semantics.
 Use optional dependencies and tested environment locks per supported backend.
 A single package does not require an untested universal Conda environment.
 
+Keep metrics focused on reward components, loss, optimizer steps, evaluation,
+elapsed/training GPU-hours and basic training health. Exclude research-only
+gradient decomposition, reconstruction probes, per-state drift analyses and
+reward-conflict/correlation telemetry. Preserve the computations required by
+the algorithm and recovery, even when their diagnostic logging is omitted.
+ReFL reports its differentiable reward separately from the common MP4 score.
+
 ## Generic Reliability, Not Private Cluster Operations
 
 Retain portable validation, atomic publication, configurable output paths,
@@ -101,7 +112,7 @@ configurable rather than encoding a particular cluster's disk failover policy.
 
 ## Validation and Release Gates
 
-1. Freeze manuscript membership and recover run provenance. Several early T2I
+1. Freeze Experiments-section membership and recover run provenance. Several early T2I
    baseline config snapshots lack an exact runtime SHA; check W&B code metadata
    and original source snapshots before calling them exactly reproducible.
 2. Audit licenses and redistribution terms for upstream code, models, rewards,

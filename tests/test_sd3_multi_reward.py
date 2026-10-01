@@ -71,7 +71,7 @@ def test_joint_scores_not_scalar_total_reach_covariance_without_clipping(space, 
             r = raw[rows]
             expected[rows] += (weight / 3) * (r - r.mean()) / (r.std(unbiased=False) + 1e-4)
     torch.testing.assert_close(combined, expected, rtol=1e-12, atol=1e-12)
-    assert metrics["train/multi_reward/combined_std"] >= 0
+    assert metrics == {}
     assert not torch.allclose(combined.float(), scored.scores.weighted)
     captured = []
 

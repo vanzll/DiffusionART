@@ -50,7 +50,7 @@ def test_independent_formula_repeated_prompts_and_disagreement(matrix, renormali
     prompts = ["repeat", "other", "repeat", "other", "repeat", "other", "singleton"]
     weights = {"z": 2.0, "a": 5.0}
     expected, expected_parts = formula_oracle(rewards, prompts, weights, 0.03, renormalize)
-    combined, parts, metrics = combined_group_advantages(
+    combined, parts = combined_group_advantages(
         rewards, prompts, weights, eps=0.03, renormalize_combined=renormalize
     )
     torch.testing.assert_close(combined, expected, atol=2e-15, rtol=2e-15)
@@ -59,19 +59,15 @@ def test_independent_formula_repeated_prompts_and_disagreement(matrix, renormali
     for value in (combined, *parts.values()):
         assert value.dtype == torch.float64 and value.device.type == "cpu"
         assert not value.requires_grad and value.grad_fn is None
-    assert all(type(value) is float and math.isfinite(value) for value in metrics.values())
 
 
 @pytest.mark.parametrize("renormalize", [False, True])
 def test_exact_zeros_for_singletons_and_representable_ties(renormalize):
     rewards = {"a": torch.tensor([0.25, 0.25, 0.25, 77], dtype=torch.float64)}
-    combined, parts, metrics = combined_group_advantages(
+    combined, parts = combined_group_advantages(
         rewards, ["p", "p", "p", "q"], {"a": 3}, renormalize_combined=renormalize
     )
     assert torch.count_nonzero(combined) == torch.count_nonzero(parts["a"]) == 0
-    assert metrics["all_zero_fraction"] == metrics["a/zero_fraction"] == 1
-    assert metrics["scalarization_retention"] == 0
-    assert "correlation_mean" not in metrics
 
 
 @pytest.mark.parametrize("matrix", [False, True])
@@ -82,7 +78,7 @@ def test_nonrepresentable_ties_preserve_fp64_rounding_residual(matrix, renormali
         values = torch.stack((values, torch.full_like(values, 0.25)), dim=1)
     rewards, prompts, weights = {"a": values}, ["p", "p", "p", "q"], {"a": 3}
     expected, expected_parts = formula_oracle(rewards, prompts, weights, 1e-4, renormalize)
-    combined, parts, metrics = combined_group_advantages(
+    combined, parts = combined_group_advantages(
         rewards, prompts, weights, renormalize_combined=renormalize
     )
     torch.testing.assert_close(parts["a"], expected_parts["a"], atol=0, rtol=0)
@@ -91,12 +87,11 @@ def test_nonrepresentable_ties_preserve_fp64_rounding_residual(matrix, renormali
     residual = parts["a"][:3, 0] if matrix else parts["a"][:3]
     assert torch.all(residual != 0)
     assert torch.count_nonzero(parts["a"][-1]) == 0
-    assert metrics["all_zero_fraction"] == metrics["a/zero_fraction"] == (0.625 if matrix else 0.25)
 
 
-def test_conflicting_objectives_and_original_diagnostics():
+def test_conflicting_objectives_cancel_without_diagnostics():
     a = torch.tensor([-1, 1, -1, 1, 4], dtype=torch.float64)
-    combined, parts, metrics = combined_group_advantages(
+    combined, parts = combined_group_advantages(
         {"a": a, "b": -a, "c": torch.ones(5)},
         ["p", "p", "q", "q", "s"],
         {"a": 2, "b": 2, "c": 4},
@@ -104,30 +99,18 @@ def test_conflicting_objectives_and_original_diagnostics():
     )
     assert torch.count_nonzero(combined) == 0
     torch.testing.assert_close(parts["a"], a.new_tensor([-0.8, 0.8, -0.8, 0.8, 0]))
-    assert metrics["conflict_fraction"] == 0.8
-    assert metrics["all_zero_fraction"] == 0.2
-    assert metrics["scalarization_retention"] == 0
-    assert metrics["a/weight"] == metrics["b/weight"] == 0.25
-    assert metrics["c/weight"] == 0.5
-    assert metrics["a/abs_mean"] == pytest.approx(0.64)
-    assert metrics["a/group_std_mean"] == pytest.approx(2 / 3)
-    assert metrics["a/group_zero_std_fraction"] == pytest.approx(1 / 3)
-    assert metrics["a/raw_mean"] == 0.8
-    assert metrics["a/raw_std"] == pytest.approx(np.std(a.numpy()))
-    assert metrics["correlation/a__b"] == pytest.approx(-1)
-    assert metrics["correlation/a__c"] == metrics["correlation/b__c"] == 0
-    assert metrics["correlation_min"] == pytest.approx(-1)
-    assert metrics["correlation_mean"] == pytest.approx(-1 / 3)
+    assert torch.equal(parts["b"], -parts["a"])
+    assert torch.count_nonzero(parts["c"]) == 0
 
 
 def test_population_std_eps_after_std_and_normalized_weights():
     rewards = {"a": torch.tensor([0.0, 4.0]), "b": torch.tensor([100.0, 100.0])}
-    result, parts, metrics = combined_group_advantages(rewards, ["p", "p"], {"a": 2, "b": 6}, eps=2)
+    result, parts = combined_group_advantages(rewards, ["p", "p"], {"a": 2, "b": 6}, eps=2)
     torch.testing.assert_close(parts["a"], torch.tensor([-0.5, 0.5], dtype=torch.float64))
     torch.testing.assert_close(result, parts["a"] / 4)
     scaled = combined_group_advantages(rewards, ["p", "p"], {"a": 20, "b": 60}, eps=2)
-    assert torch.equal(result, scaled[0]) and metrics == scaled[2]
-    renorm, _, _ = combined_group_advantages(
+    assert torch.equal(result, scaled[0])
+    renorm, _ = combined_group_advantages(
         rewards, ["p", "p"], {"a": 2, "b": 6}, eps=2, renormalize_combined=True
     )
     torch.testing.assert_close(renorm, result / (0.125 + 2))
@@ -135,7 +118,7 @@ def test_population_std_eps_after_std_and_normalized_weights():
 
 def test_large_offset_tiny_spread_preserves_fp64():
     values = torch.tensor([1e12 - 0.001, 1e12, 1e12 + 0.001], dtype=torch.float64)
-    actual, parts, _ = combined_group_advantages({"a": values}, ["p"] * 3, {"a": 1})
+    actual, parts = combined_group_advantages({"a": values}, ["p"] * 3, {"a": 1})
     expected, _ = formula_oracle({"a": values}, ["p"] * 3, {"a": 1}, 1e-4, False)
     torch.testing.assert_close(actual, expected, atol=0, rtol=0)
     assert actual[0] < -0.5 and actual[2] > 0.5
@@ -150,11 +133,11 @@ def test_columns_are_independent_and_groups_use_exact_text(renormalize):
     }
     prompts = ["p", "p", "p ", "p "]
     weights = {"a": 2, "b": 1}
-    combined, parts, metrics = combined_group_advantages(
+    combined, parts = combined_group_advantages(
         rewards, prompts, weights, renormalize_combined=renormalize
     )
     for column in range(3):
-        separate, separate_parts, _ = combined_group_advantages(
+        separate, separate_parts = combined_group_advantages(
             {name: value[:, column] for name, value in rewards.items()},
             prompts,
             weights,
@@ -163,10 +146,6 @@ def test_columns_are_independent_and_groups_use_exact_text(renormalize):
         torch.testing.assert_close(combined[:, column], separate, atol=1e-15, rtol=1e-15)
         for name in parts:
             assert torch.equal(parts[name][:, column], separate_parts[name])
-    # Preserve the canonical diagnostic's flattened group std, not per-column std.
-    assert metrics["a/group_std_mean"] == pytest.approx(
-        (np.std(rewards["a"][:2].numpy()) + np.std(rewards["a"][2:].numpy())) / 2
-    )
 
 
 @pytest.mark.parametrize(
@@ -179,7 +158,7 @@ def test_no_input_mutation_or_autograd_and_no_output_aliasing(dtype):
     assert not source.is_contiguous()
     rewards, prompts, weights = {"a": source}, ["p"] * 4, {"a": 3.0}
     before, old_prompts, old_weights = source.detach().clone(), prompts[:], deepcopy(weights)
-    combined, parts, _ = combined_group_advantages(rewards, prompts, weights)
+    combined, parts = combined_group_advantages(rewards, prompts, weights)
     assert combined.dtype == parts["a"].dtype == torch.float64
     assert not combined.requires_grad and not parts["a"].requires_grad
     assert source.grad is None and torch.equal(source, before)
@@ -201,7 +180,7 @@ def test_sorted_component_accumulation_is_insertion_order_independent():
     reverse = combined_group_advantages(
         dict(reversed(list(rewards.items()))), prompts, dict(reversed(list(weights.items())))
     )
-    assert torch.equal(forward[0], reverse[0]) and forward[2] == reverse[2]
+    assert torch.equal(forward[0], reverse[0])
     assert list(forward[1]) == sorted(rewards)
     for name in rewards:
         assert torch.equal(forward[1][name], reverse[1][name])
@@ -247,14 +226,14 @@ def test_nonfinite_reward(value):
 
 @pytest.mark.parametrize("renormalize", [False, True])
 @pytest.mark.parametrize(
-    "values, calculated",
-    [([1e308, 1e308], "advantages"), ([-1e308, 1e308], "metrics")],
+    "values",
+    [[1e308, 1e308], [-1e308, 1e308]],
 )
-def test_finite_rewards_with_overflowed_calculations_are_rejected(values, calculated, renormalize):
+def test_finite_rewards_with_overflowed_calculations_are_rejected(values, renormalize):
     rewards = {"a": torch.tensor(values, dtype=torch.float64)}
     assert torch.isfinite(rewards["a"]).all()
     with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
-        with pytest.raises(ValueError, match=f"calculated {calculated} must be finite"):
+        with pytest.raises(ValueError, match="calculated advantages must be finite"):
             combined_group_advantages(
                 rewards, ["p", "p"], {"a": 1}, renormalize_combined=renormalize
             )
