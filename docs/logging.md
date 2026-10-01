@@ -38,8 +38,8 @@ remains JSONL-only.
 - Raw and fixed-normalized reward names are unchanged. ReFL's differentiable
   optimization scores remain separate from the common MP4 reporting scores.
 
-The exporter uploads numeric metrics only. Videos stay on disk and in the HTML
-gallery; it does not upload checkpoints, datasets, source code or videos.
+The exporter uploads numeric metrics only. Evaluation videos stay on disk;
+it does not upload checkpoints, datasets, source code or videos.
 
 ## Ownership and Recovery
 

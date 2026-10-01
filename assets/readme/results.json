@@ -1,0 +1,20 @@
+{
+  "source": "DiffusionART manuscript, Final-step T2V evaluation, overall performance",
+  "source_snapshot": "ICLR/review-20260926/fig3-mirror-20261001/main_cjy.live-after.tex",
+  "task": "t2v",
+  "model": "HunyuanVideo-13B",
+  "metrics": ["raw_vq", "raw_mq"],
+  "reward_weights": {
+    "DiffusionART": {"ta": 0.7, "vq": 0.2, "mq": 0.1},
+    "DiffusionNFT": {"ta": 0.7, "vq": 0.2, "mq": 0.1},
+    "GRPO baselines": {"ta": 0.0, "vq": 0.5, "mq": 0.5}
+  },
+  "results": [
+    {"method": "Pre-trained", "raw_vq": 5.195, "raw_mq": 1.943},
+    {"method": "Flow-GRPO-Fast", "raw_vq": 6.279, "raw_mq": 3.222},
+    {"method": "DanceGRPO", "raw_vq": 6.173, "raw_mq": 3.121},
+    {"method": "DiffusionNFT (EMA)", "raw_vq": 6.827, "raw_mq": 2.683},
+    {"method": "DiffusionNFT (on-policy)", "raw_vq": 5.543, "raw_mq": 1.839},
+    {"method": "DiffusionART", "raw_vq": 8.970, "raw_mq": 4.224}
+  ]
+}

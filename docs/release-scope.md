@@ -78,7 +78,7 @@ Keep shared facilities small and algorithm loops explicit:
 - `models/`: model, scheduler, conditioning and VAE adapters.
 - `rewards/`: scalar/pairwise scorers and differentiable video adapters.
 - `training/`: rollout/update orchestration, distributed execution and precision.
-- `evaluation/`: frozen datasets, media identity, scoring and HTML galleries.
+- `evaluation/`: frozen datasets, media identity, scoring and local artifacts.
 - `configs/`: general examples plus immutable paper profiles.
 - `tests/`: mathematical, adapter, integration and replay tests.
 - `docs/`: method contracts, extension guide and reproduction index.

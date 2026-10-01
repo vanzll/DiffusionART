@@ -11,6 +11,7 @@
 | Train HunyuanVideo | [HunyuanVideo runner](hunyuan-runner.md) |
 | Train Wan I2V | [Wan runner](wan-runner.md) |
 | Run across GPUs or nodes | [Distributed execution](distributed-execution.md) |
+| Resume or evaluate a checkpoint | [Checkpoint guide](checkpoint-resume.md) |
 
 ## Algorithms
 

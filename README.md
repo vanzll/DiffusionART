@@ -1,116 +1,179 @@
-<h1 align="center">DiffusionART</h1>
+<p align="center">
+  <img src="assets/readme/logo.svg" width="560" alt="DiffusionART">
+</p>
 
-<p align="center"><strong>A configurable RL framework for visual generation</strong></p>
+<p align="center"><strong>Efficient, stable and scalable reinforcement of diffusion models</strong></p>
 <p align="center">Text-to-image &nbsp;&middot;&nbsp; Text-to-video &nbsp;&middot;&nbsp; Image-to-video</p>
+
+<!-- Resource badges are intentionally unlinked until their destinations are supplied. -->
+<p align="center">
+  <img src="https://img.shields.io/badge/arXiv-b31b1b?style=flat-square" alt="arXiv">
+  <img src="https://img.shields.io/badge/GitHub-24292f?style=flat-square&amp;logo=github&amp;logoColor=white" alt="GitHub">
+  <img src="https://img.shields.io/badge/Hugging_Face_Models-ffd21e?style=flat-square&amp;logo=huggingface&amp;logoColor=black" alt="Hugging Face Models">
+  <img src="https://img.shields.io/badge/Twitter_Channel-1d9bf0?style=flat-square" alt="Twitter Channel">
+</p>
 
 <p align="center">
   <a href="https://vanzll.github.io/diffusionart-project/">Project Page</a> &nbsp;/&nbsp;
   <a href="#quick-start">Quick Start</a> &nbsp;/&nbsp;
   <a href="docs/README.md">Documentation</a> &nbsp;/&nbsp;
-  <a href="#paper-experiments">Paper Experiments</a>
+  <a href="#paper-experiments">Experiments</a>
 </p>
 
 <p align="center">
   Zhenglin Wan, Jiayu Chen, Zhengfeiyang Zhang, Pengfei Zhou, Wangbo Zhao,<br>
   Fangyuan Kong, Pengfei Wan, Kun Gai, Yang You<br>
-  <sub>HPC-AI Lab, National University of Singapore &middot; Kling AI &middot; HKUST</sub>
+  <sub>National University of Singapore &middot; Kling AI &middot; HKUST</sub>
 </p>
 
-Train diffusion models with **DiffusionART, DiffusionNFT, Flow-GRPO, Flow-GRPO-Fast,
-Flow-DPPO, DanceGRPO, and ReFL**. Choose the model, algorithm, reward, and training
-recipe in YAML; use the same entrypoint for rollout, updates, evaluation, and resume.
+**DiffusionART** is Diffusion Reinforcement with **Aggregation-First Reward Tilting**.
+It aggregates endpoint rewards into a shared guidance direction before
+backpropagation, avoiding NFT's opposing self-consistency forces. Two disjoint
+MSE updates per rollout combine reward guidance with drift-adaptive restoration.
+No differentiable reward model or policy EMA is required.
 
-- **Composable recipes.** Switch models and rewards without rewriting the training loop.
-- **Explicit algorithms.** Preserve each method's sampling, update schedule, and policy state.
-- **A complete lifecycle.** DDP/FSDP, full-state checkpoints, evaluation galleries, and W&B logging.
-- **Comparable metrics.** Training steps, raw rewards, and training/elapsed GPU-hours.
+This repository brings DiffusionART and six baseline algorithms into one
+configurable training framework. Choose a model, algorithm and reward in YAML;
+use the same entrypoint to train, evaluate and resume.
 
-## Visual Results
+## News
+
+- **2026-10-01** &mdash; Unified T2I, T2V and I2V implementations and paper recipes are available here, with full-state resume and local evaluation artifacts.
+
+## Key Features
+
+| | What you get |
+| --- | --- |
+| **Aggregation-first learning** | Shared endpoint guidance and adaptive restoration, without differentiating through the reward model. |
+| **Small-group pairwise feedback** | Train from scalar scores or pairwise preferences; video recipes cover **K = 2, 4, 8** samples per prompt. |
+| **One configurable framework** | Model, algorithm, reward weights, sampling and evaluation are all selected in YAML. |
+| **Seven training algorithms** | DiffusionART, DiffusionNFT, Flow-GRPO, Flow-GRPO-Fast, Flow-DPPO, DanceGRPO and ReFL. |
+| **Complete experiment lifecycle** | DDP/FSDP, full-state checkpoints, configurable retention and checkpoint-based evaluation. |
+| **Comparable learning curves** | Raw rewards, training steps and separate training/elapsed GPU-hours; JSONL and optional scalar-only W&B logging. |
+
+## Results
+
+**HunyuanVideo-13B &middot; text-to-video.** Final evaluation from the paper:
+
+| Method | VQ &uarr; | MQ &uarr; |
+| --- | ---: | ---: |
+| Pre-trained | 5.195 | 1.943 |
+| Flow-GRPO-Fast | 6.279 | 3.222 |
+| DanceGRPO | 6.173 | 3.121 |
+| DiffusionNFT (EMA) | 6.827 | 2.683 |
+| DiffusionNFT (on-policy) | 5.543 | 1.839 |
+| **DiffusionART** | **8.970** | **4.224** |
+
+ART and NFT use TA:VQ:MQ = 7:2:1; GRPO baselines use VQ:MQ = 1:1.
+See [experiment recipes](#paper-experiments) and the
+[project page](https://vanzll.github.io/diffusionart-project/) for learning curves
+and playable comparisons. [Table source](assets/readme/results.json).
 
 <table>
   <thead><tr><th width="50%">Pre-trained</th><th width="50%">DiffusionART</th></tr></thead>
   <tbody>
-    <tr><th colspan="2" align="center">Text-to-image</th></tr>
+    <tr><th colspan="2">Text-to-image &middot; A snowy Chicago street at Christmas</th></tr>
     <tr>
-      <td><img src="assets/readme/image-chicago-before.jpg" width="320" alt="Pre-trained image: a snowy Chicago street at Christmas"></td>
-      <td><img src="assets/readme/image-chicago-after.jpg" width="320" alt="DiffusionART image: a snowy Chicago street at Christmas"></td>
+      <td><img src="assets/readme/image-chicago-before.jpg" width="360" alt="Pre-trained: snowy Chicago street"></td>
+      <td><img src="assets/readme/image-chicago-after.jpg" width="360" alt="DiffusionART: snowy Chicago street"></td>
     </tr>
-    <tr><th colspan="2" align="center">Text-to-video</th></tr>
+    <tr><th colspan="2">Text-to-video &middot; A river through an autumn valley</th></tr>
     <tr>
-      <td><img src="assets/readme/video-106-before.jpg" width="320" alt="Pre-trained video frame: a river through an autumn valley"></td>
-      <td><img src="assets/readme/video-106-after.jpg" width="320" alt="DiffusionART video frame: a river through an autumn valley"></td>
+      <td><img src="assets/readme/video-106-before.jpg" width="360" alt="Pre-trained video frame: autumn valley"></td>
+      <td><img src="assets/readme/video-106-after.jpg" width="360" alt="DiffusionART video frame: autumn valley"></td>
     </tr>
   </tbody>
 </table>
 
-Selected paper examples; video cells show one frame. Visit the
-[project page](https://vanzll.github.io/diffusionart-project/) for playable
-comparisons and quantitative results. [Sample provenance](assets/readme/provenance.json).
+Selected paper examples; video cells show individual frames.
+[Sample provenance](assets/readme/provenance.json).
+
+## Supported Models
+
+| Task | Model | Algorithms | Setup |
+| --- | --- | --- | --- |
+| T2I | **SD3.5-M** | ART, NFT, GRPO, Fast, DPPO, Dance | [SD3 guide](docs/sd3-runner.md) |
+| T2I | **FLUX.1-dev** | ART, NFT, GRPO, Fast, DPPO | [FLUX guide](docs/flux-runner.md) |
+| T2V | **HunyuanVideo-13B** | ART, NFT, Fast, Dance, ReFL | [Hunyuan guide](docs/hunyuan-runner.md) |
+| I2V | **Wan2.1-I2V-14B, CFG/step-distilled** | ART, NFT, Fast, Dance, ReFL | [Wan guide](docs/wan-runner.md) |
+
+Fast = Flow-GRPO-Fast; DPPO = Flow-DPPO; Dance = DanceGRPO.
+
+| Reward | Tasks | Feedback |
+| --- | --- | --- |
+| **PickScore, GenEval, OCR, Aesthetic, CLIPScore** | T2I | Scalar scores and weighted combinations |
+| **VideoReward: TA, VQ, MQ** | T2V / I2V | Scalar scores and weighted combinations |
+| **Pairwise preferences** | Hunyuan T2V / ART | Binary preference labels derived from scorer comparisons |
+| **Differentiable VideoReward** | Video ReFL | Pixel-space gradients; common MP4 scores for reporting |
+
+See [algorithm contracts](docs/algorithm-provenance.md) and
+[reward composition](docs/composite-rewards.md) for method-specific behavior.
 
 ## Quick Start
 
-### 1. Check Your Installation
+### 1. Install
 
 Use Python 3.10+ and [uv](https://docs.astral.sh/uv/getting-started/installation/).
-This four-update CPU check needs no model downloads, GPU, or W&B account.
+Pretrained training requires Linux and CUDA.
 
 ```bash
 git clone https://github.com/vanzll/DiffusionART.git
 cd DiffusionART
 uv sync --locked --python 3.10
+```
+
+<details>
+<summary><strong>Optional: four-update CPU installation check</strong></summary>
+
+No GPU, model downloads or W&B account needed:
+
+```bash
 uv run --locked visual-rl --config configs/examples/cpu_smoke.yaml --validate
 uv run --locked visual-rl --config configs/examples/cpu_smoke.yaml
 ```
 
-Check `outputs/cpu-smoke/status.json`: `status` should be `completed` and
-`optimizer_steps` should be `4`. To repeat, pass `--output-dir outputs/cpu-smoke-2`.
-This checks the software lifecycle, not pretrained image generation.
+`outputs/cpu-smoke/status.json` should report `completed` and four optimizer
+steps. To repeat, pass `--output-dir outputs/cpu-smoke-2`.
 
-### 2. Prepare a Model
+</details>
 
-Pretrained training runs on Linux with CUDA. Follow the matching guide for
-dependencies, model access, pinned assets, and data preparation:
+### 2. Prepare Assets
 
-| Task | Models | Setup |
-| --- | --- | --- |
-| T2I | SD3.5-M, FLUX.1-dev | [SD3](docs/sd3-runner.md#install-and-prepare) / [FLUX](docs/flux-runner.md) |
-| T2V | HunyuanVideo-13B | [Video environment](docs/video-installation.md) / [Hunyuan assets](docs/hunyuan-runner.md) |
-| I2V | CFG-distilled Wan-14B | [Video environment](docs/video-installation.md) / [Wan assets](docs/wan-runner.md) |
+Follow the matching [model guide](#supported-models) for model access, pinned
+weights, reward models and prompt data. Images use the `diffusers` extra;
+videos use the [pinned video environment](docs/video-installation.md).
 
-Image environments use `uv --extra diffusers`; video environments use the pinned
-installer in the video guide. Prepare the assets before launching training.
+### 3. Train
 
-### 3. Run a Recipe
-
-For SD3, after completing the setup above:
+After preparing SD3 and PickScore assets:
 
 ```bash
 uv run --locked --extra diffusers visual-rl \
   --config configs/examples/sd3_pickscore.yaml
 ```
 
-For eight-GPU image training, prepare the [paper profile](docs/paper-image.md) first:
+For an eight-GPU paper image recipe, prepare its [data and assets](docs/paper-image.md), then:
 
 ```bash
 uv run --locked --extra diffusers torchrun --standalone --nproc-per-node=8 \
   -m visual_rl.train --config configs/paper/image/sd3_pickscore_art.yaml
 ```
 
-For video training, activate the prepared video environment and use the same CLI:
+Video recipes use the same entrypoint inside the prepared video environment:
 
 ```bash
 torchrun --standalone --nproc-per-node=8 -m visual_rl.train \
   --config configs/paper/video/hunyuan_art_721.yaml
 ```
 
-See [distributed execution](docs/distributed-execution.md) for multi-node launches.
-Add `--validate` to check a config before loading models. Use `--resume` with a
-full-state checkpoint receipt to continue training.
+Add `--validate` for config checks before loading models. See
+[distributed execution](docs/distributed-execution.md) for multi-node launches and
+[checkpoint/resume](docs/checkpoint-resume.md) for recovery and evaluation.
 
-## One Config, One Experiment
+## Configure Your Experiment
 
-Start from an [example](configs/examples/) or a [paper profile](configs/paper/).
-For instance, save this as `configs/my-pickscore.yaml`:
+Extend an [example](configs/examples/) or [paper recipe](configs/paper/).
+Save this as `configs/my-pickscore.yaml`:
 
 ```yaml
 extends: examples/sd3_pickscore.yaml
@@ -119,61 +182,47 @@ training:
   max_updates: 1000
 runtime:
   output_dir: outputs/my-pickscore
+  checkpoint_keep: 2
 ```
 
 ```bash
 uv run --locked --extra diffusers visual-rl --config configs/my-pickscore.yaml
 ```
 
-The config owns `algorithm`, `model`, `reward`, `sampling`, `training`, and
-`evaluation`. Inheritance keeps recipes short; overrides select the experiment.
-Changing a component resets its old options, and reward weights replace the
-whole weight map. Required asset variables use `${ENV_VAR}`.
+Select components through `model.name`, `algorithm.name` and `reward.name`;
+compose objectives with `reward.weights`. Sampling, microbatches, evaluation
+and checkpoint cadence live in the same file. Required asset paths use `${ENV_VAR}`.
 
-Local metrics are always written to `metrics.jsonl`. Enable [W&B](docs/logging.md)
-with `runtime.log: wandb`; evaluation images and videos stay on disk with an
-HTML gallery. [Prompt manifests](docs/prompt-data.md) preserve sample identity.
-
-## Supported Methods
-
-| Model | Training algorithms |
-| --- | --- |
-| SD3 / SD3.5 | DiffusionART, DiffusionNFT, Flow-GRPO, Flow-GRPO-Fast, Flow-DPPO, DanceGRPO |
-| FLUX.1-dev | DiffusionART, DiffusionNFT, Flow-GRPO, Flow-GRPO-Fast, Flow-DPPO |
-| HunyuanVideo / Wan I2V | DiffusionART, DiffusionNFT, Flow-GRPO-Fast, DanceGRPO, ReFL |
-
-Image rewards include **PickScore, GenEval, OCR, Aesthetic, and CLIPScore**;
-video recipes use **VideoReward (TA, VQ, MQ)**. Compose scalar rewards with
-explicit weights, or use DiffusionART's binary pairwise feedback. ReFL has its
-own differentiable reward path. See [algorithm contracts](docs/algorithm-provenance.md)
-and [reward composition](docs/composite-rewards.md).
+Metrics are saved to `metrics.jsonl`; evaluation images, videos and scores stay
+on disk. Set `runtime.log: wandb` for [scalar logging](docs/logging.md).
 
 ## Paper Experiments
 
-| Task | Recipes | Selected DiffusionART Runs |
-| --- | --- | --- |
-| T2I | [Image profiles](docs/paper-image.md) | [GenEval](https://wandb.ai/vanzl3386-chinese-university-of-hong-kong-shenzhen/flow-grpo-algo/runs/11pq0iy3) / [PickScore](https://wandb.ai/vanzl3386-chinese-university-of-hong-kong-shenzhen/flow-grpo-algo/runs/mofumvbw) / [OCR](https://wandb.ai/vanzl3386-chinese-university-of-hong-kong-shenzhen/flow-grpo-algo/runs/9c0zrzlw) |
-| T2V | [Video profiles](docs/paper-video.md) | [TA:VQ:MQ = 7:2:1](https://wandb.ai/vanzl3386-chinese-university-of-hong-kong-shenzhen/flow-grpo-algo/runs/gyvtocue) |
-| I2V | [Video profiles](docs/paper-video.md) | [VQ:MQ = 1:1](https://wandb.ai/vanzl3386-chinese-university-of-hong-kong-shenzhen/flow-grpo-algo/runs/08ca4146a532752c473f1f37) |
+| Task | Benchmark / reward | Configs | Selected ART runs |
+| --- | --- | --- | --- |
+| T2I | GenEval, PickScore, OCR, joint rewards | [Image recipes](docs/paper-image.md) | [GenEval](https://wandb.ai/vanzl3386-chinese-university-of-hong-kong-shenzhen/flow-grpo-algo/runs/11pq0iy3) &middot; [PickScore](https://wandb.ai/vanzl3386-chinese-university-of-hong-kong-shenzhen/flow-grpo-algo/runs/mofumvbw) &middot; [OCR](https://wandb.ai/vanzl3386-chinese-university-of-hong-kong-shenzhen/flow-grpo-algo/runs/9c0zrzlw) |
+| T2V | TA:VQ:MQ = 7:2:1; scalar / pairwise VQ | [Video recipes](docs/paper-video.md) | [Main](https://wandb.ai/vanzl3386-chinese-university-of-hong-kong-shenzhen/flow-grpo-algo/runs/gyvtocue) &middot; [Pairwise K=2](https://wandb.ai/vanzl3386-chinese-university-of-hong-kong-shenzhen/flow-grpo-algo/runs/x9mzbm4c) |
+| I2V | VQ:MQ = 1:1 | [Video recipes](docs/paper-video.md) | [Main](https://wandb.ai/vanzl3386-chinese-university-of-hong-kong-shenzhen/flow-grpo-algo/runs/08ca4146a532752c473f1f37) |
 
-The [run inventory](docs/reproduction-inventory.json) includes baseline runs,
-source commits, and recipe provenance. Reproduction covers the Experiments
-section, not the preceding motivation probes. W&B links may require access.
+Baseline runs and source commits are in the [run inventory](docs/reproduction-inventory.json).
+W&B links may require access. Current validation covers CPU integration and
+distributed tests; pretrained GPU acceptance and paper-number parity remain
+pending. [Release scope](docs/release-scope.md).
 
-> **Development release.** CPU integration and distributed tests are in place;
-> pretrained GPU acceptance and exact paper-result reproduction remain pending.
-> See [release scope](docs/release-scope.md) for coverage and remaining work.
+## Learn More
 
-## Documentation & Development
-
-[Documentation index](docs/README.md) &nbsp;/&nbsp;
-[Development guide](docs/development.md) &nbsp;/&nbsp;
+[Documentation](docs/README.md) &nbsp;/&nbsp;
+[Development](docs/development.md) &nbsp;/&nbsp;
 [Model interfaces](docs/model-contract.md) &nbsp;/&nbsp;
 [Reward interfaces](docs/reward-contract.md)
 
-We build on [Flow-GRPO](https://github.com/yifan123/flow_grpo),
+## Acknowledgements
+
+Built on [Flow-GRPO](https://github.com/yifan123/flow_grpo),
 [DiffusionNFT](https://github.com/NVlabs/DiffusionNFT),
-[DanceGRPO](https://github.com/XueZeyue/DanceGRPO), and
-[UniRL](https://github.com/Tencent-Hunyuan/UniRL). Attribution and asset terms
-are recorded in [third-party notices](THIRD_PARTY_NOTICES.md); the project-wide
-license is pending.
+[DanceGRPO](https://github.com/XueZeyue/DanceGRPO) and
+[UniRL](https://github.com/Tencent-Hunyuan/UniRL).
+README organization draws inspiration from
+[verl-agent](https://github.com/langfengQ/verl-agent) and Flow-GRPO.
+See [third-party notices](THIRD_PARTY_NOTICES.md) for attribution and asset terms;
+the project-wide license is pending.

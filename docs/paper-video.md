@@ -195,9 +195,10 @@ No launch was performed for this change.
 - Research checkpoints were model-only every100 rollouts: 200 optimizer steps
   for ART/Fast/Dance,100 for NFT/ReFL. YAML uses those evidenced step intervals,
   but native checkpoints are full-resume and retained, not historical keep1.
-  Native media retention is all scored train/eval videos; historical train
+  Native media retention saves all scored evaluation videos; training MP4s are
+  temporary reward inputs and are removed after scoring. Historical train
   retention was interval10 updates and ranks0/16. No unsupported artifact interval
-  is added. Current storage needs substantially more capacity and responsive I/O;
+  is added. Checkpoints need substantial capacity and responsive I/O;
   select a writable shared `PAPER_VIDEO_OUTPUT_ROOT` before launch. The native
   runner has no bounded primary/fallback failover; do not claim automatic recovery.
 

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="152" viewBox="0 0 720 152" role="img" aria-labelledby="title desc">
+  <title id="title">DiffusionART</title>
+  <desc id="desc">Three trajectories converge into one shared red direction beside the DiffusionART wordmark.</desc>
+  <rect width="720" height="152" fill="#ffffff"/>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M30 35 C64 35 59 76 95 76 M30 76 H95 M30 117 C64 117 59 76 95 76" stroke="#b9c2cc" stroke-width="7"/>
+    <path d="M95 76 H144 M126 58 L144 76 L126 94" stroke="#dc3348" stroke-width="9"/>
+  </g>
+  <g fill="#ffffff" stroke="#8b98a6" stroke-width="3">
+    <circle cx="30" cy="35" r="7"/>
+    <circle cx="30" cy="76" r="7"/>
+    <circle cx="30" cy="117" r="7"/>
+  </g>
+  <circle cx="95" cy="76" r="9" fill="#dc3348"/>
+  <text x="181" y="90" font-family="Arial, Helvetica, sans-serif" font-size="66" font-weight="700" fill="#17212c">Diffusion<tspan fill="#dc3348">ART</tspan></text>
+</svg>
