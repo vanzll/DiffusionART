@@ -25,7 +25,15 @@ def main(argv=None):
     parser.add_argument(
         "--resume", help="explicit checkpoint receipt; never auto-resume by run name"
     )
+    parser.add_argument("--resume-rewind", action="store_true",
+                        help="archive history after the checkpoint before resuming")
+    parser.add_argument("--eval-only", action="store_true",
+                        help="load a complete checkpoint and evaluate without training")
     args = parser.parse_args(argv)
+    if (args.resume_rewind or args.eval_only) and not args.resume:
+        parser.error("--resume-rewind and --eval-only require --resume")
+    if args.resume_rewind and args.eval_only:
+        parser.error("evaluation must not rewind training history")
     if args.list_backends:
         for backend in list_backends():
             print(f"{backend.name}\t{backend.status}\t{','.join(sorted(backend.tasks))}")
@@ -45,6 +53,8 @@ def main(argv=None):
 
             launch_identity("none")
         backend = get_backend(config)
+        if args.eval_only and not config.evaluation.enabled:
+            raise ConfigError("--eval-only requires an enabled evaluation manifest")
         if config.runtime.log == "wandb" and importlib.util.find_spec("wandb") is None:
             raise ConfigError("W&B logging requires installing visual-diffusion-rl[wandb]")
         if args.validate:
@@ -59,7 +69,12 @@ def main(argv=None):
                 )
             )
             return 0
-        backend.load()(config, resume=args.resume)
+        options = {"resume": args.resume}
+        if args.resume_rewind:
+            options["resume_rewind"] = True
+        if args.eval_only:
+            options["evaluate_only"] = True
+        backend.load()(config, **options)
         return 0
     except (ConfigError, FileNotFoundError) as exc:
         print(f"configuration error: {exc}", file=sys.stderr)

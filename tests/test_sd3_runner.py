@@ -197,6 +197,10 @@ def test_native_cli_train_eval_and_resume(tmp_path, monkeypatch):
     assert main(["--config", str(path), "--resume", str(root / "checkpoints/latest.json")]) == 0
     assert len((root / "metrics.jsonl").read_text().splitlines()) == 4
     assert len(list(root.glob("evaluation/step-*/*/manifest.json"))) == 3
+    records = {name: (root / name).read_bytes() for name in ("metrics.jsonl", "status.json", "cost.json")}
+    assert main(["--config", str(path), "--resume", str(root / "checkpoints/latest.json"), "--eval-only"]) == 0
+    assert records == {name: (root / name).read_bytes() for name in records}
+    assert len(list(root.glob("evaluation/step-*/*/manifest.json"))) == 4
 
 
 @pytest.mark.parametrize("precision", ["fp32", "bf16", "fp16"])
@@ -244,6 +248,41 @@ def test_resume_refuses_foreign_output_before_loading_assets(tmp_path, monkeypat
     monkeypatch.setattr(sd3, "load_components", forbidden)
     with pytest.raises(ConfigError, match="different run/config"):
         sd3.run(config, resume=root / "checkpoints/latest.json")
+
+
+def test_rewind_after_updates_beyond_checkpoint_is_exact(tmp_path, monkeypatch):
+    from test_distributed_checkpoint import assert_tree_equal
+
+    c = load_config(config_file(tmp_path))
+    monkeypatch.setattr(sd3, "load_components", tiny_parts)
+    sd3.run(c)
+    expected = payload(Path(c.runtime.output_dir))
+    interrupted = replace(c, runtime=replace(c.runtime, output_dir=str(tmp_path / "interrupted")))
+    save = sd3.save_checkpoint
+
+    def fail_before_next_checkpoint(*args, **kwargs):
+        if kwargs["progress"].optimizer_steps == 4:
+            raise RuntimeError("crash between checkpoints")
+        return save(*args, **kwargs)
+
+    monkeypatch.setattr(sd3, "save_checkpoint", fail_before_next_checkpoint)
+    with pytest.raises(RuntimeError, match="between checkpoints"):
+        sd3.run(interrupted)
+    monkeypatch.setattr(sd3, "save_checkpoint", save)
+    root = Path(interrupted.runtime.output_dir)
+    receipt = root / "checkpoints/latest.json"
+    with pytest.raises(ConfigError, match="--resume-rewind"):
+        sd3.run(interrupted, resume=receipt)
+    sd3.run(interrupted, resume=receipt, resume_rewind=True)
+    actual = payload(root)
+    for key in ("model", "optimizer", "stateful", "generators"):
+        assert_tree_equal(expected[key], actual[key])
+    assert [json.loads(line)["train/optimizer_step"] for line in
+            (root / "metrics.jsonl").read_text().splitlines()] == [1, 2, 3, 4]
+    archive, = (root / "resume-history").iterdir()
+    assert len((archive / "metrics.jsonl").read_text().splitlines()) == 4
+    assert list((archive / "evaluation/step-000000004").glob("*/manifest.json"))
+    assert actual["progress"]["training_seconds"] > expected["progress"]["training_seconds"]
 
 
 def test_checkpoint_cost_persisted_and_completed_resume_does_not_regress(tmp_path, monkeypatch):

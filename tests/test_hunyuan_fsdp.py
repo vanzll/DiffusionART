@@ -27,7 +27,7 @@ def wrap(c, parts, session):
                              block_types=(Transformer,), activation_checkpointing=False)
 
 
-def worker(rank, path, root, family="hunyuan"):
+def worker(rank, path, root, family="hunyuan", verify_modes=False):
     from visual_rl.backends import hunyuan_fsdp
 
     faulthandler.enable(all_threads=True)
@@ -106,6 +106,18 @@ def worker(rank, path, root, family="hunyuan"):
     phase("completed-resume-check")
     assert main(["--config", path, "--output-dir", target, "--resume", receipt[0]]) == 0
     assert not dist.is_initialized()
+    if verify_modes:
+        directory = Path(target)
+        records = {name: (directory / name).read_bytes() for name in ("metrics.jsonl", "cost.json", "status.json")}
+        phase("checkpoint-eval-only")
+        assert main(["--config", path, "--output-dir", target, "--resume", receipt[0], "--eval-only"]) == 0
+        assert records == {name: (directory / name).read_bytes() for name in records}
+        previous, = directory.glob("checkpoints/step-000000002-*/manifest.json")
+        phase("rewind-and-replay")
+        assert main(["--config", path, "--output-dir", target, "--resume", str(previous), "--resume-rewind"]) == 0
+        assert_tree_equal(expected, observed)
+        assert len(list(directory.glob("resume-history/*/resume.json"))) == 1
+        assert not dist.is_initialized()
     (Path(root) / f"rank-{rank}-passed.json").write_text(json.dumps({"passed": True}))
     phase("worker-completed")
 
@@ -147,7 +159,8 @@ def test_native_hunyuan_fsdp_eval_and_resume(tmp_path, algorithm):
             assert len(manifest.samples) == 3
             assert [row.seed for row in manifest.samples] == [312, 313, 314]
             assert audit_manifest(manifest, media_root=root).complete
-            assert (file.parent / "index.html").exists()
+            assert not (file.parent / "index.html").exists()
+            assert (file.parent / "summary.json").is_file()
         metrics = [json.loads(line) for line in (root / "metrics.jsonl").read_text().splitlines()]
         assert [row["train/optimizer_step"] for row in metrics] == ([0, 1, 2, 3, 4] if algorithm == "pairwise" else [1, 2, 3, 4])
         assert all(row["system/dp_world_size"] == 2 and row["cost/elapsed_gpu_hours"] == 0 for row in metrics)
@@ -175,3 +188,24 @@ def test_single_rank_fsdp_rejected_before_assets(tmp_path, monkeypatch):
         monkeypatch.setenv(key, value)
     assert main(["--config", str(path)]) == 2
     assert not (tmp_path / "run").exists()
+
+
+def test_fsdp_checkpoint_evaluation_and_history_rewind(tmp_path):
+    if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
+        pytest.skip("FFmpeg/ffprobe required")
+    path = config_file(tmp_path, "diffusionnft")
+    c = yaml.safe_load(path.read_text())
+    c["runtime"]["distributed"] = "fsdp"
+    c["sampling"]["prompts_per_rollout"] = 2
+    path.write_text(yaml.safe_dump(c))
+    context = mp.spawn(worker, args=(str(path), str(tmp_path), "hunyuan", True), nprocs=2, join=False)
+    deadline = time.monotonic() + 120
+    try:
+        while not context.join(timeout=1):
+            if time.monotonic() > deadline:
+                pytest.fail("FSDP recovery regression exceeded 120s")
+    finally:
+        for process in context.processes:
+            if process.is_alive():
+                process.terminate()
+            process.join(timeout=5)

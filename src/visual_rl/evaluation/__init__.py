@@ -1,6 +1,5 @@
-"""Manifest identity, completeness auditing, and small local-media galleries."""
+"""Local evaluation media, sample identity and completeness auditing."""
 
-from .gallery import JupyterContents, render_gallery
 from .manifest import (
     EvaluationAudit,
     EvaluationManifest,
@@ -16,9 +15,7 @@ __all__ = [
     "EvaluationManifest",
     "SampleAudit",
     "SampleRecord",
-    "JupyterContents",
     "audit_manifest",
     "file_sha256",
     "resolve_media",
-    "render_gallery",
 ]

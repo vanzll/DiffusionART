@@ -141,3 +141,30 @@ def test_component_switch_does_not_inherit_other_algorithm_options(tmp_path):
     assert load_config(parent, {"reward": {"weights": {"other": 1.0}}}).reward.weights == {
         "other": 1.0
     }
+
+
+@pytest.mark.parametrize("keep", [None, 1, 2])
+def test_checkpoint_retention_is_operational_and_legacy_compatible(tmp_path, keep):
+    import hashlib
+
+    path = write_config(tmp_path)
+    c = load_config(path, {"runtime": {"checkpoint_keep": keep}})
+    old = c.to_dict()
+    old["runtime"].pop("checkpoint_keep")
+    digest = hashlib.sha256(json.dumps(old, sort_keys=True, allow_nan=False,
+                                       separators=(",", ":")).encode()).hexdigest()
+    assert c.fingerprint() == digest == load_config(path).fingerprint()
+    assert c.fingerprint() != load_config(path, {"training": {"learning_rate": 2e-5}}).fingerprint()
+
+
+@pytest.mark.parametrize("keep", [0, -1, True, "2"])
+def test_invalid_checkpoint_retention(tmp_path, keep):
+    with pytest.raises(ConfigError):
+        load_config(write_config(tmp_path), {"runtime": {"checkpoint_keep": keep}})
+
+
+@pytest.mark.parametrize("flag", ["--resume-rewind", "--eval-only"])
+def test_resume_modes_require_checkpoint(tmp_path, flag):
+    with pytest.raises(SystemExit) as exc:
+        main(["--config", str(write_config(tmp_path)), flag])
+    assert exc.value.code == 2

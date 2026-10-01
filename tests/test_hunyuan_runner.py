@@ -214,9 +214,12 @@ def test_native_video_cli_encoding_eval_and_exact_resume(tmp_path, monkeypatch, 
         assert audit_manifest(manifest, media_root=root).complete
         assert [s.seed for s in manifest.samples] == [312, 313]
         assert all(s.fps == 8 and s.framecount == 5 for s in manifest.samples)
-        assert (file.parent / "index.html").exists()
+        assert not (file.parent / "index.html").exists()
+        assert (file.parent / "summary.json").is_file()
     status = json.loads((root / "status.json").read_text())
     assert status["optimizer_steps"] == 4
+    assert not list(root.glob(".train-media-*"))
+    assert not (root / "train-media").exists()
     assert status["completed_rollouts"] == (4 if algorithm in ("diffusionnft", "refl") else 2)
     metrics = [json.loads(line) for line in (root / "metrics.jsonl").read_text().splitlines()]
     assert [row["train/optimizer_step"] for row in metrics] == [1, 2, 3, 4]
@@ -228,6 +231,10 @@ def test_native_video_cli_encoding_eval_and_exact_resume(tmp_path, monkeypatch, 
         assert not any(key.startswith("train/refl/update_") for row in metrics for key in row)
         assert all(row["train/loss"] == pytest.approx(row["train/refl/loss"]) for row in metrics)
         assert all(row["train/grad_norm/before_clip"] > 0 for row in metrics)
+    records = {name: (root / name).read_bytes() for name in ("metrics.jsonl", "status.json", "cost.json")}
+    assert main(["--config", str(path), "--resume", str(root / "checkpoints/latest.json"), "--eval-only"]) == 0
+    assert records == {name: (root / name).read_bytes() for name in records}
+    assert len(list(root.glob("evaluation/*/*/manifest.json"))) == 4
     save = hunyuan.save_checkpoint
 
     def stop(*args, **kwargs):
@@ -250,6 +257,24 @@ def test_native_video_cli_encoding_eval_and_exact_resume(tmp_path, monkeypatch, 
     assert_tree_equal(expected["model"], actual["model"])
     assert_tree_equal(expected["optimizer"], actual["optimizer"])
     assert_tree_equal(expected["stateful"], actual["stateful"])
+
+
+@pytest.mark.parametrize("failure", [False, True])
+def test_training_media_is_ephemeral_even_when_scoring_fails(tmp_path, failure):
+    class Backend:
+        def score_videos(self, c, parts, endpoints, prompts, directory, device):
+            directory.mkdir()
+            (directory / "sample.mp4").write_bytes(b"temporary")
+            if failure:
+                raise RuntimeError("scorer failure")
+            return [directory / "sample.mp4"], "scores"
+
+    if failure:
+        with pytest.raises(RuntimeError, match="scorer failure"):
+            hunyuan.score_training_videos(Backend(), None, None, None, None, tmp_path, None)
+    else:
+        assert hunyuan.score_training_videos(Backend(), None, None, None, None, tmp_path, None) == "scores"
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_cached_conditioning_identity_and_pooled_token(tmp_path):

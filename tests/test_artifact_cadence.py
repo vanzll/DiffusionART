@@ -26,7 +26,7 @@ def test_explicit_cadence_native_training_eval_and_resume(tmp_path, monkeypatch)
     sd3.run(c)
     assert (torch.backends.cuda.matmul.allow_tf32, torch.backends.cudnn.allow_tf32) == original_flags
     root = Path(c.runtime.output_dir)
-    assert sorted(path.name for path in (root / "evaluation").iterdir()) == [
+    assert sorted(path.name for path in (root / "evaluation").glob("step-*")) == [
         "step-000000000", "step-000000002", "step-000000006"]
     expected = payload(root)
     interrupted = replace(c, runtime=replace(c.runtime, output_dir=str(tmp_path / "interrupted")))

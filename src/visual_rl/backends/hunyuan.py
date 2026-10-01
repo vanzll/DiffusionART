@@ -11,6 +11,7 @@ import sys
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import numpy as np
 import torch
@@ -18,9 +19,7 @@ import torch
 from ..algorithms import art_loss, art_scalar_covariance, clipped_grpo_loss
 from ..config import ConfigError
 from ..data import PromptDataset, PromptStream
-from ..evaluation import SampleRecord, audit_manifest
-from ..evaluation.gallery import render_gallery
-from ..evaluation.manifest import EvaluationManifest
+from ..evaluation import SampleRecord
 from ..evaluation.video import encode_video
 from ..models.finetune import FineTuneConfig, parameter_inventory
 from ..models.hunyuan import HunyuanVideoConditioning
@@ -30,6 +29,7 @@ from ..sampling import shifted_schedule
 from ..training import video_grpo, video_nft, video_pairwise, video_refl
 from ..training.checkpoint import _atomic_json, load_checkpoint, save_checkpoint
 from ..training.objectives import ARTObjective, disjoint_windows
+from ..training.resume import prepare_resume_history, validate_resume_request
 from ..training.rollout import collect_rollout
 from ..training.state import CostClock, Progress
 from ..training.update import accumulated_step
@@ -297,17 +297,18 @@ def evaluate(c, parts, dataset, step, root, device, *, backend=None):
     return publish_evaluation(c, dataset, step, root, directory, samples)
 
 
-def publish_evaluation(c, dataset, step, root, directory, samples):
-    summary = _publish_evaluation(c, dataset, step, root, directory, samples)
-    manifest = EvaluationManifest(step, tuple(row.sample_id for row in dataset.rows), tuple(samples))
-    gallery = (directory / "index.html").relative_to(root).as_posix()
-    (directory / "index.html").write_text(render_gallery(manifest, audit=audit_manifest(manifest, media_root=root), gallery_path=gallery))
-    _atomic_json(root / "evaluation/latest.json", {"optimizer_step": step, "gallery": gallery,
-                                                   "manifest": summary["manifest"]})
-    return summary
+publish_evaluation = _publish_evaluation
 
 
-def run(c, *, resume=None, backend=None):
+def score_training_videos(backend, c, parts, endpoints, prompts, root, device):
+    """MP4 transport is temporary; only evaluation media is retained."""
+    with TemporaryDirectory(prefix=".train-media-", dir=root) as directory:
+        _, scores = backend.score_videos(c, parts, endpoints, prompts, Path(directory) / "samples", device)
+    return scores
+
+
+def run(c, *, resume=None, backend=None, resume_rewind=False, evaluate_only=False):
+    validate_resume_request(resume, resume_rewind, evaluate_only)
     import fcntl
 
     from ..training.distributed import launch_identity
@@ -317,7 +318,8 @@ def run(c, *, resume=None, backend=None):
     if c.runtime.distributed == "fsdp":
         from .hunyuan_fsdp import run as run_fsdp
 
-        return run_fsdp(c, resume=resume, backend=backend)
+        return run_fsdp(c, resume=resume, backend=backend,
+                        resume_rewind=resume_rewind, evaluate_only=evaluate_only)
     launch_identity("none")
     if torch.distributed.is_initialized():
         raise ConfigError("single-device video runner must not enter an existing process group")
@@ -349,9 +351,11 @@ def run(c, *, resume=None, backend=None):
         if resume:
             if progress.optimizer_steps % updates_per_rollout(c) or progress.optimizer_steps > c.training.max_updates:
                 raise ConfigError("resume must be at an in-budget completed rollout boundary")
-            for line in (root / "metrics.jsonl").read_text().splitlines():
-                if json.loads(line).get("train/optimizer_step", 0) > progress.optimizer_steps:
-                    raise ConfigError("metrics newer than checkpoint; refuse history splicing")
+            if evaluate_only:
+                if validation is None:
+                    raise ConfigError("checkpoint evaluation requires a validation manifest")
+                return evaluate(c, parts, validation, progress.optimizer_steps, root, device, backend=backend)
+            prepare_resume_history(c, root, progress, receipt=resume, rewind=resume_rewind)
             _restore_cost(c, root, progress)
             if progress.optimizer_steps == c.training.max_updates and (root / "status.json").exists():
                 return
@@ -377,8 +381,7 @@ def run(c, *, resume=None, backend=None):
                             cache = backend.collect_training(c, parts, predict, plan, sigmas, device)
                     else:
                         cache = backend.collect_training(c, parts, predict, plan, sigmas, device)
-                    directory = root / "train-media" / f"attempt-{progress.attempts:09d}-{uuid.uuid4().hex}"
-                    _, scores = backend.score_videos(c, parts, cache.endpoints, prompts, directory, device)
+                    scores = score_training_videos(backend, c, parts, cache.endpoints, prompts, root, device)
                     extra_metrics = {}
                     if nft:
                         objective = video_nft.prepare_objective(c, cache, predict, scores, scores, device,
@@ -422,7 +425,8 @@ def run(c, *, resume=None, backend=None):
                     evaluate(c, parts, validation, step, root, device, backend=backend)
                 if c.runtime.checkpoint_due(step, c.training.max_updates):
                     clock.tick()
-                    save_checkpoint(root / "checkpoints", progress=progress, **checkpoint)
+                    save_checkpoint(root / "checkpoints", progress=progress,
+                                    keep_last=c.runtime.checkpoint_keep, **checkpoint)
                 _publish_cost(c, root, clock)
         _publish_cost(c, root, clock)
         _atomic_json(root / "status.json", {"status": "completed", "kind": f"{c.model.name}_native_development",

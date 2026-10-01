@@ -33,6 +33,7 @@ from ..training.grpo_sampling import collect_grpo_rollout
 from ..training.image_contracts import prompt_advantages, tf32_policy
 from ..training.nft import NFTState, nft_windows, prepare_nft_objective
 from ..training.nft_sampling import collect_nft_endpoints
+from ..training.resume import prepare_resume_history, validate_resume_request
 from ..training.rollout import collect_rollout
 from ..training.state import CostClock, Progress
 from ..training.update import accumulated_step
@@ -140,7 +141,8 @@ def _evaluate(session, c, parts, wrapped, dataset, step, root, nft):
     session.primary("evaluation manifest", publish)
 
 
-def run(c, *, resume=None):
+def run(c, *, resume=None, resume_rewind=False, evaluate_only=False):
+    validate_resume_request(resume, resume_rewind, evaluate_only)
     identity = launch_identity("ddp")
     p = identity.local_prompt_count(c.sampling.prompts_per_rollout)
     k = c.sampling.samples_per_prompt
@@ -156,11 +158,12 @@ def run(c, *, resume=None):
     timeout = float(os.environ.get("VISUAL_RL_COLLECTIVE_TIMEOUT_SECONDS", "300"))
     with distributed_session("ddp", device=c.runtime.device, timeout_seconds=timeout) as session:
         session.require_same_digest(c.fingerprint())
-        session.agree({"resume": None if resume is None else str(Path(resume).absolute())})
-        _run(session, c, p, k, resume)
+        session.agree({"resume": None if resume is None else str(Path(resume).absolute()),
+                       "rewind": resume_rewind, "evaluate_only": evaluate_only})
+        _run(session, c, p, k, resume, resume_rewind=resume_rewind, evaluate_only=evaluate_only)
 
 
-def _run(session, c, p, k, resume):
+def _run(session, c, p, k, resume, *, resume_rewind=False, evaluate_only=False):
     from . import sd3
 
     rank, world = session.identity.rank, session.identity.world_size
@@ -240,13 +243,14 @@ def _run(session, c, p, k, resume):
             def check_resume():
                 if progress.optimizer_steps % updates or progress.optimizer_steps > c.training.max_updates:
                     raise ConfigError("resume requires an in-budget completed rollout boundary")
-                if (root / "metrics.jsonl").exists():
-                    for line in (root / "metrics.jsonl").read_text().splitlines():
-                        if json.loads(line).get("train/optimizer_step", 0) > progress.optimizer_steps:
-                            raise ConfigError("metrics newer than checkpoint; refuse history splicing")
-                sd3._restore_cost(c, root, progress)
-
-            session.local("resume history", check_resume)
+            session.local("resume boundary", check_resume)
+            if evaluate_only:
+                if validation is None:
+                    raise ConfigError("checkpoint evaluation requires a validation manifest")
+                return _evaluate(session, c, parts, wrapped, validation, progress.optimizer_steps, root, algorithm_state)
+            session.primary("resume history rollback", lambda: prepare_resume_history(
+                c, root, progress, receipt=resume, rewind=resume_rewind))
+            session.local("resume cost", lambda: sd3._restore_cost(c, root, progress))
             done = session.local("resume completion", lambda: progress.optimizer_steps == c.training.max_updates
                                  and (root / "status.json").exists())
             session.agree(done)
@@ -377,7 +381,8 @@ def _run(session, c, p, k, resume):
                 _evaluate(session, c, parts, wrapped, validation, step, root, algorithm_state)
             if c.runtime.checkpoint_due(step, c.training.max_updates):
                 clock.tick()
-                save_ddp_checkpoint(root / "checkpoints", progress=progress, **checkpoint_args)
+                save_ddp_checkpoint(root / "checkpoints", progress=progress,
+                                    keep_last=c.runtime.checkpoint_keep, **checkpoint_args)
             _publish_cost(session, c, root, clock)
         state = _publish_cost(session, c, root, clock)
         session.primary("completion", lambda: _atomic_json(root / "status.json", {

@@ -72,7 +72,12 @@ def validate_config(config):
         raise ConfigError("group fixture requires even K and complete update windows")
 
 
-def run(config, *, resume=None):
+def run(config, *, resume=None, resume_rewind=False, evaluate_only=False):
+    from ..training.resume import validate_resume_request
+
+    validate_resume_request(resume, resume_rewind, evaluate_only)
+    if evaluate_only:
+        raise ConfigError("CPU fixture has no media evaluation; use a model backend")
     validate_config(config)
     algorithm = config.algorithm.name
     k, p = config.sampling.samples_per_prompt, config.sampling.prompts_per_rollout
@@ -89,10 +94,10 @@ def run(config, *, resume=None):
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as exc:
             raise RuntimeError("output directory already has an active writer") from exc
-        _run_owned(config, root, resume, algorithm, p, k)
+        _run_owned(config, root, resume, algorithm, p, k, resume_rewind=resume_rewind)
 
 
-def _run_owned(config, root, resume, algorithm, p, k):
+def _run_owned(config, root, resume, algorithm, p, k, *, resume_rewind=False):
     torch.manual_seed(config.seed)
     random.seed(config.seed)
     np.random.seed(config.seed)
@@ -117,12 +122,9 @@ def _run_owned(config, root, resume, algorithm, p, k):
             stateful=components,
             generators={"sampling": generator},
         )
-        if (root / "metrics.jsonl").exists():
-            lines = (root / "metrics.jsonl").read_text().splitlines()
-            if lines and json.loads(lines[-1])["train/optimizer_step"] > progress.optimizer_steps:
-                raise ValueError(
-                    "metrics are newer than checkpoint; cannot splice or overwrite history"
-                )
+        from ..training.resume import prepare_resume_history
+
+        prepare_resume_history(config, root, progress, receipt=resume, rewind=resume_rewind)
     else:
         _atomic_json(root / "resolved-config.json", config.to_dict())
         _atomic_json(
@@ -268,6 +270,7 @@ def _run_owned(config, root, resume, algorithm, p, k):
             if config.runtime.checkpoint_due(progress.optimizer_steps, config.training.max_updates):
                 save_checkpoint(
                     root / "checkpoints",
+                    keep_last=config.runtime.checkpoint_keep,
                     model=model,
                     optimizer=optimizer,
                     progress=progress,
@@ -280,6 +283,7 @@ def _run_owned(config, root, resume, algorithm, p, k):
             {
                 "status": "completed",
                 "kind": "software_fixture_not_paper_result",
+                "config_sha256": config.fingerprint(),
                 **progress.state_dict(),
             },
         )

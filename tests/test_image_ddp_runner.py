@@ -109,7 +109,7 @@ def saved_state(root):
     return manifest, torch.load(manifest.parent / "shared.pt", weights_only=True)
 
 
-def worker(rank, path, root):
+def worker(rank, path, root, verify_modes=False):
     torch.set_num_threads(1)
     os.environ.update(RANK=str(rank), WORLD_SIZE="2", LOCAL_RANK=str(rank), LOCAL_WORLD_SIZE="2",
                       VISUAL_RL_COLLECTIVE_TIMEOUT_SECONDS="30")
@@ -163,6 +163,18 @@ def worker(rank, path, root):
     before = (Path(interrupted) / "metrics.jsonl").read_bytes()
     assert main(["--config", path, "--output-dir", interrupted, "--resume", str(actual_manifest)]) == 0
     assert (Path(interrupted) / "metrics.jsonl").read_bytes() == before
+    if verify_modes:
+        directory = Path(interrupted)
+        records = {name: (directory / name).read_bytes() for name in ("metrics.jsonl", "cost.json", "status.json")}
+        assert main(["--config", path, "--output-dir", interrupted, "--resume", str(actual_manifest), "--eval-only"]) == 0
+        assert records == {name: (directory / name).read_bytes() for name in records}
+        previous, = directory.glob("checkpoints/step-000000002-*/manifest.json")
+        assert main(["--config", path, "--output-dir", interrupted, "--resume", str(previous), "--resume-rewind"]) == 0
+        _, replayed = saved_state(directory)
+        assert_tree_equal(expected["model"], replayed["model"])
+        assert_tree_equal(expected["optimizer"], replayed["optimizer"])
+        assert_tree_equal(expected["replicated_stateful"], replayed["replicated_stateful"])
+        assert len(list(directory.glob("resume-history/*/resume.json"))) == 1
 
 
 @pytest.mark.parametrize("algorithm,model,precision", [
@@ -214,6 +226,21 @@ def test_ddp_rejects_global_prompt_budget_that_cannot_shard(tmp_path, monkeypatc
     with pytest.raises(ConfigError, match="prompt groups"):
         sd3.run(load_config(path))
     assert not (tmp_path / "run").exists()
+
+
+def test_ddp_checkpoint_evaluation_and_history_rewind(tmp_path):
+    path = configured(tmp_path, "diffusionnft")
+    ctx = mp.spawn(worker, args=(str(path), str(tmp_path), True), nprocs=2, join=False)
+    deadline = time.monotonic() + 120
+    try:
+        while not ctx.join(timeout=1):
+            if time.monotonic() > deadline:
+                pytest.fail("DDP recovery regression exceeded 120s")
+    finally:
+        for process in ctx.processes:
+            if process.is_alive():
+                process.terminate()
+            process.join(timeout=5)
 
 
 def score_worker(rank, root):

@@ -315,6 +315,7 @@ class Runtime:
     checkpoint_every: int = 100
     log: str = "jsonl"
     checkpoint_at_updates: tuple[int, ...] = ()
+    checkpoint_keep: int | None = None
 
     def __post_init__(self):
         if not isinstance(self.output_dir, str) or not self.output_dir.strip():
@@ -324,6 +325,8 @@ class Runtime:
         if self.distributed not in ("none", "ddp", "fsdp"):
             raise ConfigError("unknown distributed strategy")
         _positive_int(self.checkpoint_every, "runtime.checkpoint_every", zero=True)
+        if self.checkpoint_keep is not None:
+            _positive_int(self.checkpoint_keep, "runtime.checkpoint_keep")
         object.__setattr__(self, "checkpoint_at_updates",
                            _update_steps(self.checkpoint_at_updates, "runtime.checkpoint_at_updates"))
         if self.log not in ("jsonl", "wandb"):
@@ -375,11 +378,17 @@ class Experiment:
         return asdict(self)
 
     def fingerprint(self) -> str:
-        return hashlib.sha256(
-            json.dumps(
-                self.to_dict(), sort_keys=True, allow_nan=False, separators=(",", ":")
-            ).encode()
-        ).hexdigest()
+        return config_fingerprint(self.to_dict())
+
+
+def config_fingerprint(document: dict) -> str:
+    """Retention is operational; old checkpoints and changed keep counts remain valid."""
+    document = dict(document)
+    document["runtime"] = dict(document.get("runtime", {}))
+    document["runtime"].pop("checkpoint_keep", None)
+    return hashlib.sha256(
+        json.dumps(document, sort_keys=True, allow_nan=False, separators=(",", ":")).encode()
+    ).hexdigest()
 
 
 def load_config(path: str | Path, overrides: dict | None = None) -> Experiment:

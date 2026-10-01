@@ -59,3 +59,13 @@ def test_preflight_rejects_backend_specific_options_without_writing(tmp_path):
     with pytest.raises(ConfigError):
         get_backend(config)
     assert not (tmp_path / "not-created").exists()
+
+
+def test_configurable_checkpoint_retention_and_resume(tmp_path):
+    config = load_config(EXAMPLE, {"runtime": {"output_dir": str(tmp_path / "run"), "checkpoint_keep": 1}})
+    run(config)
+    root = Path(config.runtime.output_dir)
+    assert len(list((root / "checkpoints").glob("step-*.pt"))) == 1
+    changed = load_config(EXAMPLE, {"runtime": {"output_dir": str(root), "checkpoint_keep": 2}})
+    run(changed, resume=root / "checkpoints/latest.json")
+    assert len((root / "metrics.jsonl").read_text().splitlines()) == 4

@@ -22,6 +22,7 @@ from ..training import video_nft, video_pairwise, video_refl
 from ..training.checkpoint import _atomic_json
 from ..training.distributed import distributed_session, launch_identity
 from ..training.fsdp_checkpoint import load_fsdp_checkpoint, save_fsdp_checkpoint
+from ..training.resume import prepare_resume_history, validate_resume_request
 from ..training.sharding import wrap_video_policy
 from ..training.state import CostClock, Progress
 from ..training.update import accumulated_step
@@ -115,10 +116,11 @@ def evaluate(session, c, parts, dataset, step, root, *, backend=hunyuan):
         hunyuan.publish_evaluation(c, dataset, step, root, directory,
                                   [ordered[i] for i in range(len(dataset.rows))])
 
-    session.primary("evaluation manifest/gallery", publish)
+    session.primary("evaluation manifest", publish)
 
 
-def run(c, *, resume=None, backend=hunyuan):
+def run(c, *, resume=None, backend=hunyuan, resume_rewind=False, evaluate_only=False):
+    validate_resume_request(resume, resume_rewind, evaluate_only)
     backend.validate_config(c)
     identity = launch_identity("fsdp")
     if identity.world_size < 2:
@@ -130,11 +132,13 @@ def run(c, *, resume=None, backend=hunyuan):
     timeout = float(os.environ.get("VISUAL_RL_COLLECTIVE_TIMEOUT_SECONDS", "300"))
     with distributed_session("fsdp", device=c.runtime.device, timeout_seconds=timeout) as session:
         session.require_same_digest(c.fingerprint())
-        session.agree({"resume": None if resume is None else str(Path(resume).absolute())})
-        _run(session, c, p, k, resume, backend=backend)
+        session.agree({"resume": None if resume is None else str(Path(resume).absolute()),
+                       "rewind": resume_rewind, "evaluate_only": evaluate_only})
+        _run(session, c, p, k, resume, backend=backend,
+             resume_rewind=resume_rewind, evaluate_only=evaluate_only)
 
 
-def _run(session, c, p, k, resume, *, backend=hunyuan):
+def _run(session, c, p, k, resume, *, backend=hunyuan, resume_rewind=False, evaluate_only=False):
     rank, world = session.identity.rank, session.identity.world_size
     root = Path(c.runtime.output_dir)
 
@@ -178,13 +182,16 @@ def _run(session, c, p, k, resume, *, backend=hunyuan):
             def validate_resume():
                 if progress.optimizer_steps % hunyuan.updates_per_rollout(c) or progress.optimizer_steps > c.training.max_updates:
                     raise ConfigError("resume requires an in-budget completed rollout boundary")
-                for line in (root / "metrics.jsonl").read_text().splitlines():
-                    if json.loads(line).get("train/optimizer_step", 0) > progress.optimizer_steps:
-                        raise ConfigError("metrics newer than checkpoint; refuse history splicing")
-                _restore_cost(c, root, progress)
-                return progress.optimizer_steps == c.training.max_updates and (root / "status.json").exists()
-
-            done = session.local("resume history", validate_resume)
+            session.local("resume boundary", validate_resume)
+            if evaluate_only:
+                if validation is None:
+                    raise ConfigError("checkpoint evaluation requires a validation manifest")
+                return evaluate(session, c, parts, validation, progress.optimizer_steps, root, backend=backend)
+            session.primary("resume history rollback", lambda: prepare_resume_history(
+                c, root, progress, receipt=resume, rewind=resume_rewind))
+            session.local("resume cost", lambda: _restore_cost(c, root, progress))
+            done = session.local("resume completion", lambda:
+                progress.optimizer_steps == c.training.max_updates and (root / "status.json").exists())
             session.agree(done)
             if done:
                 return
@@ -221,9 +228,8 @@ def _run(session, c, p, k, resume, *, backend=hunyuan):
                         cache = backend.collect_training(c, parts, predict, plan, sigmas, session.device)
                 else:
                     cache = backend.collect_training(c, parts, predict, plan, sigmas, session.device)
-                directory = root / "train-media" / f"rank-{rank:05d}" / f"attempt-{progress.attempts:09d}-{uuid.uuid4().hex}"
-                _, scores = session.local("rollout decode/scoring", lambda: backend.score_videos(c, parts,
-                    cache.endpoints, [row.text for row in rows for _ in range(k)], directory, session.device))
+                scores = session.local("rollout decode/scoring", lambda: hunyuan.score_training_videos(
+                    backend, c, parts, cache.endpoints, [row.text for row in rows for _ in range(k)], root, session.device))
                 global_scores = _global_scores(session, scores)
 
                 extra_metrics = {}
@@ -290,7 +296,8 @@ def _run(session, c, p, k, resume, *, backend=hunyuan):
                 evaluate(session, c, parts, validation, step, root, backend=backend)
             if c.runtime.checkpoint_due(step, c.training.max_updates):
                 clock.tick()
-                save_fsdp_checkpoint(root / "checkpoints", progress=progress, **checkpoint)
+                save_fsdp_checkpoint(root / "checkpoints", progress=progress,
+                                     keep_last=c.runtime.checkpoint_keep, **checkpoint)
             _publish_cost(session, c, root, clock)
         state = _publish_cost(session, c, root, clock)
         session.primary("completion", lambda: _atomic_json(root / "status.json", {

@@ -6,7 +6,6 @@ ART/NFT DDP dispatch uses shared kernels and evaluation. Deadline-isolated
 artifact publication remains separate; do not use unreliable network storage.
 """
 
-import hashlib
 import inspect
 import json
 import math
@@ -20,7 +19,7 @@ import numpy as np
 import torch
 
 from ..algorithms import art_loss, art_scalar_covariance
-from ..config import ConfigError
+from ..config import ConfigError, config_fingerprint
 from ..data import PromptDataset, PromptStream
 from ..evaluation import EvaluationManifest, SampleRecord, audit_manifest
 from ..models import FluxAdapter, FluxConfig, SD3Adapter, SD3Config
@@ -47,6 +46,7 @@ from ..training.nft import (
     validate_nft,
 )
 from ..training.objectives import ARTObjective, disjoint_windows
+from ..training.resume import prepare_resume_history, validate_resume_request
 from ..training.rollout import collect_rollout
 from ..training.state import CostClock, Progress
 from ..training.update import accumulated_step
@@ -432,9 +432,7 @@ def _check_run_identity(c, root):
         resolved = json.loads((root / "resolved-config.json").read_text())
     except (OSError, ValueError) as exc:
         raise ConfigError("resume output is missing valid run identity/config") from exc
-    digest = hashlib.sha256(
-        json.dumps(resolved, sort_keys=True, allow_nan=False, separators=(",", ":")).encode()
-    ).hexdigest()
+    digest = config_fingerprint(resolved)
     if (
         record.get("kind") != f"{c.model.name}_native_development"
         or record.get("config_sha256") != c.fingerprint()
@@ -574,15 +572,21 @@ def _publish_evaluation(c, dataset, step, root, directory, samples):
         summary.update({f"eval/diagnostics/{k}": v
                         for k, v in summarize_diagnostics(diagnostics).items()})
     _atomic_json(directory / "summary.json", summary)
+    _atomic_json(root / "evaluation/latest.json", {
+        "optimizer_step": step,
+        "manifest": (directory / "manifest.json").relative_to(root).as_posix(),
+        "summary": (directory / "summary.json").relative_to(root).as_posix(),
+    })
     return summary
 
 
-def run(c, *, resume=None):
+def run(c, *, resume=None, resume_rewind=False, evaluate_only=False):
+    validate_resume_request(resume, resume_rewind, evaluate_only)
     validate_config(c)
     if c.runtime.distributed == "ddp":
         from .image_ddp import run as run_ddp
 
-        return run_ddp(c, resume=resume)
+        return run_ddp(c, resume=resume, resume_rewind=resume_rewind, evaluate_only=evaluate_only)
     if torch.distributed.is_initialized():
         raise ConfigError("single-device image runner must not enter an existing process group")
     data = PromptDataset.load(c.data.manifest, expected_sha256=c.data.sha256, task="t2i")
@@ -658,12 +662,14 @@ def run(c, *, resume=None):
                 stateful=stateful,
                 generators={"sampling": generator},
             )
-            if progress.optimizer_steps % updates_per_rollout:
+            if progress.optimizer_steps % updates_per_rollout or progress.optimizer_steps > c.training.max_updates:
                 raise ConfigError("resume requires a complete rollout update boundary")
-            if (root / "metrics.jsonl").exists():
-                for line in (root / "metrics.jsonl").read_text().splitlines():
-                    if json.loads(line).get("train/optimizer_step", 0) > progress.optimizer_steps:
-                        raise ConfigError("metrics newer than checkpoint; refuse history splicing")
+            if evaluate_only:
+                if validation is None:
+                    raise ConfigError("checkpoint evaluation requires a validation manifest")
+                with algorithm_state.evaluation() if algorithm_state is not None else nullcontext():
+                    return evaluate(c, parts, validation, progress.optimizer_steps, root)
+            prepare_resume_history(c, root, progress, receipt=resume, rewind=resume_rewind)
             _restore_cost(c, root, progress)
             if (
                 progress.optimizer_steps == c.training.max_updates
@@ -849,6 +855,7 @@ def run(c, *, resume=None):
                             optimizer=optimizer,
                             progress=progress,
                             config_sha256=c.fingerprint(),
+                            keep_last=c.runtime.checkpoint_keep,
                             stateful=stateful,
                             generators={"sampling": generator},
                         )

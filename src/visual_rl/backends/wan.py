@@ -144,5 +144,6 @@ def score_videos(c, parts, *args, **kwargs):
     return hunyuan.score_videos(c, parts, *args, **kwargs, decode_bf16=False)
 
 
-def run(c, *, resume=None):
-    return hunyuan.run(c, resume=resume, backend=sys.modules[__name__])
+def run(c, *, resume=None, resume_rewind=False, evaluate_only=False):
+    return hunyuan.run(c, resume=resume, backend=sys.modules[__name__],
+                       resume_rewind=resume_rewind, evaluate_only=evaluate_only)
