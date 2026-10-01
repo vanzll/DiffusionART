@@ -8,11 +8,72 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 import warnings
 from pathlib import Path
 
 _STEM = re.compile(r"step-[0-9]{9,}-[0-9a-f]{32}\Z")
 _REGISTRY = ".checkpoint-retention.json"
+
+
+class _CleanupWorker:
+    """One permanent daemon and one replaceable metadata-only pending job.
+
+    A stalled filesystem operation pins this worker, never the training ranks.
+    No replacement thread or unbounded shutdown join is permitted.
+    """
+
+    def __init__(self):
+        self._condition = threading.Condition()
+        self._thread = None
+        self._pending = None
+        self._busy = False
+
+    def enqueue(self, job):
+        with self._condition:
+            if self._thread is None:
+                self._thread = threading.Thread(target=self._run, name="checkpoint-retention", daemon=True)
+                self._thread.start()
+            self._pending = job
+            self._condition.notify()
+
+    def _run(self):
+        while True:
+            with self._condition:
+                self._condition.wait_for(lambda: self._pending is not None)
+                job, self._pending = self._pending, None
+                self._busy = True
+            try:
+                retain_checkpoints(job["root"], job["receipt"], identity=job["identity"],
+                                   keep_last=job["keep_last"])
+            except Exception as exc:
+                _warn(exc)
+            finally:
+                with self._condition:
+                    self._busy = False
+                    self._condition.notify_all()
+
+    def wait_idle(self, timeout):
+        """Bounded observation for tests only; save/exit never waits for IO."""
+        with self._condition:
+            return self._condition.wait_for(lambda: not self._busy and self._pending is None,
+                                            timeout=timeout)
+
+
+_WORKER = _CleanupWorker()
+
+
+def enqueue_retention(root, receipt, *, identity, keep_last):
+    """Best-effort enqueue with no IO, tensor/model ownership or collective."""
+    if keep_last is None:
+        return
+    try:
+        # JSON roundtrip accepts only metadata and detaches mutable layout lists.
+        job = json.loads(json.dumps({"root": str(root), "receipt": str(receipt),
+                                    "identity": identity, "keep_last": keep_last}, allow_nan=False))
+        _WORKER.enqueue(job)
+    except Exception as exc:
+        _warn(exc)
 
 
 def validate_keep_last(keep_last):
@@ -109,7 +170,7 @@ def _warn(exc):
     # Cleanup is advisory even when a caller promotes warnings to exceptions.
     try:
         warnings.warn(f"checkpoint retention skipped: {exc}", RuntimeWarning, stacklevel=3)
-    except Warning:
+    except Exception:
         pass
 
 
@@ -162,6 +223,10 @@ def retain_checkpoints(root, receipt, *, identity, keep_last):
             try:
                 # Revalidate immediately before exact-file unlink; never recurse.
                 candidate, files = _snapshot(root, item)
+                # Hashing can be slow while training publishes a newer latest.
+                latest = _json(root / "latest.json")
+                if item["receipt"] in {current, latest.get("receipt"), latest.get("manifest")}:
+                    continue
                 for path in files:
                     _safe_path(path).unlink()
                 if identity["kind"] != "local":

@@ -20,7 +20,7 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
 
 from .checkpoint import _atomic_json, _digest, restore_rng, rng_state
-from .checkpoint_retention import retain_checkpoints, validate_keep_last
+from .checkpoint_retention import enqueue_retention, validate_keep_last
 from .state import Progress
 
 
@@ -126,6 +126,8 @@ def save_ddp_checkpoint(
     is supported. Rank-local buffers are preserved even when they differ.
     ``keep_last`` retains registered publications only, in publication order;
     None disables cleanup. All ranks must supply the same retention setting.
+    Cleanup is asynchronous/advisory; a busy worker may skip publications and
+    cannot guarantee N snapshots at save return.
     """
     group = _Group(model)
     group.local("retention preflight", lambda: validate_keep_last(keep_last))
@@ -176,13 +178,13 @@ def save_ddp_checkpoint(
         _atomic_json(root / "latest.json", {"manifest": f"{directory.name}/manifest.json"})
 
     group.local("manifest publication", publish_manifest)
-    group.local("retention cleanup", lambda: retain_checkpoints(
-        root, receipt, identity={"kind": "ddp", "config_sha256": config_sha256,
-                                "topology": {"world_size": group.world,
-                                             "global_world_size": dist.get_world_size(),
-                                             "members": dist.get_process_group_ranks(group.group),
-                                             "device_type": group.device.type}},
-        keep_last=keep_last) if group.rank == 0 else None)
+    if group.rank == 0:
+        enqueue_retention(
+            root, receipt, identity={"kind": "ddp", "config_sha256": config_sha256,
+                                    "topology": {"world_size": group.world,
+                                                 "global_world_size": dist.get_world_size(),
+                                                 "members": dist.get_process_group_ranks(group.group),
+                                                 "device_type": group.device.type}}, keep_last=keep_last)
     return receipt
 
 

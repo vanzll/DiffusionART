@@ -2,6 +2,7 @@ import copy
 import json
 import os
 import random
+import threading
 import time
 from pathlib import Path
 
@@ -11,6 +12,7 @@ import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
 
+from visual_rl.training import checkpoint_retention as retention
 from visual_rl.training import distributed_checkpoint as checkpoint
 from visual_rl.training.checkpoint import restore_rng, rng_state
 from visual_rl.training.distributed import distributed_session
@@ -80,7 +82,7 @@ def update(model, optimizer, shadow, generator, cursor, rank):
 def worker(rank, root, mode):
     torch.set_num_threads(1)
     os.environ.update(RANK=str(rank), WORLD_SIZE="2", LOCAL_RANK=str(rank), LOCAL_WORLD_SIZE="2")
-    with distributed_session("ddp", device="cpu", timeout_seconds=15,
+    with distributed_session("ddp", device="cpu", timeout_seconds=2 if mode == "slow_cleanup" else 15,
                              init_method=f"file://{root}/rendezvous"):
         torch.manual_seed(35)
         model, optimizer, shadow = make_model()
@@ -109,14 +111,51 @@ def worker(rank, root, mode):
                 checkpoint.save_ddp_checkpoint(output, progress=progress, **kwargs)
             assert not output.exists()
             return
+        started = threading.Event()
+        if mode == "slow_cleanup" and rank == 0:
+            original_cleanup = retention.retain_checkpoints
+
+            def delayed(*args, **kwargs):
+                started.set()
+                time.sleep(5)
+                original_cleanup(*args, **kwargs)
+
+            retention.retain_checkpoints = delayed
+        begin = time.monotonic()
         receipt = checkpoint.save_ddp_checkpoint(output, progress=progress,
-                                                keep_last=2 if mode in {"retention", "publication_failure", "write_failure"} else None,
+                                                keep_last=2 if mode in {"retention", "publication_failure", "write_failure", "slow_cleanup"} else None,
                                                 **kwargs)
+        if mode == "slow_cleanup":
+            assert time.monotonic() - begin < 2
+            if rank == 0:
+                assert started.wait(timeout=1)
+            update(model, optimizer, shadow, generator, cursor, rank)
+            flag = torch.ones(1)
+            dist.all_reduce(flag)
+            assert flag.item() == 2
+            time.sleep(5.5)
+            if rank == 0:
+                assert retention._WORKER.wait_idle(timeout=1)
+                retention.retain_checkpoints = original_cleanup
+            return
+        if mode in {"retention", "publication_failure", "write_failure"}:
+            if rank == 0:
+                assert retention._WORKER.wait_idle(timeout=10)
+            dist.barrier()
         if mode == "retention":
             foreign = checkpoint.save_ddp_checkpoint(
                 output, progress=progress, **{**kwargs, "config_sha256": "b" * 64}, keep_last=1)
+            if rank == 0:
+                assert retention._WORKER.wait_idle(timeout=10)
+            dist.barrier()
             second = checkpoint.save_ddp_checkpoint(output, progress=progress, **kwargs, keep_last=2)
+            if rank == 0:
+                assert retention._WORKER.wait_idle(timeout=10)
+            dist.barrier()
             current = checkpoint.save_ddp_checkpoint(output, progress=progress, **kwargs, keep_last=2)
+            if rank == 0:
+                assert retention._WORKER.wait_idle(timeout=10)
+            dist.barrier()
             assert not receipt.parent.exists()
             assert foreign.exists() and second.exists() and current.exists()
             assert checkpoint.load_ddp_checkpoint(current, **kwargs) == progress
@@ -214,7 +253,7 @@ def worker(rank, root, mode):
                 assert set(payload["model_local"]) == {"local_counter"}
 
 
-@pytest.mark.parametrize("mode", ["resume", "retention", "publication_failure", "step_mismatch", "bad_names", "write_failure", "corrupt_shared", "corrupt_rank",
+@pytest.mark.parametrize("mode", ["resume", "retention", "slow_cleanup", "publication_failure", "step_mismatch", "bad_names", "write_failure", "corrupt_shared", "corrupt_rank",
                                   "missing_rank", "world_mismatch", "component_mismatch", "apply_failure"])
 def test_real_ddp_checkpoint(tmp_path, mode):
     ctx = mp.spawn(worker, args=(str(tmp_path), mode), nprocs=2, join=False)

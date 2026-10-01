@@ -238,3 +238,69 @@ def test_distributed_snapshot_safety_without_native_collectives(tmp_path, kind, 
     with pytest.warns(RuntimeWarning) if unsafe != "topology" else nullcontext():
         current = publish("2", {"world_size": 2, "members": [0, 1]})
     assert first.exists() and current.exists()
+
+
+def test_worker_is_single_bounded_daemon_and_coalesces_metadata(monkeypatch):
+    import threading
+
+    started, release = threading.Event(), threading.Event()
+    seen = []
+
+    def delayed(root, receipt, *, identity, keep_last):
+        seen.append((receipt, identity))
+        if receipt == "first":
+            started.set()
+            assert release.wait(timeout=5)
+
+    worker = retention._CleanupWorker()
+    monkeypatch.setattr(retention, "_WORKER", worker)
+    monkeypatch.setattr(retention, "retain_checkpoints", delayed)
+    identity = {"kind": "ddp", "topology": {"members": [0, 1]}}
+    try:
+        retention.enqueue_retention("root", "first", identity=identity, keep_last=1)
+        assert started.wait(timeout=1)
+        thread = worker._thread
+        assert thread.daemon
+        for index in range(100):
+            retention.enqueue_retention("root", str(index), identity=identity, keep_last=1)
+        identity["topology"]["members"].append(2)
+        assert worker._thread is thread
+        assert worker._pending["receipt"] == "99"
+        assert not worker.wait_idle(timeout=0.02)
+    finally:
+        release.set()
+        assert worker.wait_idle(timeout=2)
+    assert [receipt for receipt, _ in seen] == ["first", "99"]
+    assert all(item["topology"]["members"] == [0, 1] for _, item in seen)
+
+
+def test_stale_queued_publication_never_adopts_or_prunes(tmp_path, writer):
+    save, _, _ = writer
+    first = save(1, keep_last=None)
+    current = save(2, keep_last=None)
+    with pytest.warns(RuntimeWarning, match="not published latest"):
+        retention.retain_checkpoints(tmp_path, first, keep_last=1,
+                                    identity={"kind": "local", "config_sha256": "a" * 64})
+    assert first.exists() and current.exists()
+    assert not (tmp_path / ".checkpoint-retention.json").exists()
+
+
+def test_latest_rechecked_after_slow_integrity_validation(tmp_path, writer, monkeypatch):
+    save, _, _ = writer
+    first = save(1)
+    original = retention._snapshot
+    checks = 0
+
+    def change_latest(root, entry):
+        nonlocal checks
+        result = original(root, entry)
+        if entry["receipt"] == first.name:
+            checks += 1
+            if checks == 2:
+                checkpoint._atomic_json(tmp_path / "latest.json", {"receipt": first.name})
+        return result
+
+    monkeypatch.setattr(retention, "_snapshot", change_latest)
+    current = save(2, keep_last=1)
+    assert checks == 2
+    assert first.exists() and payload(first).exists() and current.exists()

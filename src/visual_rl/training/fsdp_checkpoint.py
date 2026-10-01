@@ -33,7 +33,7 @@ from torch.distributed.fsdp import LocalStateDictConfig, ShardingStrategy, State
 from torch.distributed.remote_device import _remote_device
 
 from .checkpoint import _atomic_json, _digest, restore_rng, rng_state
-from .checkpoint_retention import retain_checkpoints, validate_keep_last
+from .checkpoint_retention import enqueue_retention, validate_keep_last
 from .distributed_checkpoint import DistributedCheckpointError as DistributedCheckpointError
 from .distributed_checkpoint import _Group, _write
 from .state import Progress
@@ -175,6 +175,8 @@ def save_fsdp_checkpoint(
     Stateful callbacks must be rank-local and must not perform collectives.
     ``keep_last`` retains registered publications of exactly the same layout;
     None disables cleanup. All ranks must supply the same retention setting.
+    Cleanup is asynchronous/advisory; a busy worker may skip publications and
+    cannot guarantee N snapshots at save return.
     """
     group = _FSDPGroup(model)
     group.local("retention preflight", lambda: validate_keep_last(keep_last))
@@ -218,9 +220,9 @@ def save_fsdp_checkpoint(
         _atomic_json(root / "latest.json", {"manifest": f"{directory.name}/manifest.json"})
 
     group.local("manifest publication", publish)
-    group.local("retention cleanup", lambda: retain_checkpoints(
-        root, receipt, identity={"kind": "fsdp-local", "config_sha256": config_sha256,
-                                "topology": layout}, keep_last=keep_last) if group.rank == 0 else None)
+    if group.rank == 0:
+        enqueue_retention(root, receipt, identity={"kind": "fsdp-local", "config_sha256": config_sha256,
+                                                  "topology": layout}, keep_last=keep_last)
     return receipt
 
 

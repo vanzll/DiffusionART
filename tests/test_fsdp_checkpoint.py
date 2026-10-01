@@ -1,6 +1,7 @@
 import copy
 import json
 import random
+import threading
 import time
 from datetime import timedelta
 from pathlib import Path
@@ -15,6 +16,7 @@ from torch.distributed._shard.sharded_tensor import ShardedTensor
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.distributed.fsdp import MixedPrecision, ShardingStrategy
 
+from visual_rl.training import checkpoint_retention as retention
 from visual_rl.training import fsdp_checkpoint as checkpoint
 from visual_rl.training.checkpoint import rng_state
 from visual_rl.training.state import Progress
@@ -111,7 +113,8 @@ def snapshot(model, optimizer, cursor, generator):
 def worker(rank, root, mode):
     torch.set_num_threads(1)
     dist.init_process_group("gloo", rank=rank, world_size=2,
-                            init_method=f"file://{root}/rendezvous", timeout=timedelta(seconds=20))
+                            init_method=f"file://{root}/rendezvous",
+                            timeout=timedelta(seconds=2 if mode == "slow_cleanup" else 20))
     try:
         torch.manual_seed(35)
         model, optimizer = make_model(mixed=mode == "mixed", padding=mode == "padding",
@@ -140,9 +143,37 @@ def worker(rank, root, mode):
             assert not output.exists()
             return
         before = snapshot(model, optimizer, cursor, generator)
+        started = threading.Event()
+        if mode == "slow_cleanup" and rank == 0:
+            original_cleanup = retention.retain_checkpoints
+
+            def delayed(*args, **kwargs):
+                started.set()
+                time.sleep(5)
+                original_cleanup(*args, **kwargs)
+
+            retention.retain_checkpoints = delayed
+        begin = time.monotonic()
         receipt = checkpoint.save_fsdp_checkpoint(output, progress=progress,
-                                                 keep_last=2 if mode in {"retention", "publication_failure", "write_failure"} else None,
+                                                 keep_last=2 if mode in {"retention", "publication_failure", "write_failure", "slow_cleanup"} else None,
                                                  **kwargs)
+        if mode == "slow_cleanup":
+            assert time.monotonic() - begin < 2
+            if rank == 0:
+                assert started.wait(timeout=1)
+            update(model, optimizer, generator, cursor, rank)
+            flag = torch.ones(1)
+            dist.all_reduce(flag)
+            assert flag.item() == 2
+            time.sleep(5.5)
+            if rank == 0:
+                assert retention._WORKER.wait_idle(timeout=1)
+                retention.retain_checkpoints = original_cleanup
+            return
+        if mode in {"retention", "publication_failure", "write_failure"}:
+            if rank == 0:
+                assert retention._WORKER.wait_idle(timeout=10)
+            dist.barrier()
         equal(before, snapshot(model, optimizer, cursor, generator))
         with load_with_process_group(model.process_group), torch.serialization.safe_globals(checkpoint._SHARD_TYPES):
             payload = torch.load(receipt.parent / f"rank-{rank:05d}.pt", weights_only=True)
@@ -158,7 +189,13 @@ def worker(rank, root, mode):
 
         if mode == "retention":
             second = checkpoint.save_fsdp_checkpoint(output, progress=progress, **kwargs, keep_last=2)
+            if rank == 0:
+                assert retention._WORKER.wait_idle(timeout=10)
+            dist.barrier()
             current = checkpoint.save_fsdp_checkpoint(output, progress=progress, **kwargs, keep_last=2)
+            if rank == 0:
+                assert retention._WORKER.wait_idle(timeout=10)
+            dist.barrier()
             assert not receipt.parent.exists()
             assert second.exists() and current.exists()
             assert checkpoint.load_fsdp_checkpoint(current, **kwargs) == progress
@@ -268,7 +305,7 @@ def worker(rank, root, mode):
         dist.destroy_process_group()
 
 
-@pytest.mark.parametrize("mode", ["resume", "retention", "publication_failure", "mixed", "padding", "scalar", "write_failure", "corrupt", "world",
+@pytest.mark.parametrize("mode", ["resume", "retention", "slow_cleanup", "publication_failure", "mixed", "padding", "scalar", "write_failure", "corrupt", "world",
                                   "config", "wrapping", "optimizer_order", "components",
                                   "bad_names", "gradients", "step_mismatch", "apply_failure",
                                   "extraction_failure"])
