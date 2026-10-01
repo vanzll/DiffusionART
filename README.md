@@ -28,15 +28,15 @@ recipe in YAML; use the same entrypoint for rollout, updates, evaluation, and re
 ## Visual Results
 
 <table>
-  <thead><tr><th></th><th>Pre-trained</th><th>DiffusionART</th></tr></thead>
+  <thead><tr><th width="50%">Pre-trained</th><th width="50%">DiffusionART</th></tr></thead>
   <tbody>
+    <tr><th colspan="2" align="center">Text-to-image</th></tr>
     <tr>
-      <th>Text-to-image</th>
       <td><img src="assets/readme/image-chicago-before.jpg" width="320" alt="Pre-trained image: a snowy Chicago street at Christmas"></td>
       <td><img src="assets/readme/image-chicago-after.jpg" width="320" alt="DiffusionART image: a snowy Chicago street at Christmas"></td>
     </tr>
+    <tr><th colspan="2" align="center">Text-to-video</th></tr>
     <tr>
-      <th>Text-to-video</th>
       <td><img src="assets/readme/video-106-before.jpg" width="320" alt="Pre-trained video frame: a river through an autumn valley"></td>
       <td><img src="assets/readme/video-106-after.jpg" width="320" alt="DiffusionART video frame: a river through an autumn valley"></td>
     </tr>
