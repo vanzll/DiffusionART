@@ -31,6 +31,7 @@ jobs:
       - name: Lint and Test
         run: |
           uv run --locked --no-sync ruff check src tests
+          mkdir -p test-results
           uv run --locked --no-sync pytest -q --junitxml=test-results/junit.xml --basetemp=test-results/work
       - name: Preserve Test Diagnostics
         if: always()
