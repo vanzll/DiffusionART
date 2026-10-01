@@ -1,19 +1,24 @@
 """Conservative retention of explicitly registered, published checkpoints.
 
-Legacy and unregistered artifacts are never adopted. The registry is local to
-one absolute root; this is not a concurrent-writer or hostile-filesystem lock.
+Legacy and unregistered artifacts are never adopted. Cleanup uses a separate
+per-root lock, not the trainer's output lease or a hostile-filesystem lock.
 """
 
 from __future__ import annotations
 
+import fcntl
 import json
+import os
 import re
+import stat
 import threading
 import warnings
+from contextlib import contextmanager
 from pathlib import Path
 
 _STEM = re.compile(r"step-[0-9]{9,}-[0-9a-f]{32}\Z")
 _REGISTRY = ".checkpoint-retention.json"
+_LOCK = ".checkpoint-retention.lock"
 
 
 class _CleanupWorker:
@@ -174,7 +179,42 @@ def _warn(exc):
         pass
 
 
+@contextmanager
+def _retention_lock(root):
+    """The cleanup caller owns this fd until all registry/pruning IO completes.
+
+    Keep the lock inode in place across runs: unlink/recreate would let a new
+    process bypass a stalled worker that still holds the original flock.
+    """
+    path = _safe_path(root / _LOCK)
+    fd = os.open(path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC, 0o600)
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise ValueError("retention lock requires a regular, non-hardlinked file")
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        yield
+    finally:
+        os.close(fd)
+
+
 def retain_checkpoints(root, receipt, *, identity, keep_last):
+    """Advisory cleanup under a nonblocking per-root, cross-process flock.
+
+    Both synchronous callers and the daemon participate. Busy roots are skipped;
+    a stalled owner is never replaced, even after the trainer releases its lease.
+    """
+    if keep_last is None:
+        return
+    try:
+        root = _safe_path(Path(root).absolute())
+        with _retention_lock(root):
+            _retain_locked(root, receipt, identity=identity, keep_last=keep_last)
+    except Exception as exc:
+        _warn(exc)
+
+
+def _retain_locked(root, receipt, *, identity, keep_last):
     """Run only after successful latest publication; all errors are nonfatal.
 
     Newest means publication order, not largest step (a resumed run can rewind).

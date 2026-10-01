@@ -10,6 +10,14 @@ from visual_rl.training import checkpoint_retention as retention
 from visual_rl.training.state import Progress
 
 
+def _hold_retention_lock(root, ready, release):
+    from pathlib import Path
+
+    with retention._retention_lock(Path(root)):
+        ready.set()
+        assert release.wait(timeout=15)
+
+
 @pytest.fixture
 def writer(tmp_path):
     model = torch.nn.Linear(2, 1)
@@ -304,3 +312,91 @@ def test_latest_rechecked_after_slow_integrity_validation(tmp_path, writer, monk
     current = save(2, keep_last=1)
     assert checks == 2
     assert first.exists() and payload(first).exists() and current.exists()
+
+
+def test_process_lock_skips_sync_cleanup_without_registry_mutation(tmp_path, writer):
+    import multiprocessing
+    import time
+
+    save, _, _ = writer
+    first = save(1)
+    current = save(2, keep_last=None)
+    registry = tmp_path / ".checkpoint-retention.json"
+    before = registry.read_bytes()
+    ctx = multiprocessing.get_context("spawn")
+    ready, release = ctx.Event(), ctx.Event()
+    process = ctx.Process(target=_hold_retention_lock, args=(str(tmp_path), ready, release))
+    process.start()
+    try:
+        assert ready.wait(timeout=10)
+        begin = time.monotonic()
+        with pytest.warns(RuntimeWarning):
+            retention.retain_checkpoints(tmp_path, current, keep_last=1,
+                                        identity={"kind": "local", "config_sha256": "a" * 64})
+        assert time.monotonic() - begin < 2
+        assert first.exists() and current.exists()
+        assert registry.read_bytes() == before
+    finally:
+        release.set()
+        process.join(timeout=5)
+        if process.is_alive():
+            process.terminate()
+            process.join(timeout=5)
+    assert process.exitcode == 0
+    retention.retain_checkpoints(tmp_path, current, keep_last=1,
+                                identity={"kind": "local", "config_sha256": "a" * 64})
+    assert registry.exists() and not first.exists()
+    next_receipt = save(3, keep_last=1)
+    assert not current.exists() and next_receipt.exists()
+
+
+def test_daemon_holds_root_lock_through_slow_validation(tmp_path, writer, monkeypatch):
+    import threading
+
+    save, _, _ = writer
+    current = save(1, keep_last=None)
+    entered, release = threading.Event(), threading.Event()
+    worker = retention._CleanupWorker()
+    original = retention._snapshot
+
+    def delayed(root, entry):
+        entered.set()
+        assert release.wait(timeout=5)
+        return original(root, entry)
+
+    monkeypatch.setattr(retention, "_WORKER", worker)
+    monkeypatch.setattr(retention, "_snapshot", delayed)
+    try:
+        retention.enqueue_retention(tmp_path, current, keep_last=1,
+                                    identity={"kind": "local", "config_sha256": "a" * 64})
+        assert entered.wait(timeout=1)
+        with pytest.raises(BlockingIOError), retention._retention_lock(tmp_path):
+            pytest.fail("daemon's flock was bypassed")
+        assert not worker.wait_idle(timeout=0.02)
+    finally:
+        release.set()
+        assert worker.wait_idle(timeout=2)
+    with retention._retention_lock(tmp_path):
+        assert (tmp_path / ".checkpoint-retention.json").exists()
+
+
+@pytest.mark.parametrize("unsafe", ["symlink", "hardlink", "fifo"])
+def test_retention_lock_rejects_unsafe_inode(tmp_path, writer, unsafe):
+    import os
+
+    save, _, _ = writer
+    first = save(1, keep_last=None)
+    lock = tmp_path / ".checkpoint-retention.lock"
+    outside = tmp_path.parent / "foreign-lock"
+    outside.write_text("foreign")
+    if unsafe == "symlink":
+        lock.symlink_to(outside)
+    elif unsafe == "hardlink":
+        os.link(outside, lock)
+    else:
+        os.mkfifo(lock)
+    with pytest.warns(RuntimeWarning):
+        current = save(2, keep_last=1)
+    assert first.exists() and current.exists()
+    assert outside.read_text() == "foreign"
+    assert not (tmp_path / ".checkpoint-retention.json").exists()
