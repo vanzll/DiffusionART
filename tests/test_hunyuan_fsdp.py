@@ -1,3 +1,4 @@
+import faulthandler
 import json
 import os
 import shutil
@@ -29,6 +30,15 @@ def wrap(c, parts, session):
 def worker(rank, path, root, family="hunyuan"):
     from visual_rl.backends import hunyuan_fsdp
 
+    faulthandler.enable(all_threads=True)
+
+    def phase(name):
+        (Path(root) / f"rank-{rank}-phase.json").write_text(json.dumps({
+            "rank": rank, "pid": os.getpid(), "family": family, "phase": name,
+            "process_group_initialized": dist.is_initialized(),
+        }))
+
+    phase("worker-started")
     torch.set_num_threads(1)
     os.environ.update(RANK=str(rank), WORLD_SIZE="2", LOCAL_RANK=str(rank), LOCAL_WORLD_SIZE="2",
                       VISUAL_RL_COLLECTIVE_TIMEOUT_SECONDS="30")
@@ -79,20 +89,25 @@ def worker(rank, path, root, family="hunyuan"):
         return value
 
     hunyuan_fsdp.save_fsdp_checkpoint = save
+    phase("continuous-run")
     assert main(["--config", path]) == 0
     assert not dist.is_initialized()
     mode[0] = "interrupted"
     target = str(Path(root) / "interrupted")
+    phase("interruption-check")
     with pytest.raises(RuntimeError, match="test checkpoint interruption"):
         main(["--config", path, "--output-dir", target])
     assert not dist.is_initialized()
     mode[0] = "resumed"
+    phase("resume-check")
     assert main(["--config", path, "--output-dir", target, "--resume", receipt[0]]) == 0
     assert_tree_equal(expected, observed)
     assert not dist.is_initialized()
+    phase("completed-resume-check")
     assert main(["--config", path, "--output-dir", target, "--resume", receipt[0]]) == 0
     assert not dist.is_initialized()
     (Path(root) / f"rank-{rank}-passed.json").write_text(json.dumps({"passed": True}))
+    phase("worker-completed")
 
 
 @pytest.mark.parametrize("algorithm", ["diffusionart", "flow_grpo_fast", "dancegrpo", "diffusionnft", "refl", "pairwise"])

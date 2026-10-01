@@ -31,6 +31,17 @@ jobs:
       - name: Lint and Test
         run: |
           uv run --locked --no-sync ruff check src tests
-          uv run --locked --no-sync pytest -q
+          uv run --locked --no-sync pytest -q --junitxml=test-results/junit.xml --basetemp=test-results/work
+      - name: Preserve Test Diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpu-test-diagnostics
+          retention-days: 7
+          if-no-files-found: ignore
+          path: |
+            test-results/junit.xml
+            test-results/work/**/rank-*-phase.json
+            test-results/work/**/rank-*-passed.json
       - name: Build Source and Wheel
         run: uv build

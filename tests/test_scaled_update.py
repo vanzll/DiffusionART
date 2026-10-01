@@ -195,6 +195,11 @@ def test_cpu_scaler_never_touches_cuda_rng_on_retry(monkeypatch, cuda_available)
         pytest.fail("CPU scaling must not access CUDA RNG or initialize CUDA contexts")
 
     monkeypatch.setattr(torch.cuda, "is_available", lambda: cuda_available)
+    # Adam's unrelated graph-capture probe also sees the fake CUDA availability.
+    # Isolate it so this test exercises the runner's CPU retry/RNG handling.
+    for name in ("_cuda_graph_capture_health_check", "_accelerator_graph_capture_health_check"):
+        if hasattr(optimizer, name):
+            monkeypatch.setattr(optimizer, name, lambda: None)
     for name in ("get_rng_state_all", "set_rng_state_all", "get_rng_state", "set_rng_state",
                  "init", "current_device"):
         monkeypatch.setattr(torch.cuda, name, forbidden)
