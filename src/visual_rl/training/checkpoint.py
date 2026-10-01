@@ -17,6 +17,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
+from .checkpoint_retention import retain_checkpoints, validate_keep_last
 from .state import Progress
 
 
@@ -92,13 +93,17 @@ def save_checkpoint(
     config_sha256: str,
     stateful: dict | None = None,
     generators: dict | None = None,
+    keep_last: int | None = None,
 ) -> Path:
     """Capture a completed optimizer boundary, including caller-owned data state.
 
     ``stateful`` must include scheduler, old policy, sampler/dataset cursor etc.
     when present. Resuming requires exactly the same set, never silent omission.
     Multi-rank/FSDP checkpointing is deliberately rejected by this writer.
+    ``keep_last`` opts into retention of registered publications only; legacy
+    or unregistered snapshots are not adopted, and None disables cleanup.
     """
+    validate_keep_last(keep_last)
     if torch.distributed.is_initialized():
         raise ValueError("use a coordinated distributed checkpoint adapter")
     if any(p.grad is not None for p in model.parameters()):
@@ -140,6 +145,8 @@ def save_checkpoint(
         _atomic_json(root / "latest.json", {"receipt": receipt.name, **record})
     finally:
         Path(temporary).unlink(missing_ok=True)
+    retain_checkpoints(root, receipt, identity={"kind": "local", "config_sha256": config_sha256},
+                       keep_last=keep_last)
     return receipt
 
 

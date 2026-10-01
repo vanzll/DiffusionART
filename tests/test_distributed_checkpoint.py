@@ -109,7 +109,37 @@ def worker(rank, root, mode):
                 checkpoint.save_ddp_checkpoint(output, progress=progress, **kwargs)
             assert not output.exists()
             return
-        receipt = checkpoint.save_ddp_checkpoint(output, progress=progress, **kwargs)
+        receipt = checkpoint.save_ddp_checkpoint(output, progress=progress,
+                                                keep_last=2 if mode in {"retention", "publication_failure", "write_failure"} else None,
+                                                **kwargs)
+        if mode == "retention":
+            foreign = checkpoint.save_ddp_checkpoint(
+                output, progress=progress, **{**kwargs, "config_sha256": "b" * 64}, keep_last=1)
+            second = checkpoint.save_ddp_checkpoint(output, progress=progress, **kwargs, keep_last=2)
+            current = checkpoint.save_ddp_checkpoint(output, progress=progress, **kwargs, keep_last=2)
+            assert not receipt.parent.exists()
+            assert foreign.exists() and second.exists() and current.exists()
+            assert checkpoint.load_ddp_checkpoint(current, **kwargs) == progress
+            assert json.loads((output / "latest.json").read_text())["manifest"] == (
+                f"{current.parent.name}/manifest.json")
+            return
+        if mode == "publication_failure":
+            original = checkpoint._atomic_json
+            latest = (output / "latest.json").read_bytes()
+            if rank == 0:
+                def fail(path, value):
+                    if path.name == "latest.json":
+                        raise OSError("injected publication failure")
+                    return original(path, value)
+                checkpoint._atomic_json = fail
+            try:
+                with pytest.raises(checkpoint.DistributedCheckpointError, match="publication"):
+                    checkpoint.save_ddp_checkpoint(output, progress=progress, **kwargs, keep_last=1)
+            finally:
+                checkpoint._atomic_json = original
+            assert (output / "latest.json").read_bytes() == latest
+            assert checkpoint.load_ddp_checkpoint(receipt, **kwargs) == progress
+            return
         if mode == "apply_failure":
             if rank == 1:
                 def reject(state):
@@ -127,7 +157,7 @@ def worker(rank, root, mode):
                 checkpoint._write = fail
             try:
                 with pytest.raises(checkpoint.DistributedCheckpointError, match="serialization"):
-                    checkpoint.save_ddp_checkpoint(output, progress=progress, **kwargs)
+                    checkpoint.save_ddp_checkpoint(output, progress=progress, **kwargs, keep_last=1)
             finally:
                 checkpoint._write = original
             assert (output / "latest.json").read_bytes() == latest
@@ -184,7 +214,7 @@ def worker(rank, root, mode):
                 assert set(payload["model_local"]) == {"local_counter"}
 
 
-@pytest.mark.parametrize("mode", ["resume", "step_mismatch", "bad_names", "write_failure", "corrupt_shared", "corrupt_rank",
+@pytest.mark.parametrize("mode", ["resume", "retention", "publication_failure", "step_mismatch", "bad_names", "write_failure", "corrupt_shared", "corrupt_rank",
                                   "missing_rank", "world_mismatch", "component_mismatch", "apply_failure"])
 def test_real_ddp_checkpoint(tmp_path, mode):
     ctx = mp.spawn(worker, args=(str(tmp_path), mode), nprocs=2, join=False)

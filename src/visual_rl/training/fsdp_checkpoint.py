@@ -33,6 +33,7 @@ from torch.distributed.fsdp import LocalStateDictConfig, ShardingStrategy, State
 from torch.distributed.remote_device import _remote_device
 
 from .checkpoint import _atomic_json, _digest, restore_rng, rng_state
+from .checkpoint_retention import retain_checkpoints, validate_keep_last
 from .distributed_checkpoint import DistributedCheckpointError as DistributedCheckpointError
 from .distributed_checkpoint import _Group, _write
 from .state import Progress
@@ -164,6 +165,7 @@ def _check_model(saved, live):
 def save_fsdp_checkpoint(
     root, *, model, optimizer, progress: Progress, config_sha256: str,
     stateful: dict | None = None, generators: dict | None = None,
+    keep_last: int | None = None,
 ) -> Path:
     """All model-group ranks call after an update and zero_grad(set_to_none=True).
 
@@ -171,8 +173,11 @@ def save_fsdp_checkpoint(
     directories; the previous latest pointer remains valid. No storage timeout
     or process-crash recovery is provided by this synchronous primitive.
     Stateful callbacks must be rank-local and must not perform collectives.
+    ``keep_last`` retains registered publications of exactly the same layout;
+    None disables cleanup. All ranks must supply the same retention setting.
     """
     group = _FSDPGroup(model)
+    group.local("retention preflight", lambda: validate_keep_last(keep_last))
     stateful = {} if stateful is None else stateful
     generators = {} if generators is None else generators
     layout = group.local("preflight", lambda: _preflight(
@@ -182,7 +187,7 @@ def save_fsdp_checkpoint(
     identity = {"schema_version": 1, "kind": "fsdp-local", "config_sha256": config_sha256,
                 "layout": layout, "counts": counts, "stateful": sorted(stateful),
                 "generators": sorted(generators)}
-    group.agree({"root": str(root), **identity})
+    group.agree({"root": str(root), "keep_last": keep_last, **identity})
     directory = root / f"step-{progress.optimizer_steps:09d}-{group.token()}"
     group.local("directory creation", lambda: directory.mkdir(parents=True) if group.rank == 0 else None)
     model_state = _local_state(model)
@@ -213,6 +218,9 @@ def save_fsdp_checkpoint(
         _atomic_json(root / "latest.json", {"manifest": f"{directory.name}/manifest.json"})
 
     group.local("manifest publication", publish)
+    group.local("retention cleanup", lambda: retain_checkpoints(
+        root, receipt, identity={"kind": "fsdp-local", "config_sha256": config_sha256,
+                                "topology": layout}, keep_last=keep_last) if group.rank == 0 else None)
     return receipt
 
 

@@ -20,6 +20,7 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
 
 from .checkpoint import _atomic_json, _digest, restore_rng, rng_state
+from .checkpoint_retention import retain_checkpoints, validate_keep_last
 from .state import Progress
 
 
@@ -115,6 +116,7 @@ def save_ddp_checkpoint(
     root, *, model, optimizer, progress: Progress, config_sha256: str,
     stateful: dict | None = None, replicated_stateful: dict | None = None,
     generators: dict | None = None,
+    keep_last: int | None = None,
 ) -> Path:
     """All DDP-group ranks call at the same completed optimizer boundary.
 
@@ -122,15 +124,19 @@ def save_ddp_checkpoint(
     DDP update. Callers explicitly classify components: data cursors are local;
     a synchronized old-policy/eval shadow can be replicated. No sharded optimizer
     is supported. Rank-local buffers are preserved even when they differ.
+    ``keep_last`` retains registered publications only, in publication order;
+    None disables cleanup. All ranks must supply the same retention setting.
     """
     group = _Group(model)
+    group.local("retention preflight", lambda: validate_keep_last(keep_last))
     stateful, replicated_stateful, generators = stateful or {}, replicated_stateful or {}, generators or {}
     group.local("preflight", lambda: _validate(model, progress, config_sha256, stateful, replicated_stateful, generators))
     root = group.local("root path", lambda: Path(root).absolute())
     counts = {key: progress.state_dict()[key] for key in ("attempts", "completed_rollouts", "optimizer_steps")}
     group.agree({"root": str(root), "config": config_sha256, "counts": counts,
                  "world": group.world, "stateful": sorted(stateful),
-                 "replicated": sorted(replicated_stateful), "generators": sorted(generators)})
+                 "replicated": sorted(replicated_stateful), "generators": sorted(generators),
+                 "keep_last": keep_last})
     directory = root / f"step-{progress.optimizer_steps:09d}-{group.token()}"
     group.local("directory creation", lambda: directory.mkdir(parents=True, exist_ok=False) if group.rank == 0 else None)
 
@@ -170,6 +176,13 @@ def save_ddp_checkpoint(
         _atomic_json(root / "latest.json", {"manifest": f"{directory.name}/manifest.json"})
 
     group.local("manifest publication", publish_manifest)
+    group.local("retention cleanup", lambda: retain_checkpoints(
+        root, receipt, identity={"kind": "ddp", "config_sha256": config_sha256,
+                                "topology": {"world_size": group.world,
+                                             "global_world_size": dist.get_world_size(),
+                                             "members": dist.get_process_group_ranks(group.group),
+                                             "device_type": group.device.type}},
+        keep_last=keep_last) if group.rank == 0 else None)
     return receipt
 
 

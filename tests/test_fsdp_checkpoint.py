@@ -140,7 +140,9 @@ def worker(rank, root, mode):
             assert not output.exists()
             return
         before = snapshot(model, optimizer, cursor, generator)
-        receipt = checkpoint.save_fsdp_checkpoint(output, progress=progress, **kwargs)
+        receipt = checkpoint.save_fsdp_checkpoint(output, progress=progress,
+                                                 keep_last=2 if mode in {"retention", "publication_failure", "write_failure"} else None,
+                                                 **kwargs)
         equal(before, snapshot(model, optimizer, cursor, generator))
         with load_with_process_group(model.process_group), torch.serialization.safe_globals(checkpoint._SHARD_TYPES):
             payload = torch.load(receipt.parent / f"rank-{rank:05d}.pt", weights_only=True)
@@ -153,6 +155,32 @@ def worker(rank, root, mode):
         assert sum(s["exp_avg"].numel() for s in payload["optimizer"]["state"].values()) == (
             1 if mode == "scalar" else 10 if mode == "padding" else 12)
         dist.barrier()
+
+        if mode == "retention":
+            second = checkpoint.save_fsdp_checkpoint(output, progress=progress, **kwargs, keep_last=2)
+            current = checkpoint.save_fsdp_checkpoint(output, progress=progress, **kwargs, keep_last=2)
+            assert not receipt.parent.exists()
+            assert second.exists() and current.exists()
+            assert checkpoint.load_fsdp_checkpoint(current, **kwargs) == progress
+            equal(before, snapshot(model, optimizer, cursor, generator))
+            return
+        if mode == "publication_failure":
+            original = checkpoint._atomic_json
+            latest = (output / "latest.json").read_bytes()
+            if rank == 0:
+                def fail(path, value):
+                    if path.name == "latest.json":
+                        raise OSError("injected publication failure")
+                    return original(path, value)
+                checkpoint._atomic_json = fail
+            try:
+                with pytest.raises(checkpoint.DistributedCheckpointError, match="publication"):
+                    checkpoint.save_fsdp_checkpoint(output, progress=progress, **kwargs, keep_last=1)
+            finally:
+                checkpoint._atomic_json = original
+            assert (output / "latest.json").read_bytes() == latest
+            assert checkpoint.load_fsdp_checkpoint(receipt, **kwargs) == progress
+            return
 
         if mode in {"resume", "mixed", "padding", "scalar"}:
             for _ in range(2):
@@ -200,7 +228,7 @@ def worker(rank, root, mode):
                 checkpoint._write = fail
             try:
                 with pytest.raises(checkpoint.DistributedCheckpointError, match="serialization"):
-                    checkpoint.save_fsdp_checkpoint(output, progress=progress, **kwargs)
+                    checkpoint.save_fsdp_checkpoint(output, progress=progress, **kwargs, keep_last=1)
             finally:
                 checkpoint._write = original
             assert (output / "latest.json").read_bytes() == latest
@@ -240,7 +268,7 @@ def worker(rank, root, mode):
         dist.destroy_process_group()
 
 
-@pytest.mark.parametrize("mode", ["resume", "mixed", "padding", "scalar", "write_failure", "corrupt", "world",
+@pytest.mark.parametrize("mode", ["resume", "retention", "publication_failure", "mixed", "padding", "scalar", "write_failure", "corrupt", "world",
                                   "config", "wrapping", "optimizer_order", "components",
                                   "bad_names", "gradients", "step_mismatch", "apply_failure",
                                   "extraction_failure"])
