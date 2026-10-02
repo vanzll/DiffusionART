@@ -1,6 +1,20 @@
 {
   "source": "DiffusionART project page curated qualitative assets",
   "note": "Unmodified JPEG copies. Selected examples, not a reproduction acceptance test. Image seeds are not asserted.",
+  "figures": [
+    {
+      "output": "cover-efficiency.png",
+      "source": "diffusionart_cover_units_20260928.pdf",
+      "source_sha256": "d0acedd85a1a4d0146f7bc6abd2ddffe069159afa018bcefd82673b812abbc74",
+      "presentation": "Render the existing cover's left efficiency panels; curves, labels and values unchanged."
+    },
+    {
+      "output": "method-overview.png",
+      "source": "DiffusionART_method_overview_time_fixed_20260928.pdf",
+      "source_sha256": "cbc028c7bc6131bca61fe56825e6cc6c1f6a88e0cd9bd2ffb7bbc1c0c3ee8e5d",
+      "presentation": "Render the two existing method panels and stack them vertically; content unchanged."
+    }
+  ],
   "samples": [
     {
       "task": "t2i",

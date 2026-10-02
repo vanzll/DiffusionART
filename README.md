@@ -20,36 +20,40 @@
   <a href="#paper-experiments">Experiments</a>
 </p>
 
-<p align="center">
-  Zhenglin Wan, Jiayu Chen, Zhengfeiyang Zhang, Pengfei Zhou, Wangbo Zhao,<br>
-  Fangyuan Kong, Pengfei Wan, Kun Gai, Yang You<br>
-  <sub>National University of Singapore &middot; Kling AI &middot; HKUST</sub>
-</p>
+**DiffusionART** is **Diffusion Reinforcement via Aggregation-First Reward Tilting
+with Adaptive Restoration**. It combines the strengths of forward- and
+reverse-process reinforcement learning while avoiding their limitations.
+DiffusionART is highly efficient, stable, and simple to use, without additional
+hyperparameter tuning. It requires no differentiable reward model, naturally
+supports pairwise reward models, and remains robust with small rollout groups,
+providing a highly scalable approach to fine-tuning diffusion models.
 
-**DiffusionART** is Diffusion Reinforcement with **Aggregation-First Reward Tilting**.
-It aggregates endpoint rewards into a shared guidance direction before
-backpropagation, avoiding NFT's opposing self-consistency forces. Two disjoint
-MSE updates per rollout combine reward guidance with drift-adaptive restoration.
-No differentiable reward model or policy EMA is required.
-
-This repository brings DiffusionART and six baseline algorithms into one
-configurable training framework. Choose a model, algorithm and reward in YAML;
-use the same entrypoint to train, evaluate and resume.
+<table>
+  <tr>
+    <td width="45%" align="center" valign="middle">
+      <img src="assets/readme/cover-efficiency.png" width="420" alt="Paper cover: DiffusionART training efficiency versus Flow-GRPO-Fast and DiffusionNFT">
+    </td>
+    <td width="55%" align="center" valign="middle">
+      <img src="assets/readme/method-overview.png" width="510" alt="DiffusionART: aggregation-first reward guidance and its assignment to ODE denoising states">
+    </td>
+  </tr>
+</table>
 
 ## News
 
-- **2026-10-01** &mdash; Unified T2I, T2V and I2V implementations and paper recipes are available here, with full-state resume and local evaluation artifacts.
+- 🎉 **[2026.10.01]** DiffusionART and six baselines are available in one framework for **T2I, T2V and I2V**. Explore the [training recipes](#paper-experiments)!
 
-## Key Features
+## Quick Feature Summary
 
-| | What you get |
+| Feature Category | Supported Capabilities |
 | --- | --- |
-| **Aggregation-first learning** | Shared endpoint guidance and adaptive restoration, without differentiating through the reward model. |
-| **Small-group pairwise feedback** | Train from scalar scores or pairwise preferences; video recipes cover **K = 2, 4, 8** samples per prompt. |
-| **One configurable framework** | Model, algorithm, reward weights, sampling and evaluation are all selected in YAML. |
-| **Seven training algorithms** | DiffusionART, DiffusionNFT, Flow-GRPO, Flow-GRPO-Fast, Flow-DPPO, DanceGRPO and ReFL. |
-| **Complete experiment lifecycle** | DDP/FSDP, full-state checkpoints, configurable retention and checkpoint-based evaluation. |
-| **Comparable learning curves** | Raw rewards, training steps and separate training/elapsed GPU-hours; JSONL and optional scalar-only W&B logging. |
+| **Tasks** | ✅ Text-to-image<br>✅ Text-to-video<br>✅ Image-to-video |
+| **Algorithms** | ✅ DiffusionART<br>✅ DiffusionNFT (EMA / on-policy)<br>✅ Flow-GRPO / Flow-GRPO-Fast<br>✅ Flow-DPPO / DanceGRPO<br>✅ ReFL (video) |
+| **Base Models** | ✅ SD3.5-M<br>✅ FLUX.1-dev<br>✅ HunyuanVideo-13B<br>✅ Wan2.1-I2V-14B (CFG/step-distilled) |
+| **Benchmarks** | ✅ GenEval<br>✅ OCR<br>✅ Pick-a-Pic (PickScore) |
+| **Reward Models** | ✅ GenEval / PickScore / OCR<br>✅ CLIPScore / Aesthetic<br>✅ VideoReward (TA / VQ / MQ)<br>✅ Configurable reward weights |
+| **Feedback** | ✅ Scalar rewards<br>✅ Pairwise preferences (Hunyuan ART)<br>✅ Small rollout groups: K = 2, 4, 8 |
+| **Training** | ✅ LoRA / full-parameter tuning<br>✅ DDP / FSDP<br>✅ Checkpoint resume / local evaluation artifacts |
 
 ## Results
 
