@@ -13,6 +13,19 @@
       "source": "DiffusionART_method_overview_time_fixed_20260928.pdf",
       "source_sha256": "cbc028c7bc6131bca61fe56825e6cc6c1f6a88e0cd9bd2ffb7bbc1c0c3ee8e5d",
       "presentation": "Render the two existing method panels and stack them vertically; content unchanged."
+    },
+    {
+      "output": "method-flow.png",
+      "source": "DiffusionART_method_overview_time_fixed_20260928.pdf",
+      "source_sha256": "cbc028c7bc6131bca61fe56825e6cc6c1f6a88e0cd9bd2ffb7bbc1c0c3ee8e5d",
+      "presentation": "Render only the existing right-hand algorithm flow panel; content unchanged.",
+      "output_sha256": "d78f27803092860ee1120aafdecae0fe0487ba17afd490980af39fd5097de426"
+    },
+    {
+      "outputs": ["t2v-gpu-hours.png", "i2v-gpu-hours.png"],
+      "source": "efficiency.json",
+      "presentation": "Equal-size GPU-hour panels using frozen paper data and a common raw VQ/MQ mean. Full observed curves, common smoothing, no new experiment data.",
+      "renderer": "render_efficiency.py"
     }
   ],
   "samples": [

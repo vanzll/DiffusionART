@@ -1,0 +1,65 @@
+{
+  "training_weights": "VQ:MQ = 1:1; TA = 0",
+  "display_reward": "(raw VQ + raw MQ) / 2",
+  "cost": "W&B _runtime * 32 / 3600; includes evaluation and waits",
+  "smoothing": "Causal EMA half-life 8 optimizer updates for every curve",
+  "selection": "All observed rows in each frozen export; no extrapolation or stitching",
+  "t2v_raw_conversion": {
+    "VQ": {
+      "scale": 2.2476,
+      "offset": 3.6757
+    },
+    "MQ": {
+      "scale": 1.3811,
+      "offset": 1.1646
+    },
+    "note": "The source export recovers raw scores from fixed normalized scorer calibration."
+  },
+  "t2v": {
+    "source": "t2v-curves.csv",
+    "source_sha256": "13f787423fea8e60ac2f36bd997dc9d7aafd57b4304634057f7b99ac96510290",
+    "runs": {
+      "DiffusionART": {
+        "id": "4dnkgeto",
+        "observed_updates": 300,
+        "last_gpu_hours": 655.5653816335911
+      },
+      "Flow-GRPO-Fast": {
+        "id": "76zs2v12",
+        "observed_updates": 1030,
+        "last_gpu_hours": 1193.364480537929
+      },
+      "DiffusionNFT (EMA)": {
+        "id": "njpjfulm",
+        "observed_updates": 303,
+        "last_gpu_hours": 1519.4421515094311
+      }
+    }
+  },
+  "i2v": {
+    "source": "i2v-curves.csv",
+    "source_sha256": "e226cef7526d21920365ea4ba6ec8d6f7ec8ede3834cb8e913b24841ccd6a330",
+    "runs": {
+      "DiffusionART": {
+        "id": "08ca4146a532752c473f1f37",
+        "observed_updates": 360,
+        "last_gpu_hours": 432.5555235380089
+      },
+      "Flow-GRPO-Fast": {
+        "id": "31223c0be629580537f55ae2",
+        "observed_updates": 362,
+        "last_gpu_hours": 274.93459693606223
+      },
+      "DanceGRPO": {
+        "id": "ef06ee7200e554ef1d5f4e5f",
+        "observed_updates": 400,
+        "last_gpu_hours": 475.26828561526224
+      },
+      "DiffusionNFT (EMA)": {
+        "id": "a6ce1ae3fe255baf889d5c03",
+        "observed_updates": 400,
+        "last_gpu_hours": 1300.4226127486045
+      }
+    }
+  }
+}
