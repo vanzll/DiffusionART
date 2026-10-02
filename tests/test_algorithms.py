@@ -53,6 +53,19 @@ def test_scalar_covariance_independent_formula(reduction, denominator, scale):
     assert x.grad is None and r.grad is None
 
 
+def test_scalar_zero_rows_keep_original_denominator_and_active_restoration():
+    v = leaf([[.5], [.5], [-.5], [-.5]])
+    old = torch.zeros_like(v)
+    result = art_loss(v, old, torch.ones(4), torch.tensor([[0.], [0.], [1.], [1.]]),
+                      torch.tensor([0., 0., 1., 1.]), corrective_mask_enabled=False,
+                      velocity_mask_metric="fixed_mse")
+    assert result["keep_mask"].tolist() == [False, False, True, True]
+    result["per_item_loss"].sum().div(4).backward()
+    torch.testing.assert_close(v.grad, torch.tensor([[0.], [0.], [.25], [.25]]))
+    # Active rows still restore their output toward the frozen target after drift.
+    assert result["per_item_loss"].tolist() == [0., 0., .25, .25]
+
+
 def test_zero_signal_modes_and_normalized_aggregate_are_explicit():
     x = torch.tensor([[0.0, 0.0], [2e-8, -2e-8]])
     r = torch.tensor([0.0, 1.0])
@@ -82,6 +95,36 @@ def test_identical_rewards_thresholds_roundoff_before_normalization():
         x, r, groups, 1, zero_signal_mode="threshold", zero_signal_atol=1e-12
     )
     assert not result["group_active"].any()
+    assert not result["group_directions"].any()
+
+
+def test_exact_zero_signal_preserves_real_weak_rewards():
+    x = torch.arange(14, dtype=torch.float32).reshape(7, 2)
+    r = torch.full((7,), 0.1)
+    groups = torch.zeros(7, dtype=torch.long)
+    constant = art_scalar_covariance(x, r, groups, 1, zero_signal_mode="exact")
+    for key in ("group_covariance", "group_directions", "group_guidance_magnitudes",
+                "group_reward_stds", "group_reward_abs_means"):
+        assert not constant[key].any()
+    assert not constant["group_active"].any()
+    r[-1] = torch.nextafter(r[-1], torch.tensor(float("inf")))
+    exact = art_scalar_covariance(x, r, groups, 1, zero_signal_mode="exact")
+    historical = art_scalar_covariance(x, r, groups, 1)
+    assert exact["group_active"].all()
+    for key in historical:
+        torch.testing.assert_close(exact[key], historical[key], rtol=0, atol=0)
+    with pytest.raises(ValueError):
+        art_scalar_covariance(x, r, groups, 1, zero_signal_mode="exact", zero_signal_atol=1e-7)
+
+
+def test_exact_zero_for_different_constants_and_cancelled_covariance():
+    x = torch.tensor([[0.], [1.], [0.], [2.], [4.], [6.], [1.], [3.], [5.]])
+    r = torch.tensor([0., 1., 2., .1, .1, .1, .7, .7, .7])
+    result = art_scalar_covariance(x, r, torch.arange(3).repeat_interleave(3), 3,
+                                   zero_signal_mode="exact")
+    assert not result["group_active"].any()
+    assert not result["group_covariance"].any()
+    assert not result["group_guidance_magnitudes"].any()
     assert not result["group_directions"].any()
 
 

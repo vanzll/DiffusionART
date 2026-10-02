@@ -28,7 +28,8 @@ def validate_config(c):
         raise ConfigError("choose ART, NFT, Fast-SDE, Dance or final-step ReFL")
     if any(not isinstance(c.model.options[key], str) or not c.model.options[key].strip() for key in ASSET_KEYS):
         raise ConfigError("explicit Wan component and FLUX reference model identities required")
-    if c.sampling.steps != 4 or c.sampling.options["shift"] != 5 or c.evaluation.sampling_steps not in (None, 4):
+    if (c.sampling.steps != 4 or c.sampling.options["shift"] != 5
+            or c.evaluation.sampling_steps not in (None, 4) or c.evaluation.shift not in (None, 5)):
         raise ConfigError("distilled Wan requires four steps, shift five, CFG off in train and eval")
     if ((c.evaluation.height or c.sampling.height) != c.sampling.height
             or (c.evaluation.width or c.sampling.width) != c.sampling.width):

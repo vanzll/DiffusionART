@@ -2,6 +2,9 @@ extends: hunyuan_scalar_vq_k8.yaml
 name: paper-hunyuan-pairwise-vq-k8
 algorithm:
   options:
+    restore_zero_signal: true
+    covariance:
+      zero_signal_mode: historical
     pairwise: {seed: 42}
 runtime:
   output_dir: ${PAPER_VIDEO_OUTPUT_ROOT}/hunyuan-pairwise-vq-k8

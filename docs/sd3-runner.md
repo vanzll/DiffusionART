@@ -119,8 +119,9 @@ FP32/BF16 runs do not instantiate a scaler. FLUX FP16 is not enabled.
   distributed sampler, especially around dataset epoch boundaries.
 - The trajectory cache is frozen once per rollout. Rows are shuffled before
   two disjoint updates; each selected timestep remains attached to its row.
-  Masked states stay in the original loss denominator. Zero-signal restoration
-  is an explicit configuration choice, not an automatic numerical cleanup.
+  Masked and zero-signal states stay in the original loss denominator. Scalar
+  ART requires exact constant-reward protection and `restore_zero_signal=false`;
+  globally all-zero rollouts skip updates while retaining their actual cost.
 - LoRA, its target layers, covariance settings, mask and timestep weighting are
   configuration-owned. VAE and reward weights stay frozen. This runner uses
   FP32 VAE decode and FP32 PickScore; transformer autocast is configured separately.

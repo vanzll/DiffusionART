@@ -101,6 +101,11 @@ class ARTObjective:
     reconstruct_from_mean: bool = False
     reconstruct_old_from_mean: bool = False
 
+    @property
+    def has_guidance(self):
+        rms = self.row_directions.float().flatten(1).square().mean(1).sqrt()
+        return bool(((self.row_magnitudes > 0) & (rms > 0)).any())
+
     def __call__(self, items):
         rows, slots, steps = _indices(items, self.cache)
         state = self.cache.states[rows, slots].to(self.device)

@@ -104,7 +104,7 @@ def config_file(tmp_path, algorithm="diffusionart"):
     manifest = tmp_path / "prompts.jsonl"
     manifest.write_text("".join(json.dumps(row) + "\n" for row in records))
     c = {"name": "tiny-hunyuan-art", "task": "t2v", "seed": 42,
-         "algorithm": {"name": "diffusionart", "options": {"covariance": {}, "loss": {}, "restore_zero_signal": True}},
+         "algorithm": {"name": "diffusionart", "options": {"covariance": {}, "loss": {}, "restore_zero_signal": False}},
          "model": {"name": "hunyuan_public", "checkpoint": "injected", "revision": "test", "options": {
              "native_root": "injected", "finetune": {"mode": "full"}, "gradient_checkpointing": False,
              "ffmpeg": "ffmpeg", "ffprobe": "ffprobe", "allow_tf32": False}},
@@ -120,6 +120,7 @@ def config_file(tmp_path, algorithm="diffusionart"):
                         "height": 32, "width": 16},
          "runtime": {"output_dir": str(tmp_path / "run"), "device": "cpu", "distributed": "none", "checkpoint_every": 2}}
     if algorithm == "pairwise":
+        c["algorithm"]["options"].update(restore_zero_signal=True, covariance={"zero_signal_mode": "historical"})
         c["algorithm"]["options"]["pairwise"] = {"seed": 42}
         c["reward"].update(normalization="fixed", weights={"VQ": 1., "MQ": 0., "TA": 0.})
     elif algorithm == "refl":

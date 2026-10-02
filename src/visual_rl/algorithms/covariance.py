@@ -25,6 +25,7 @@ def art_scalar_covariance(
     Historical direction reduction divides covariance by reward MAD before
     RMS normalization with an epsilon floor. ``normalized_aggregate`` instead
     normalizes the aggregate covariance to exact unit RMS when active.
+    ``exact`` clears roundoff from exactly constant rewards without a cutoff.
     ``threshold`` zero handling explicitly gates raw covariance and reward range;
     it is not silently applied to the historical fp32 computation.
     """
@@ -36,12 +37,12 @@ def art_scalar_covariance(
         raise ValueError("reduction must be unbiased or population")
     if direction_mode not in ("historical", "normalized_aggregate"):
         raise ValueError("unknown direction_mode")
-    if zero_signal_mode not in ("historical", "threshold"):
+    if zero_signal_mode not in ("historical", "exact", "threshold"):
         raise ValueError("unknown zero_signal_mode")
-    if (zero_signal_mode == "historical" and atol != 0) or (
+    if (zero_signal_mode in ("historical", "exact") and atol != 0) or (
         zero_signal_mode == "threshold" and atol <= 0
     ):
-        raise ValueError("threshold mode requires positive atol; historical requires zero")
+        raise ValueError("threshold mode requires positive atol; historical/exact require zero")
     if scale_mode not in (
         "reward_mad",
         "raw_covariance",
@@ -68,6 +69,14 @@ def art_scalar_covariance(
     means = sums / counts.clamp_min(1)
     stds = (square_sums / counts.clamp_min(1) - means.square()).clamp_min(0).sqrt()
     centered = r - means[groups]
+    if zero_signal_mode == "exact":
+        maxima = r.new_full((group_count,), -torch.inf).scatter_reduce_(0, groups, r, reduce="amax")
+        minima = r.new_full((group_count,), torch.inf).scatter_reduce_(0, groups, r, reduce="amin")
+        constant = maxima == minima
+        # Summing identical FP32 rewards can round their mean away from the reward.
+        centered = torch.where(constant[groups], 0.0, centered)
+        means = torch.where(constant, maxima, means)
+        stds = torch.where(constant, 0.0, stds)
     mad = x.new_zeros(group_count).index_add_(0, groups, centered.abs()) / counts.clamp_min(1)
     numerator = x.new_zeros(group_count, x.shape[1]).index_add_(0, groups, centered[:, None] * x)
     denominator = (counts - int(reduction == "unbiased")).clamp_min(1)
@@ -83,6 +92,8 @@ def art_scalar_covariance(
     signal = covariance / torch.where(mad > 0, mad, 1.0)[:, None]
     signal_rms = signal.square().mean(1).sqrt()
     active = (counts > 1) & (mad > 0) & (signal_rms > 0) & (magnitudes > 0)
+    if zero_signal_mode == "exact":
+        magnitudes = torch.where(active, magnitudes, 0.0)
     if zero_signal_mode == "threshold":
         maxima = r.new_full((group_count,), -torch.inf).scatter_reduce_(0, groups, r, reduce="amax")
         minima = r.new_full((group_count,), torch.inf).scatter_reduce_(0, groups, r, reduce="amin")

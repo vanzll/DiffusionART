@@ -273,6 +273,21 @@ def _run(session, c, p, k, resume, *, backend=hunyuan, resume_rewind=False, eval
                 else:
                     loss_fn, windows = session.local("objective preparation", lambda: backend.prepare_objective(
                         c, parts, cache, predict, scores, global_scores, session.device))
+                    if c.algorithm.name == "diffusionart":
+                        active = session.local("scalar ART activity", lambda: torch.tensor(
+                            int(loss_fn.has_guidance), dtype=torch.int32, device=session.device))
+                        dist.all_reduce(active, op=dist.ReduceOp.MAX)
+                        if not active.item():
+                            metrics = {**_reward_metrics(global_scores, "train"), **_cost(session, clock),
+                                       "system/skipped_zero_guidance": 1}
+
+                            def write_inactive():
+                                log.write(json.dumps(metrics, allow_nan=False, sort_keys=True) + "\n")
+                                log.flush()
+
+                            session.primary("inactive scalar ART publication", write_inactive)
+                            _publish_cost(session, c, root, clock)
+                            continue
                 for items in windows:
                     metrics = accumulated_step(model, optimizer, items, loss_fn, microbatch=c.training.microbatch,
                                                denominator=len(items), max_grad_norm=c.training.grad_clip,

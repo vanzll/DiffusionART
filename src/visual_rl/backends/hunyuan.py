@@ -67,6 +67,12 @@ def validate_config(c, *, model_name="hunyuan_public", task="t2v", extra_model_k
             raise ConfigError("restore_zero_signal must be boolean")
         if video_pairwise.enabled(c):
             video_pairwise.validate_options(c)
+        else:
+            if c.algorithm.options["restore_zero_signal"]:
+                raise ConfigError("scalar ART requires restore_zero_signal=false")
+            if (not isinstance(c.algorithm.options["covariance"], dict)
+                    or c.algorithm.options["covariance"].get("zero_signal_mode", "exact") != "exact"):
+                raise ConfigError("scalar ART requires exact zero-signal protection")
     elif c.algorithm.name == "diffusionnft":
         video_nft.validate_options(c)
     elif c.algorithm.name == "refl":
@@ -233,7 +239,7 @@ def prepare_objective(c, parts, cache, predict, scores, global_scores, device):
     count = len(cache.endpoints)
     groups = torch.arange(count) // k
     covariance = art_scalar_covariance(cache.endpoints, scores.weighted, groups, count // k,
-                                       **c.algorithm.options["covariance"])
+        **{"zero_signal_mode": "exact", **c.algorithm.options["covariance"]})
     anchors = (~covariance["group_active"][groups] if c.algorithm.options["restore_zero_signal"]
                else torch.zeros(count, dtype=torch.bool))
     objective = ARTObjective(cache, predict, covariance["group_directions"][groups],
@@ -406,6 +412,13 @@ def run(c, *, resume=None, backend=None, resume_rewind=False, evaluate_only=Fals
                             continue
                     else:
                         objective, windows = backend.prepare_objective(c, parts, cache, predict, scores, scores, device)
+                        if c.algorithm.name == "diffusionart" and not objective.has_guidance:
+                            metrics = {**_reward_metrics(scores, "train"), **clock.metrics(),
+                                       "system/skipped_zero_guidance": 1}
+                            log.write(json.dumps(metrics, allow_nan=False, sort_keys=True) + "\n")
+                            log.flush()
+                            _publish_cost(c, root, clock)
+                            continue
                     for items in windows:
                         metrics = accumulated_step(model, optimizer, items, objective, microbatch=c.training.microbatch,
                                                    denominator=len(items), max_grad_norm=c.training.grad_clip,

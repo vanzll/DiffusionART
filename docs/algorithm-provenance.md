@@ -99,10 +99,14 @@ guidance_gain=1., zero_signal_mode="historical", zero_signal_atol=0., eps=1e-5)`
 - Scale modes are `unit_normalized_covariance`, `raw_covariance`,
   `reward_std_normalized_covariance`, and `reward_mad`, matching the source.
   Historical inactive groups can retain nonzero magnitude but have zero direction.
+- Scalar profiles use `zero_signal_mode="exact"`: exactly constant rewards
+  produce zero covariance, direction and magnitude, even when FP32 summation
+  rounds their mean. Real nonconstant weak signals retain the existing reduction.
 - `zero_signal_mode="threshold"` requires positive `zero_signal_atol` and
   gates both raw covariance RMS and reward range, then zeros inactive magnitudes.
-  This explicitly addresses constant-reward fp32 residuals; historical mode
-  does not silently adopt it. No random replacement direction is ever generated.
+  This optional kernel cutoff is rejected by native scalar runners; historical mode
+  remains available for pairwise compatibility. No random replacement direction
+  is ever generated.
 - Outputs include `group_covariance`, `group_directions` shaped `[G, ...]`,
   `group_guidance_magnitudes`, `group_active`, counts, and reward statistics.
 
@@ -144,8 +148,13 @@ unmasked reference MSE, matching the backend's regularizer.
 The mask removes active rows only when movement energy is >= threshold AND
 `mean((current-old) * desired_corrective_step) > 0`. Overshoot corrections are
 therefore retained. Explicit `restore_anchor_mask` retains requested inactive
-rows with positive sigma. Scalar Flow-ART callers supply `~group_active` per
-row; pairwise callers supply `row_restore_anchor`. Disabling the mask does not
+rows with positive sigma. Scalar runners require `restore_zero_signal=false`:
+zero-signal rows contribute neither guidance nor restoration, but retain their
+original loss denominator. There is no refill. Globally all-zero scalar rollouts
+skip optimizer updates without advancing training steps; their actual cost is
+counted. A locally inactive rank still executes both full update windows when
+another rank has signal. Pairwise callers retain `row_restore_anchor` and the
+historical covariance mode. Disabling the mask does not
 implicitly activate zero-guidance rows or change the denominator.
 
 Metrics are `fixed_mse`, `noise_normalized_v`, `q2_sde_kl`, or the equivalent

@@ -6,13 +6,13 @@ seed: 42
 algorithm:
   name: diffusionart
   options:
-    restore_zero_signal: true
+    restore_zero_signal: false
     covariance:
       reduction: unbiased
       direction_mode: historical
       scale_mode: unit_normalized_covariance
       guidance_gain: 1.0
-      zero_signal_mode: historical
+      zero_signal_mode: exact
     loss:
       loss_space: velocity_linear_sigma
       direction_normalization: rms

@@ -342,6 +342,21 @@ def _run(session, c, p, k, resume, *, resume_rewind=False, evaluate_only=False):
                         return obj, windows, metrics
 
                 objective_fn, windows, algorithm_metrics = session.local("objective preparation", objective)
+                if c.algorithm.name == "diffusionart":
+                    active = session.local("scalar ART activity", lambda: torch.tensor(
+                        int(objective_fn.has_guidance), dtype=torch.int32, device=session.device))
+                    dist.all_reduce(active, op=dist.ReduceOp.MAX)
+                    if not active.item():
+                        metrics = {**algorithm_metrics, **sd3._reward_metrics(scores, "train"),
+                                   **_cost(session, clock), "system/skipped_zero_guidance": 1}
+
+                        def log_inactive():
+                            log.write(json.dumps(metrics, sort_keys=True, allow_nan=False) + "\n")
+                            log.flush()
+
+                        session.primary("inactive scalar ART publication", log_inactive)
+                        _publish_cost(session, c, root, clock)
+                        continue
                 if not windows:
                     empty_rollouts += 1
                     metrics = {**algorithm_metrics, **sd3._reward_metrics(scores, "train"),

@@ -163,11 +163,11 @@ def test_frozen_schedule_loss_and_no_stale_inheritance(configured_env, name):
         assert c.algorithm.options == {"reward_loss_scale": 1.0}
     else:
         assert c.algorithm.options["loss"] == ART_LOSS
-        assert c.algorithm.options["restore_zero_signal"] is True
+        assert c.algorithm.options["restore_zero_signal"] is ("pairwise" in name)
         assert c.algorithm.options["covariance"] == {
             "reduction": "unbiased", "direction_mode": "historical",
             "scale_mode": "unit_normalized_covariance", "guidance_gain": 1.0,
-            "zero_signal_mode": "historical",
+            "zero_signal_mode": "historical" if "pairwise" in name else "exact",
         }
         assert set(c.algorithm.options) == {
             "loss", "covariance", "restore_zero_signal",

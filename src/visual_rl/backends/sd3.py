@@ -140,6 +140,11 @@ def validate_config(c):
         raise ConfigError("model local_files_only must be boolean")
     if is_art and type(a["restore_zero_signal"]) is not bool:
         raise ConfigError("restore_zero_signal must be boolean")
+    if is_art and a["restore_zero_signal"]:
+        raise ConfigError("scalar ART requires restore_zero_signal=false")
+    if is_art and (not isinstance(a["covariance"], dict)
+                   or a["covariance"].get("zero_signal_mode", "exact") != "exact"):
+        raise ConfigError("scalar ART requires exact zero-signal protection")
     if any(size % m["spatial_factor"] for size in (c.sampling.height, c.sampling.width)):
         raise ConfigError("image dimensions must divide by spatial_factor")
     if c.sampling.samples_per_prompt < 2 or c.sampling.prompts_per_rollout < 1:
@@ -812,6 +817,14 @@ def run(c, *, resume=None, resume_rewind=False, evaluate_only=False):
                             device,
                             guidance_scores=guidance_scores,
                         )
+                        if not objective.has_guidance:
+                            record = {**clock.metrics(), **algorithm_metrics,
+                                      "system/skipped_zero_guidance": 1,
+                                      **_reward_metrics(result.scores, "train")}
+                            log.write(json.dumps(record, sort_keys=True, allow_nan=False) + "\n")
+                            log.flush()
+                            _publish_cost(c, root, clock)
+                            continue
                     for items in windows:
                         if grpo is not None:
                             grpo.before_update(progress.optimizer_steps)
@@ -882,7 +895,7 @@ def _art_update(
         result.scores.weighted if guidance_scores is None else guidance_scores,
         groups,
         p,
-        **c.algorithm.options["covariance"],
+        **{"zero_signal_mode": "exact", **c.algorithm.options["covariance"]},
     )
     directions = stats["group_directions"][groups]
     if c.model.name == "flux" and c.training.precision == "bf16":

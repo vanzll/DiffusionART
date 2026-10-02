@@ -4,6 +4,9 @@ extends: hunyuan_art.yaml
 name: hunyuan-pairwise-k8-integration
 algorithm:
   options:
+    restore_zero_signal: true
+    covariance:
+      zero_signal_mode: historical
     pairwise: {seed: 42}
 reward:
   weights: {VQ: 1.0, MQ: 0.0, TA: 0.0}

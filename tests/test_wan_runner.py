@@ -116,6 +116,23 @@ def test_wan_cli_media_eval_and_exact_resume(tmp_path, monkeypatch, algorithm):
     video_test.test_native_video_cli_encoding_eval_and_exact_resume(tmp_path, monkeypatch, algorithm)
 
 
+@pytest.mark.parametrize("algorithm", ["diffusionart", "flow_grpo_fast", "dancegrpo", "diffusionnft", "refl"])
+@pytest.mark.parametrize("shift", [None, 5, 7])
+def test_wan_eval_shift_contract(tmp_path, algorithm, shift):
+    from visual_rl.config import ConfigError
+
+    path = config_file(tmp_path, algorithm)
+    values = yaml.safe_load(path.read_text())
+    values["evaluation"]["shift"] = shift
+    path.write_text(yaml.safe_dump(values))
+    c = load_config(path)
+    if shift == 7:
+        with pytest.raises(ConfigError, match="shift five"):
+            wan.validate_config(c)
+    else:
+        wan.validate_config(c)
+
+
 def test_example_configs(monkeypatch):
     for name in ("WAN_DISTILLED_TRANSFORMER", "WAN_DISTILLED_REVISION", "WAN_BASE_MODEL", "WAN_BASE_REVISION",
                  "FLUX_REFERENCE_MODEL", "FLUX_REFERENCE_REVISION", "DANCEGRPO_ROOT", "VIDEO_REWARD_MODEL",

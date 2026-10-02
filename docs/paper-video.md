@@ -67,12 +67,16 @@ PPO clipping. Fast instead centers the full group and divides scalar rewards
 by global population std plus `1e-4`; ratio clips are `1e-5`/`1e-4` respectively.
 Neither uses policy or evaluation EMA, reference KL, or image Fast-CPS.
 
-ART uses unbiased, unit-normalized endpoint covariance, historical zero-signal
-restoration, velocity-linear-sigma loss, RMS direction, corrective velocity mask
+ART uses unbiased, unit-normalized endpoint covariance, velocity-linear-sigma
+loss, RMS direction, corrective velocity mask
 with scheduler-reference metric and Q2 noise `.8`/threshold `1e-5`. Pairwise
 compares only fixed-normalized VQ in seeded disjoint pairs: winner1/loser0/tie.5.
 Only binary labels enter covariance; ties anchor only with a global preference.
-Scalar VQ remains scalar; evaluation reports scalar scores in both cases.
+Scalar ART uses exact constant-reward protection and no zero-signal restoration;
+inactive rows retain the original loss denominator. Globally all-zero scalar
+rollouts skip updates but retain their actual cost. Pairwise keeps historical
+covariance and tie-anchor semantics. Scalar VQ remains scalar; evaluation reports
+scalar scores in both cases.
 
 NFT uses old-policy ODE endpoints, fresh endpoint re-noising, normalized-x0
 mirror loss (`beta=1`, clip5, stabilization floor `1e-5`) and one full update.
