@@ -15,29 +15,89 @@
 
 <p align="center">
   <a href="https://vanzll.github.io/diffusionart-project/">Project Page</a> &nbsp;/&nbsp;
+  <a href="#method">Method</a> &nbsp;/&nbsp;
   <a href="#quick-start">Quick Start</a> &nbsp;/&nbsp;
   <a href="docs/README.md">Documentation</a> &nbsp;/&nbsp;
   <a href="#paper-experiments">Experiments</a>
 </p>
 
 **DiffusionART** is **Diffusion Reinforcement via Aggregation-First Reward Tilting
-with Adaptive Restoration**. It combines the strengths of forward- and
-reverse-process reinforcement learning while avoiding their limitations.
-DiffusionART is highly efficient, stable, and simple to use, without additional
-hyperparameter tuning. It requires no differentiable reward model, naturally
-supports pairwise reward models, and remains robust with small rollout groups,
-providing a highly scalable approach to fine-tuning diffusion models.
+with Adaptive Restoration**. Aggregate reward guidance first, then update the
+model: DiffusionART learns from black-box rewards through two disjoint MSE
+updates per rollout. It needs no critic, reverse-transition likelihood or
+reward-model backpropagation, and supports small-group pairwise feedback.
+
+This repository provides one configurable framework for DiffusionART and six
+baselines across **text-to-image, text-to-video and image-to-video** generation.
 
 <table>
   <tr>
-    <td width="45%" align="center" valign="middle">
-      <img src="assets/readme/cover-efficiency.png" width="420" alt="Paper cover: DiffusionART training efficiency versus Flow-GRPO-Fast and DiffusionNFT">
+    <td width="50%" align="center" valign="top">
+      <img src="assets/readme/t2v-gpu-hours.png" width="460" alt="Text-to-video: raw VQ/MQ reward versus elapsed GPU hours, with VQ:MQ = 1:1 for all methods">
     </td>
-    <td width="55%" align="center" valign="middle">
-      <img src="assets/readme/method-overview.png" width="510" alt="DiffusionART: aggregation-first reward guidance and its assignment to ODE denoising states">
+    <td width="50%" align="center" valign="top">
+      <img src="assets/readme/i2v-gpu-hours.png" width="460" alt="Image-to-video: raw VQ/MQ reward versus elapsed GPU hours, with VQ:MQ = 1:1 for all methods">
     </td>
   </tr>
 </table>
+
+Both comparisons use **VQ:MQ = 1:1**. The vertical axis is the mean of raw VQ
+and MQ scores; elapsed GPU hours include evaluation and waiting time.
+[Curve sources](assets/readme/efficiency.json).
+
+## Method
+
+**Motivation.** NFT-style forward-process training contains a hidden
+**self-consistency force** beyond reward guidance. Its incomplete cancellation
+can destabilize learning and slow reward improvement.
+
+**Insight.** Off-policy **restoration** is the key stabilizer: even a small
+output-space restoration MSE can produce a large aggregated parameter gradient.
+DiffusionART removes the consistency force by aggregating endpoint guidance
+first, then obtains drift-adaptive restoration through a second MSE update.
+
+<table>
+  <tr>
+    <th width="55%" nowrap>Aggregation-first guidance</th>
+    <th width="45%" nowrap>One rollout, two disjoint updates</th>
+  </tr>
+  <tr>
+    <td align="center" valign="middle">
+      <img src="assets/readme/method-flow.png" width="500" alt="Paper algorithm diagram: endpoint reward covariance is normalized and shared across each prompt's ODE denoising states">
+    </td>
+    <td valign="middle">
+<pre># Scalar DiffusionART (schematic)
+cache = ode_rollout(prompts, K)
+rewards = score(cache.endpoints)
+g, active = covariance_guidance(
+    rewards, cache.endpoints)
+g, active = share_by_prompt(g, active, cache)
+if not any_global(active):
+    skip_rollout()
+else:
+    target = stopgrad(cache.v_old - g)
+    for batch in disjoint_split(cache, 2):
+        v = model(batch.states, batch.t)
+        w = batch.t * active[batch.rows]
+        w *= corrective_mask(v, batch, g)
+        loss = mean(w * mse(v, target[batch]))
+        optimizer_step(loss)</pre>
+    </td>
+  </tr>
+</table>
+
+Generate **K samples per prompt**, score their endpoints, and normalize the
+reward-endpoint covariance **after aggregation**. Both disjoint updates use
+the same frozen rollout predictions and targets. The second update retains
+guidance while restoring velocity drift toward the rollout policy, without EMA.
+Corrective masking limits excessive outward drift. The pseudocode uses the
+code's decreasing-noise velocity convention; zero-signal scalar rows keep their
+place in the original loss denominator but contribute no loss.
+
+**Pairwise feedback** replaces reward magnitudes with winner/loser labels when
+forming the guidance. The video recipes support **K = 2, 4, 8** videos per prompt.
+See [algorithm details](docs/algorithm-provenance.md) for the exact objectives
+and pairwise handling.
 
 ## News
 
@@ -54,64 +114,6 @@ providing a highly scalable approach to fine-tuning diffusion models.
 | **Reward Models** | ✅ GenEval / PickScore / OCR<br>✅ CLIPScore / Aesthetic<br>✅ VideoReward (TA / VQ / MQ)<br>✅ Configurable reward weights |
 | **Feedback** | ✅ Scalar rewards<br>✅ Pairwise preferences (Hunyuan ART)<br>✅ Small rollout groups: K = 2, 4, 8 |
 | **Training** | ✅ LoRA / full-parameter tuning<br>✅ DDP / FSDP<br>✅ Checkpoint resume / local evaluation artifacts |
-
-## Results
-
-**HunyuanVideo-13B &middot; text-to-video.** Final evaluation from the paper:
-
-| Method | VQ &uarr; | MQ &uarr; |
-| --- | ---: | ---: |
-| Pre-trained | 5.195 | 1.943 |
-| Flow-GRPO-Fast | 6.279 | 3.222 |
-| DanceGRPO | 6.173 | 3.121 |
-| DiffusionNFT (EMA) | 6.827 | 2.683 |
-| DiffusionNFT (on-policy) | 5.543 | 1.839 |
-| **DiffusionART** | **8.970** | **4.224** |
-
-ART and NFT use TA:VQ:MQ = 7:2:1; GRPO baselines use VQ:MQ = 1:1.
-See [experiment recipes](#paper-experiments) and the
-[project page](https://vanzll.github.io/diffusionart-project/) for learning curves
-and playable comparisons. [Table source](assets/readme/results.json).
-
-<table>
-  <thead><tr><th width="50%">Pre-trained</th><th width="50%">DiffusionART</th></tr></thead>
-  <tbody>
-    <tr><th colspan="2">Text-to-image &middot; A snowy Chicago street at Christmas</th></tr>
-    <tr>
-      <td><img src="assets/readme/image-chicago-before.jpg" width="360" alt="Pre-trained: snowy Chicago street"></td>
-      <td><img src="assets/readme/image-chicago-after.jpg" width="360" alt="DiffusionART: snowy Chicago street"></td>
-    </tr>
-    <tr><th colspan="2">Text-to-video &middot; A river through an autumn valley</th></tr>
-    <tr>
-      <td><img src="assets/readme/video-106-before.jpg" width="360" alt="Pre-trained video frame: autumn valley"></td>
-      <td><img src="assets/readme/video-106-after.jpg" width="360" alt="DiffusionART video frame: autumn valley"></td>
-    </tr>
-  </tbody>
-</table>
-
-Selected paper examples; video cells show individual frames.
-[Sample provenance](assets/readme/provenance.json).
-
-## Supported Models
-
-| Task | Model | Algorithms | Setup |
-| --- | --- | --- | --- |
-| T2I | **SD3.5-M** | ART, NFT, GRPO, Fast, DPPO, Dance | [SD3 guide](docs/sd3-runner.md) |
-| T2I | **FLUX.1-dev** | ART, NFT, GRPO, Fast, DPPO | [FLUX guide](docs/flux-runner.md) |
-| T2V | **HunyuanVideo-13B** | ART, NFT, Fast, Dance, ReFL | [Hunyuan guide](docs/hunyuan-runner.md) |
-| I2V | **Wan2.1-I2V-14B, CFG/step-distilled** | ART, NFT, Fast, Dance, ReFL | [Wan guide](docs/wan-runner.md) |
-
-Fast = Flow-GRPO-Fast; DPPO = Flow-DPPO; Dance = DanceGRPO.
-
-| Reward | Tasks | Feedback |
-| --- | --- | --- |
-| **PickScore, GenEval, OCR, Aesthetic, CLIPScore** | T2I | Scalar scores and weighted combinations |
-| **VideoReward: TA, VQ, MQ** | T2V / I2V | Scalar scores and weighted combinations |
-| **Pairwise preferences** | Hunyuan T2V / ART | Binary preference labels derived from scorer comparisons |
-| **Differentiable VideoReward** | Video ReFL | Pixel-space gradients; common MP4 scores for reporting |
-
-See [algorithm contracts](docs/algorithm-provenance.md) and
-[reward composition](docs/composite-rewards.md) for method-specific behavior.
 
 ## Quick Start
 
@@ -173,6 +175,64 @@ torchrun --standalone --nproc-per-node=8 -m visual_rl.train \
 Add `--validate` for config checks before loading models. See
 [distributed execution](docs/distributed-execution.md) for multi-node launches and
 [checkpoint/resume](docs/checkpoint-resume.md) for recovery and evaluation.
+
+## Results
+
+**HunyuanVideo-13B &middot; text-to-video.** Final evaluation from the paper:
+
+| Method | VQ &uarr; | MQ &uarr; |
+| --- | ---: | ---: |
+| Pre-trained | 5.195 | 1.943 |
+| Flow-GRPO-Fast | 6.279 | 3.222 |
+| DanceGRPO | 6.173 | 3.121 |
+| DiffusionNFT (EMA) | 6.827 | 2.683 |
+| DiffusionNFT (on-policy) | 5.543 | 1.839 |
+| **DiffusionART** | **8.970** | **4.224** |
+
+ART and NFT use TA:VQ:MQ = 7:2:1; GRPO baselines use VQ:MQ = 1:1.
+See [experiment recipes](#paper-experiments) and the
+[project page](https://vanzll.github.io/diffusionart-project/) for learning curves
+and playable comparisons. [Table source](assets/readme/results.json).
+
+<table>
+  <thead><tr><th width="50%">Pre-trained</th><th width="50%">DiffusionART</th></tr></thead>
+  <tbody>
+    <tr><th colspan="2">Text-to-image &middot; A snowy Chicago street at Christmas</th></tr>
+    <tr>
+      <td><img src="assets/readme/image-chicago-before.jpg" width="360" alt="Pre-trained: snowy Chicago street"></td>
+      <td><img src="assets/readme/image-chicago-after.jpg" width="360" alt="DiffusionART: snowy Chicago street"></td>
+    </tr>
+    <tr><th colspan="2">Text-to-video &middot; A river through an autumn valley</th></tr>
+    <tr>
+      <td><img src="assets/readme/video-106-before.jpg" width="360" alt="Pre-trained video frame: autumn valley"></td>
+      <td><img src="assets/readme/video-106-after.jpg" width="360" alt="DiffusionART video frame: autumn valley"></td>
+    </tr>
+  </tbody>
+</table>
+
+Selected paper examples; video cells show individual frames.
+[Sample provenance](assets/readme/provenance.json).
+
+## Supported Models
+
+| Task | Model | Algorithms | Setup |
+| --- | --- | --- | --- |
+| T2I | **SD3.5-M** | ART, NFT, GRPO, Fast, DPPO, Dance | [SD3 guide](docs/sd3-runner.md) |
+| T2I | **FLUX.1-dev** | ART, NFT, GRPO, Fast, DPPO | [FLUX guide](docs/flux-runner.md) |
+| T2V | **HunyuanVideo-13B** | ART, NFT, Fast, Dance, ReFL | [Hunyuan guide](docs/hunyuan-runner.md) |
+| I2V | **Wan2.1-I2V-14B, CFG/step-distilled** | ART, NFT, Fast, Dance, ReFL | [Wan guide](docs/wan-runner.md) |
+
+Fast = Flow-GRPO-Fast; DPPO = Flow-DPPO; Dance = DanceGRPO.
+
+| Reward | Tasks | Feedback |
+| --- | --- | --- |
+| **PickScore, GenEval, OCR, Aesthetic, CLIPScore** | T2I | Scalar scores and weighted combinations |
+| **VideoReward: TA, VQ, MQ** | T2V / I2V | Scalar scores and weighted combinations |
+| **Pairwise preferences** | Hunyuan T2V / ART | Binary preference labels derived from scorer comparisons |
+| **Differentiable VideoReward** | Video ReFL | Pixel-space gradients; common MP4 scores for reporting |
+
+See [algorithm contracts](docs/algorithm-provenance.md) and
+[reward composition](docs/composite-rewards.md) for method-specific behavior.
 
 ## Configure Your Experiment
 
