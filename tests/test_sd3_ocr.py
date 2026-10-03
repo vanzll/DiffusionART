@@ -115,7 +115,16 @@ def test_ocr_rewards_reach_updates_eval_and_full_checkpoints(
         torch.set_num_threads(old_threads)
     output = tmp_path / "run"
     history = [json.loads(line) for line in (output / "metrics.jsonl").read_text().splitlines()]
-    assert len(history) == 4 and seen
+    assert seen
+    last_step = 0
+    for row in history:
+        if row.get("system/skipped_zero_guidance"):
+            assert algorithm == "diffusionart"
+            assert row["train/optimizer_step"] == last_step
+        else:
+            assert row["train/optimizer_step"] == last_step + 1
+            last_step += 1
+    assert last_step == 4
     assert closed == [True]
     for row in history:
         assert 0 <= row["train/reward"] <= 1
