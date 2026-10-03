@@ -33,14 +33,14 @@ models and state-of-the-art algorithms** across text-to-image, text-to-video
 and image-to-video generation.
 
 <p align="center">
-  <img src="assets/readme/efficiency-comparison.png" width="900" alt="Side-by-side T2V and I2V comparisons: DiffusionART, Flow-GRPO-Fast and DiffusionNFT, with markers and matched-reward GPU-hours ratios">
+  <img src="assets/readme/efficiency-comparison.png" width="900" alt="Side-by-side T2V and I2V comparisons: DiffusionART, Flow-GRPO-Fast and DiffusionNFT; matched-reward GPU-hours ratios on T2V only">
 </p>
 
 <p align="center"><em>
 Fine-tuning <a href="https://huggingface.co/tencent/HunyuanVideo">HunyuanVideo (13B)</a> (left) and
 <a href="https://huggingface.co/lightx2v/Wan2.1-I2V-14B-480P-StepDistill-CfgDistill-Lightx2v">Wan2.1-I2V-14B-480P, CFG/step-distilled (14B)</a> (right)
 using <a href="https://huggingface.co/KlingTeam/VideoReward">VideoReward</a>, with <strong>Visual Quality (VQ):Motion Quality (MQ) = 1:1</strong>.
-Mean train reward is the mean of raw VQ and MQ. Ratios compare GPU hours to reach each baseline's final reward level; GPU hours include evaluation and waiting time.
+Mean train reward is the mean of raw VQ and MQ. T2V ratios compare GPU hours to reach each baseline's final reward level; GPU hours include evaluation and waiting time.
 </em></p>
 
 ## Method
@@ -119,7 +119,7 @@ for pairwise K = 2, 4, 8 and scalar K = 8, each trained for 400 updates.
 
 ## Visualization Results
 
-<p align="center"><img src="assets/readme/qualitative-comparison.png" width="1000" alt="Side-by-side text-to-image and text-to-video comparisons: eight image prompts and six video prompts, pre-trained versus DiffusionART, with four frames per video"></p>
+<p align="center"><img src="assets/readme/qualitative-comparison.png" width="900" alt="Square text-to-image and text-to-video comparison: four image prompts and three video prompts, pre-trained versus DiffusionART, with four frames per video"></p>
 
 <p align="center"><em>Pre-trained versus DiffusionART. Video strips show four frames.</em></p>
 
