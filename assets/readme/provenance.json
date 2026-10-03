@@ -26,6 +26,28 @@
       "source": "efficiency.json",
       "presentation": "Equal-size GPU-hour panels using frozen paper data and a common raw VQ/MQ mean. Full observed curves, common smoothing, no new experiment data.",
       "renderer": "render_efficiency.py"
+    },
+    {
+      "output": "paper-algorithm.png",
+      "source": "ICLR/main.pdf",
+      "source_sha256": "96e642dda9d57083d87c0064d882aa254a2af16abafb32fd0aae24fa2c914ce9",
+      "page": 9,
+      "presentation": "Paper Algorithm 1 retypeset for a narrow column. Original five steps and loss, with only line wrapping and typography changed.",
+      "renderer": "render_paper_algorithm.py",
+      "output_sha256": "4092b424198a6d79c58dded70023086383a4a741beaf010e2344ea981ceb4037"
+    },
+    {
+      "output": "visual-improvements.png",
+      "source": "diffusionart_cover_units_20260928.pdf",
+      "source_sha256": "d0acedd85a1a4d0146f7bc6abd2ddffe069159afa018bcefd82673b812abbc74",
+      "presentation": "Unmodified right-hand cover panel with four image pairs and a four-frame video strip. These are selected paper examples, not outputs from the pairwise runs.",
+      "output_sha256": "a86ca203b690865762b6e5dd25c4b1471a0d6c825e4d2fdc415b5dd65472a735"
+    },
+    {
+      "output": "pairwise-gpu-hours.png",
+      "source": "efficiency.json",
+      "presentation": "Scalar K=8 and pairwise K=2/4/8 from frozen paper histories. Raw VQ, elapsed GPU hours and the paper's common five-update smoothing; no extrapolation.",
+      "renderer": "render_efficiency.py"
     }
   ],
   "samples": [
