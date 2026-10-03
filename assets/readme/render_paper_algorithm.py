@@ -21,7 +21,7 @@ def render():
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     ax.axis("off")
-    ax.text(.05, .955, "Algorithm 1  DiffusionART", fontsize=12, weight="bold")
+    ax.text(.05, .955, "Algorithm: DiffusionART", fontsize=12, weight="bold")
     ax.text(.05, .915, "One training iteration", fontsize=10, color="#596570")
     ax.plot([.05, .95], [.89, .89], color="#D1D9E0", linewidth=.8)
     ax.text(.05, .85, "Rollout Stage", fontsize=10, weight="bold")
@@ -30,7 +30,7 @@ def render():
         (.763, "", r"For each prompt $c$, collect $K$ endpoints"),
         (.724, "", r"with rewards $R$, states $s_t$, and predictions"),
         (.685, "", r"$v_\theta^{(0)}(s_t)$."),
-        (.630, "2.", r"Compute $G(c)$ by Equation 5 for each prompt $c$."),
+        (.630, "2.", r"Compute normalized covariance guidance $G(c)$."),
         (.575, "3.", r"Freeze $v_{\mathrm{tgt}}^{\mathrm{ART}}(s_t)=v_\theta^{(0)}(s_t)+G(c)$"),
         (.530, "", r"for each state $s_t$ of prompt $c$."),
         (.402, "4.", "Split the samples into two equal-sized"),

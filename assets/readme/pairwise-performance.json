@@ -1,0 +1,11 @@
+{
+  "metric": "Final evaluation raw VQ",
+  "training_optimizer_steps": 400,
+  "source": "ICLR/main.tex, T2V pairwise feedback table",
+  "source_sha256": "4aeaf7d932143caea5542560e18e82baaa8eda1801ba3d97ed76f2c57ca1082a",
+  "precision": "Three decimal places, as reported in the paper",
+  "rows": [
+    {"K": 2, "run": "x9mzbm4c", "VQ": 12.235},
+    {"K": 8, "run": "p6jdpon4", "VQ": 12.092}
+  ]
+}

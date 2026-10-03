@@ -22,9 +22,9 @@
       "output_sha256": "d78f27803092860ee1120aafdecae0fe0487ba17afd490980af39fd5097de426"
     },
     {
-      "outputs": ["t2v-gpu-hours.png", "i2v-gpu-hours.png"],
+      "output": "efficiency-comparison.png",
       "source": "efficiency.json",
-      "presentation": "Equal-size GPU-hour panels using frozen paper data and a common raw VQ/MQ mean. Full observed curves, common smoothing, no new experiment data.",
+      "presentation": "One image with equal-size T2V/I2V panels, observed markers and matched-reward ratios. ART/Fast/NFT only; full source histories retained, common raw VQ/MQ mean and smoothing, no new experiment data.",
       "renderer": "render_efficiency.py"
     },
     {
@@ -32,9 +32,9 @@
       "source": "ICLR/main.pdf",
       "source_sha256": "96e642dda9d57083d87c0064d882aa254a2af16abafb32fd0aae24fa2c914ce9",
       "page": 9,
-      "presentation": "Paper Algorithm 1 retypeset for a narrow column. Original five steps and loss, with only line wrapping and typography changed.",
+      "presentation": "Paper algorithm retypeset for a narrow column. Five steps and loss retained; title is Algorithm: DiffusionART and the covariance step is self-contained rather than referring to a paper equation number.",
       "renderer": "render_paper_algorithm.py",
-      "output_sha256": "4092b424198a6d79c58dded70023086383a4a741beaf010e2344ea981ceb4037"
+      "output_sha256": "5965e495e9420fd3ae221ae16e68f7f3363f4fb16dfb92f0e50351757ad5b5bd"
     },
     {
       "output": "visual-improvements.png",
@@ -44,10 +44,26 @@
       "output_sha256": "a86ca203b690865762b6e5dd25c4b1471a0d6c825e4d2fdc415b5dd65472a735"
     },
     {
-      "output": "pairwise-gpu-hours.png",
+      "output": "pairwise-comparison.png",
       "source": "efficiency.json",
-      "presentation": "Scalar K=8 and pairwise K=2/4/8 from frozen paper histories. Raw VQ, elapsed GPU hours and the paper's common five-update smoothing; no extrapolation.",
+      "presentation": "Pairwise K=2 and K=8 only. Raw train VQ versus GPU hours with common twelve-update smoothing; final eval VQ bars use the paper's rounded values in pairwise-performance.json. No extrapolation.",
       "renderer": "render_efficiency.py"
+    },
+    {
+      "output": "guidance-formula.png",
+      "presentation": "Exact reward-tilted distribution and its mean derivative at eta=0, rendered as an image for reliable README display.",
+      "renderer": "render_guidance_formula.py",
+      "output_sha256": "6d65429b8a65770a97f3928b22e1ce583d3c2fcb0b40c5ddaa73c1fdda7adf3a"
+    },
+    {
+      "output": "qualitative-comparison.png",
+      "presentation": "Unmodified crops of selected appendix panels: image examples a/b/e/f and video examples m/n/o, with four frames per video. Only page layout and section headings are added.",
+      "sources": [
+        {"file": "diffusionart_t2i_selected16_p1.pdf", "sha256": "9cad807bc7a409bc5fe08506a33bbcb9b32ac165e5cf0226149e878f240a1107", "crops_points": [[0, 18, 504, 175], [0, 332, 504, 491]]},
+        {"file": "diffusionart_t2v_selected26_p3.pdf", "sha256": "ea636ee451a350f2b028cb3ab7f03df7f5fccfd1c9489939c8ff247cfeb8407a", "crops_points": [[0, 0, 504, 294]]}
+      ],
+      "renderer": "render_visualization.py",
+      "output_sha256": "6caf07e359678cbd84a430b133fe03ad72c06cc7dc0d603a2b191a0e475aa400"
     }
   ],
   "samples": [

@@ -17,12 +17,11 @@
   <a href="https://vanzll.github.io/diffusionart-project/">Project Page</a> &nbsp;/&nbsp;
   <a href="#method">Method</a> &nbsp;/&nbsp;
   <a href="#quick-start">Quick Start</a> &nbsp;/&nbsp;
-  <a href="docs/README.md">Documentation</a> &nbsp;/&nbsp;
-  <a href="#paper-experiments">Experiments</a>
+  <a href="docs/README.md">Documentation</a>
 </p>
 
-**DiffusionART** is **Diffusion Reinforcement via Aggregation-First Reward Tilting
-with Adaptive Restoration**. It combines the advantages of forward-process and
+**DiffusionART** is a diffusion RL algorithm via **Aggregation-First Reward
+Tilting with Adaptive Restoration**. It combines the advantages of forward-process and
 reverse-process reinforcement learning while avoiding their limitations.
 DiffusionART is **efficient, stable and simple**, requires minimal hyperparameter
 tuning and no differentiable reward model, and naturally supports pairwise
@@ -34,16 +33,16 @@ models and state-of-the-art algorithms** across text-to-image, text-to-video
 and image-to-video generation.
 
 <p align="center">
-  <img src="assets/readme/t2v-gpu-hours.png" width="460" alt="Text-to-video training reward versus GPU hours; all methods use VQ:MQ = 1:1">
-  <img src="assets/readme/i2v-gpu-hours.png" width="460" alt="Image-to-video training reward versus GPU hours; all methods use VQ:MQ = 1:1">
+  <img src="assets/readme/efficiency-comparison.png" width="900" alt="Side-by-side T2V and I2V comparisons: DiffusionART, Flow-GRPO-Fast and DiffusionNFT, with markers and matched-reward GPU-hours ratios">
 </p>
 
-*Fine-tuning [HunyuanVideo (13B)](https://huggingface.co/tencent/HunyuanVideo)
-(left) and [Wan2.1-I2V-14B-480P, CFG/step-distilled (14B)](https://huggingface.co/lightx2v/Wan2.1-I2V-14B-480P-StepDistill-CfgDistill-Lightx2v)
-(right) using [VideoReward](https://huggingface.co/KlingTeam/VideoReward), with
-**Visual Quality (VQ):Motion Quality (MQ) = 1:1**. Mean train reward is the mean
-of raw VQ and MQ scores; GPU hours include evaluation and waiting time.
-[Curve sources](assets/readme/efficiency.json).*
+<p align="center"><em>
+Fine-tuning <a href="https://huggingface.co/tencent/HunyuanVideo">HunyuanVideo (13B)</a> (left) and
+<a href="https://huggingface.co/lightx2v/Wan2.1-I2V-14B-480P-StepDistill-CfgDistill-Lightx2v">Wan2.1-I2V-14B-480P, CFG/step-distilled (14B)</a> (right)
+using <a href="https://huggingface.co/KlingTeam/VideoReward">VideoReward</a>, with <strong>Visual Quality (VQ):Motion Quality (MQ) = 1:1</strong>.
+Mean train reward is the mean of raw VQ and MQ. Ratios compare GPU hours to reach each baseline's final reward level; GPU hours include evaluation and waiting time.
+<a href="assets/readme/efficiency.json">Curve sources</a>.
+</em></p>
 
 ## Method
 
@@ -60,18 +59,12 @@ of raw VQ and MQ scores; GPU hours include evaluation and waiting time.
 We call the covariance-form reward-improving direction **guidance**, bringing
 a classifier-free guidance (CFG)-like idea into post-training: the model learns
 to internalize reward guidance, much like distilling CFG. For a reward-tilted
-endpoint distribution with tilt strength $\eta$,
+endpoint distribution with tilt strength eta,
 
-$$
-p_\eta(x_0\mid c)\propto p_{\mathrm{old}}(x_0\mid c)\exp(\eta R(x_0,c)),
-\qquad
-\left.\frac{\partial}{\partial\eta}\mathbb{E}_{p_\eta}[x_0]\right|_{\eta=0}
-=\operatorname{Cov}_{p_{\mathrm{old}}}(R,x_0).
-$$
+<p align="center"><img src="assets/readme/guidance-formula.png" width="820" alt="p_eta(x_0 given c) is proportional to p_old(x_0 given c) exp(eta R); the derivative at eta=0 of its mean endpoint equals Cov_old(R, x_0)"></p>
 
-Here $c$ is a prompt, $x_0$ is a clean latent endpoint, and $R$ is its reward.
-DiffusionART inherits DiffusionNFT's reward-tilting principle while systematically
-removing the self-consistency force: it aggregates reward evidence **before**
+Here c is a prompt, x₀ is a clean latent endpoint, and R is its reward.
+DiffusionART systematically removes the self-consistency force: it aggregates reward evidence **before**
 applying the normalized guidance to reverse-process rollout states, without
 relying on an ideal forward-process velocity field. The second update retains
 guidance while adaptively restoring velocity drift toward the rollout policy,
@@ -80,14 +73,14 @@ without an EMA off-policy strategy.
 <table>
   <tr>
     <th width="50%">Guidance geometry and state assignment</th>
-    <th width="50%">Paper pseudocode</th>
+    <th width="50%">Pseudocode</th>
   </tr>
   <tr>
     <td align="center" valign="middle">
       <img src="assets/readme/method-overview.png" width="460" alt="Two stacked paper diagrams: reward guidance geometry above, covariance guidance assigned to ODE rollout states below">
     </td>
     <td valign="middle">
-      <img src="assets/readme/paper-algorithm.png" width="460" alt="Paper Algorithm 1: ODE sampling, covariance guidance, frozen targets, and two disjoint MSE updates">
+      <img src="assets/readme/paper-algorithm.png" width="460" alt="Algorithm: ODE sampling, covariance guidance, frozen targets, and two disjoint MSE updates">
       <p>Implementation: <a href="src/visual_rl/algorithms/covariance.py">covariance guidance</a>, <a href="src/visual_rl/algorithms/art.py">ART loss</a>, and <a href="src/visual_rl/training/objectives.py">disjoint update objectives</a>.</p>
     </td>
   </tr>
@@ -102,14 +95,13 @@ rewards with these labels when computing the shared guidance.
 See the [preference-label and pairwise-guidance implementation](src/visual_rl/algorithms/covariance.py).
 
 <p align="center">
-  <img src="assets/readme/pairwise-gpu-hours.png" width="460" alt="Scalar K=8 and pairwise K=2,4,8: VQ reward versus GPU hours">
-  <img src="assets/readme/visual-improvements.png" width="460" alt="Selected paper examples: pre-trained versus DiffusionART images and four video frames">
+  <img src="assets/readme/pairwise-comparison.png" width="900" alt="Pairwise K=2 versus K=8: VQ training curves with markers versus GPU hours, and final evaluation VQ bars">
 </p>
 
-*Left: pairwise T2V training with **K = 2, 4, 8** videos per prompt, alongside
-scalar K = 8. Right: selected image and video improvements from the paper;
-video strips show four frames. [Curve sources](assets/readme/efficiency.json)
-and [visual provenance](assets/readme/provenance.json).*
+<p align="center"><em>Pairwise T2V with <strong>K = 2 or 8</strong> videos per prompt.
+Left: VQ train reward versus GPU hours. Right: final evaluation VQ from the paper.
+<a href="assets/readme/efficiency.json">Curve sources</a> and <a href="assets/readme/pairwise-performance.json">evaluation values</a>.
+</em></p>
 
 ### Why DiffusionART?
 
@@ -120,12 +112,19 @@ and [visual provenance](assets/readme/provenance.json).*
   fewer samples and GPU hours.
 - **Training efficiency:** remove forward-process RL's unstable self-consistency
   force and address reverse-process RL's inefficient credit assignment.
-- **Simple and scalable:** two disjoint MSE updates, minimal tuning, and
-  compatibility with black-box rewards and pairwise feedback.
+- **Simple and scalable:** minimal hyperparameter tuning, no differentiable
+  rewards required, and natural support for pairwise reward models.
+
+## Visualization Results
+
+<p align="center"><img src="assets/readme/qualitative-comparison.png" width="900" alt="Selected appendix T2I and T2V examples: pre-trained versus DiffusionART, with four frames per video"></p>
+
+<p align="center"><em>Selected text-to-image and text-to-video comparisons from the paper appendix.
+Video strips show four frames. <a href="assets/readme/provenance.json">Visual provenance</a>.</em></p>
 
 ## News
 
-- 🎉 **[2026.10.01]** DiffusionART and six baselines are available in one framework for **T2I, T2V and I2V**. Explore the [training recipes](#paper-experiments)!
+- 🎉 **[2026.10.01]** DiffusionART and six baselines are available in one framework for **T2I, T2V and I2V**. Explore the [training recipes](configs/paper/)!
 
 ## Quick Feature Summary
 
@@ -200,43 +199,6 @@ Add `--validate` for config checks before loading models. See
 [distributed execution](docs/distributed-execution.md) for multi-node launches and
 [checkpoint/resume](docs/checkpoint-resume.md) for recovery and evaluation.
 
-## Results
-
-**HunyuanVideo-13B &middot; text-to-video.** Final evaluation from the paper:
-
-| Method | VQ &uarr; | MQ &uarr; |
-| --- | ---: | ---: |
-| Pre-trained | 5.195 | 1.943 |
-| Flow-GRPO-Fast | 6.279 | 3.222 |
-| DanceGRPO | 6.173 | 3.121 |
-| DiffusionNFT (EMA) | 6.827 | 2.683 |
-| DiffusionNFT (on-policy) | 5.543 | 1.839 |
-| **DiffusionART** | **8.970** | **4.224** |
-
-ART and NFT use TA:VQ:MQ = 7:2:1; GRPO baselines use VQ:MQ = 1:1.
-See [experiment recipes](#paper-experiments) and the
-[project page](https://vanzll.github.io/diffusionart-project/) for learning curves
-and playable comparisons. [Table source](assets/readme/results.json).
-
-<table>
-  <thead><tr><th width="50%">Pre-trained</th><th width="50%">DiffusionART</th></tr></thead>
-  <tbody>
-    <tr><th colspan="2">Text-to-image &middot; A snowy Chicago street at Christmas</th></tr>
-    <tr>
-      <td><img src="assets/readme/image-chicago-before.jpg" width="360" alt="Pre-trained: snowy Chicago street"></td>
-      <td><img src="assets/readme/image-chicago-after.jpg" width="360" alt="DiffusionART: snowy Chicago street"></td>
-    </tr>
-    <tr><th colspan="2">Text-to-video &middot; A river through an autumn valley</th></tr>
-    <tr>
-      <td><img src="assets/readme/video-106-before.jpg" width="360" alt="Pre-trained video frame: autumn valley"></td>
-      <td><img src="assets/readme/video-106-after.jpg" width="360" alt="DiffusionART video frame: autumn valley"></td>
-    </tr>
-  </tbody>
-</table>
-
-Selected paper examples; video cells show individual frames.
-[Sample provenance](assets/readme/provenance.json).
-
 ## Supported Models
 
 | Task | Model | Algorithms | Setup |
@@ -284,19 +246,6 @@ and checkpoint cadence live in the same file. Required asset paths use `${ENV_VA
 Metrics are saved to `metrics.jsonl`; evaluation images, videos and scores stay
 on disk. Set `runtime.log: wandb` for [scalar logging](docs/logging.md).
 
-## Paper Experiments
-
-| Task | Benchmark / reward | Configs | Selected ART runs |
-| --- | --- | --- | --- |
-| T2I | GenEval, PickScore, OCR, joint rewards | [Image recipes](docs/paper-image.md) | [GenEval](https://wandb.ai/vanzl3386-chinese-university-of-hong-kong-shenzhen/flow-grpo-algo/runs/11pq0iy3) &middot; [PickScore](https://wandb.ai/vanzl3386-chinese-university-of-hong-kong-shenzhen/flow-grpo-algo/runs/mofumvbw) &middot; [OCR](https://wandb.ai/vanzl3386-chinese-university-of-hong-kong-shenzhen/flow-grpo-algo/runs/9c0zrzlw) |
-| T2V | TA:VQ:MQ = 7:2:1; scalar / pairwise VQ | [Video recipes](docs/paper-video.md) | [Main](https://wandb.ai/vanzl3386-chinese-university-of-hong-kong-shenzhen/flow-grpo-algo/runs/gyvtocue) &middot; [Pairwise K=2](https://wandb.ai/vanzl3386-chinese-university-of-hong-kong-shenzhen/flow-grpo-algo/runs/x9mzbm4c) |
-| I2V | VQ:MQ = 1:1 | [Video recipes](docs/paper-video.md) | [Main](https://wandb.ai/vanzl3386-chinese-university-of-hong-kong-shenzhen/flow-grpo-algo/runs/08ca4146a532752c473f1f37) |
-
-Baseline runs and source commits are in the [run inventory](docs/reproduction-inventory.json).
-W&B links may require access. Current validation covers CPU integration and
-distributed tests; pretrained GPU acceptance and paper-number parity remain
-pending. [Release scope](docs/release-scope.md).
-
 ## Learn More
 
 [Documentation](docs/README.md) &nbsp;/&nbsp;
@@ -310,7 +259,3 @@ Built on [Flow-GRPO](https://github.com/yifan123/flow_grpo),
 [DiffusionNFT](https://github.com/NVlabs/DiffusionNFT),
 [DanceGRPO](https://github.com/XueZeyue/DanceGRPO) and
 [UniRL](https://github.com/Tencent-Hunyuan/UniRL).
-README organization draws inspiration from
-[verl-agent](https://github.com/langfengQ/verl-agent) and Flow-GRPO.
-See [third-party notices](THIRD_PARTY_NOTICES.md) for attribution and asset terms;
-the project-wide license is pending.
