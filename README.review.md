@@ -20,12 +20,12 @@
   <a href="docs/README.md">Documentation</a>
 </p>
 
-**DiffusionART** is a diffusion RL algorithm via **Aggregation-First Reward
+**DiffusionART** is an on-policy diffusion RL algorithm via **Aggregation-First Reward
 Tilting with Adaptive Restoration**. It combines the advantages of forward-process and
 reverse-process reinforcement learning while avoiding their limitations.
-DiffusionART is **efficient, stable and simple**, requires minimal hyperparameter
-tuning and no differentiable reward model, and naturally supports pairwise
-feedback and small rollout groups for scalable post-training.
+DiffusionART is **highly efficient, stable and simple**, requires minimal hyperparameter
+tuning and no differentiable reward model, naturally supports pairwise
+feedback, and is robust to small rollout groups for scalable diffusion reinforcement learning.
 
 This repository provides a comprehensive framework for fine-tuning visual
 generation models, supporting widely used open-source **base models, reward
@@ -41,23 +41,25 @@ Fine-tuning <a href="https://huggingface.co/tencent/HunyuanVideo">HunyuanVideo (
 <a href="https://huggingface.co/lightx2v/Wan2.1-I2V-14B-480P-StepDistill-CfgDistill-Lightx2v">Wan2.1-I2V-14B-480P, CFG/step-distilled (14B)</a> (right)
 using <a href="https://huggingface.co/KlingTeam/VideoReward">VideoReward</a>, with <strong>Visual Quality (VQ):Motion Quality (MQ) = 1:1</strong>.
 Mean train reward is the mean of raw VQ and MQ. Ratios compare GPU hours to reach each baseline's final reward level; GPU hours include evaluation and waiting time.
-<a href="assets/readme/efficiency.json">Curve sources</a>.
 </em></p>
 
 ## Method
 
 ### Motivations and Insights
 
-1. NFT-style forward-process training contains a hidden **forward-reverse
+1. NFT-style forward-process RL contains a hidden **forward-reverse
    consistency force** in its objective, slowing and destabilizing training.
-2. Off-policy strategies stabilize post-training of continuous-space generative
+2. Off-policy strategies stabilize reinforcement learning of continuous-space generative
    models through a **strong restoration force**. Even a small output-space
    restoration MSE can produce a large aggregated parameter gradient.
 
 ### Aggregation-First Guidance and Adaptive Restoration
 
-We call the covariance-form reward-improving direction **guidance**, bringing
-a classifier-free guidance (CFG)-like idea into post-training: the model learns
+DiffusionART is simple: roll out **K samples per prompt** with an ODE solver,
+compute the reward-endpoint covariance as **guidance**, apply it to the visited
+states and actions, then perform **two disjoint minibatch updates**.
+We call this reward-improving direction **guidance**, bringing
+a classifier-free guidance (CFG)-like idea into diffusion RL: the model learns
 to internalize reward guidance, much like distilling CFG. For a reward-tilted
 endpoint distribution with tilt strength eta,
 
@@ -95,32 +97,31 @@ rewards with these labels when computing the shared guidance.
 See the [preference-label and pairwise-guidance implementation](src/visual_rl/algorithms/covariance.py).
 
 <p align="center">
-  <img src="assets/readme/pairwise-comparison.png" width="900" alt="Pairwise K=2 versus K=8: VQ training curves with markers versus GPU hours, and final evaluation VQ bars">
+  <img src="assets/readme/pairwise-comparison.png" width="900" alt="Pairwise K=2 versus K=8 training curves; final evaluation VQ and GPU hours for pairwise K=2, K=4, K=8 and scalar K=8">
 </p>
 
 <p align="center"><em>Pairwise T2V with <strong>K = 2 or 8</strong> videos per prompt.
-Left: VQ train reward versus GPU hours. Right: final evaluation VQ from the paper.
-<a href="assets/readme/efficiency.json">Curve sources</a> and <a href="assets/readme/pairwise-performance.json">evaluation values</a>.
+Left: VQ train reward versus GPU hours. Right: final evaluation VQ and total GPU hours
+for pairwise K = 2, 4, 8 and scalar K = 8, each trained for 400 updates.
 </em></p>
 
-### Why DiffusionART?
+### Key Advantages
 
-- **ODE solver:** deterministic rollouts, with no reverse-transition likelihood.
-- **Rollout efficiency:** reuse rollout states and cached predictions, without
+- ✅ **ODE solver:** deterministic rollouts, with no reverse-transition likelihood.
+- ✅ **Rollout efficiency:** reuse rollout states and cached predictions, without
   adding noise again or recomputing predictions on newly noised states.
-- **Sample efficiency:** smaller groups retain strong performance while using
-  fewer samples and GPU hours.
-- **Training efficiency:** remove forward-process RL's unstable self-consistency
+- ✅ **Sample efficiency:** fewer samples per prompt with minimal performance loss
+  and lower GPU-hour cost.
+- ✅ **Training efficiency:** remove forward-process RL's unstable self-consistency
   force and address reverse-process RL's inefficient credit assignment.
-- **Simple and scalable:** minimal hyperparameter tuning, no differentiable
+- ✅ **Simple and scalable:** minimal hyperparameter tuning, no differentiable
   rewards required, and natural support for pairwise reward models.
 
 ## Visualization Results
 
-<p align="center"><img src="assets/readme/qualitative-comparison.png" width="900" alt="Selected appendix T2I and T2V examples: pre-trained versus DiffusionART, with four frames per video"></p>
+<p align="center"><img src="assets/readme/qualitative-comparison.png" width="1000" alt="Side-by-side text-to-image and text-to-video comparisons: eight image prompts and six video prompts, pre-trained versus DiffusionART, with four frames per video"></p>
 
-<p align="center"><em>Selected text-to-image and text-to-video comparisons from the paper appendix.
-Video strips show four frames. <a href="assets/readme/provenance.json">Visual provenance</a>.</em></p>
+<p align="center"><em>Pre-trained versus DiffusionART. Video strips show four frames.</em></p>
 
 ## News
 
@@ -132,10 +133,10 @@ Video strips show four frames. <a href="assets/readme/provenance.json">Visual pr
 | --- | --- |
 | **Tasks** | ✅ Text-to-image<br>✅ Text-to-video<br>✅ Image-to-video |
 | **Algorithms** | ✅ DiffusionART<br>✅ DiffusionNFT (EMA / on-policy)<br>✅ Flow-GRPO / Flow-GRPO-Fast<br>✅ Flow-DPPO / DanceGRPO<br>✅ ReFL (video) |
-| **Base Models** | ✅ SD3.5-M<br>✅ FLUX.1-dev<br>✅ HunyuanVideo-13B<br>✅ Wan2.1-I2V-14B (CFG/step-distilled) |
+| **Base Models** | ✅ [SD3.5-M](docs/sd3-runner.md)<br>✅ [FLUX.1-dev](docs/flux-runner.md)<br>✅ [HunyuanVideo-13B](docs/hunyuan-runner.md)<br>✅ [Wan2.1-I2V-14B (CFG/step-distilled)](docs/wan-runner.md) |
 | **Benchmarks** | ✅ GenEval<br>✅ OCR<br>✅ Pick-a-Pic (PickScore) |
-| **Reward Models** | ✅ GenEval / PickScore / OCR<br>✅ CLIPScore / Aesthetic<br>✅ VideoReward (TA / VQ / MQ)<br>✅ Configurable reward weights |
-| **Feedback** | ✅ Scalar rewards<br>✅ Pairwise preferences (Hunyuan ART)<br>✅ Small rollout groups: K = 2, 4, 8 |
+| **Reward Models** | ✅ GenEval / PickScore / OCR<br>✅ CLIPScore / Aesthetic<br>✅ [VideoReward (TA / VQ / MQ)](docs/video-installation.md)<br>✅ [Configurable reward weights](docs/composite-rewards.md) |
+| **Feedback** | ✅ Scalar rewards<br>✅ Pairwise preferences (Hunyuan ART)<br>✅ Configurable rollout groups: K = 2, 4, 8 |
 | **Training** | ✅ LoRA / full-parameter tuning<br>✅ DDP / FSDP<br>✅ Checkpoint resume / local evaluation artifacts |
 
 ## Quick Start
@@ -168,7 +169,7 @@ steps. To repeat, pass `--output-dir outputs/cpu-smoke-2`.
 
 ### 2. Prepare Assets
 
-Follow the matching [model guide](#supported-models) for model access, pinned
+Follow the matching [model guide](#quick-feature-summary) for model access, pinned
 weights, reward models and prompt data. Images use the `diffusers` extra;
 videos use the [pinned video environment](docs/video-installation.md).
 
@@ -198,27 +199,6 @@ torchrun --standalone --nproc-per-node=8 -m visual_rl.train \
 Add `--validate` for config checks before loading models. See
 [distributed execution](docs/distributed-execution.md) for multi-node launches and
 [checkpoint/resume](docs/checkpoint-resume.md) for recovery and evaluation.
-
-## Supported Models
-
-| Task | Model | Algorithms | Setup |
-| --- | --- | --- | --- |
-| T2I | **SD3.5-M** | ART, NFT, GRPO, Fast, DPPO, Dance | [SD3 guide](docs/sd3-runner.md) |
-| T2I | **FLUX.1-dev** | ART, NFT, GRPO, Fast, DPPO | [FLUX guide](docs/flux-runner.md) |
-| T2V | **HunyuanVideo-13B** | ART, NFT, Fast, Dance, ReFL | [Hunyuan guide](docs/hunyuan-runner.md) |
-| I2V | **Wan2.1-I2V-14B, CFG/step-distilled** | ART, NFT, Fast, Dance, ReFL | [Wan guide](docs/wan-runner.md) |
-
-Fast = Flow-GRPO-Fast; DPPO = Flow-DPPO; Dance = DanceGRPO.
-
-| Reward | Tasks | Feedback |
-| --- | --- | --- |
-| **PickScore, GenEval, OCR, Aesthetic, CLIPScore** | T2I | Scalar scores and weighted combinations |
-| **VideoReward: TA, VQ, MQ** | T2V / I2V | Scalar scores and weighted combinations |
-| **Pairwise preferences** | Hunyuan T2V / ART | Binary preference labels derived from scorer comparisons |
-| **Differentiable VideoReward** | Video ReFL | Pixel-space gradients; common MP4 scores for reporting |
-
-See [algorithm contracts](docs/algorithm-provenance.md) and
-[reward composition](docs/composite-rewards.md) for method-specific behavior.
 
 ## Configure Your Experiment
 
@@ -255,7 +235,7 @@ on disk. Set `runtime.log: wandb` for [scalar logging](docs/logging.md).
 
 ## Acknowledgements
 
-Built on [Flow-GRPO](https://github.com/yifan123/flow_grpo),
+Thanks to the authors of [Flow-GRPO](https://github.com/yifan123/flow_grpo),
 [DiffusionNFT](https://github.com/NVlabs/DiffusionNFT),
 [DanceGRPO](https://github.com/XueZeyue/DanceGRPO) and
-[UniRL](https://github.com/Tencent-Hunyuan/UniRL).
+[UniRL](https://github.com/Tencent-Hunyuan/UniRL) for open-sourcing their work.
