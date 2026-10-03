@@ -1,5 +1,5 @@
 {
-  "training_weights": "VQ:MQ = 1:1; TA = 0",
+  "comparison_training_weights": "VQ:MQ = 1:1; TA = 0",
   "display_reward": "(raw VQ + raw MQ) / 2",
   "cost": "W&B _runtime * 32 / 3600; includes evaluation and waits",
   "smoothing": "Causal EMA half-life 8 optimizer updates for every curve",
@@ -61,5 +61,50 @@
         "last_gpu_hours": 1300.4226127486045
       }
     }
+  },
+  "pairwise": {
+    "source": "pairwise-curves.csv",
+    "source_sha256": "40d1b53df1a9905c0b9f584eb7a5ab6cdc2383b44652c17de084aa7e3af3c6ad",
+    "runs": {
+      "Scalar, K=8": {
+        "id": "1iwf5sj9",
+        "observed_updates": 400,
+        "last_gpu_hours": 891.0556339946755
+      },
+      "Pairwise, K=2": {
+        "id": "x9mzbm4c",
+        "observed_updates": 400,
+        "last_gpu_hours": 260.76478161902224
+      },
+      "Pairwise, K=4": {
+        "id": "sdi90cn1",
+        "observed_updates": 400,
+        "last_gpu_hours": 465.5798294378311
+      },
+      "Pairwise, K=8": {
+        "id": "p6jdpon4",
+        "observed_updates": 400,
+        "last_gpu_hours": 883.2507417693689
+      }
+    },
+    "training_weights": "VQ only; MQ = TA = 0",
+    "display_reward": "Raw VQ mean",
+    "smoothing": "Unchanged causal EMA half-life 5 optimizer updates for every curve",
+    "source_export": "wandb_history_raw.json",
+    "source_export_sha256": "55a28a09964bd3ee91f66f3b1ac07c711d4b2fc4897fb815f43e0cc1cd486357"
+  },
+  "presentation": {
+    "line": "Solid, rounded stroke; nine markers at observed indices per curve",
+    "legend": "Inside the axes, lower right; no frame",
+    "comparison_labels": [
+      "DiffusionART (ours)",
+      "Flow-GRPO-Fast",
+      "DiffusionNFT",
+      "DanceGRPO"
+    ],
+    "comparison_axes": [
+      "GPU hours",
+      "Mean train reward"
+    ]
   }
 }

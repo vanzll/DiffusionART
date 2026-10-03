@@ -22,82 +22,106 @@
 </p>
 
 **DiffusionART** is **Diffusion Reinforcement via Aggregation-First Reward Tilting
-with Adaptive Restoration**. Aggregate reward guidance first, then update the
-model: DiffusionART learns from black-box rewards through two disjoint MSE
-updates per rollout. It needs no critic, reverse-transition likelihood or
-reward-model backpropagation, and supports small-group pairwise feedback.
+with Adaptive Restoration**. It combines the advantages of forward-process and
+reverse-process reinforcement learning while avoiding their limitations.
+DiffusionART is **efficient, stable and simple**, requires minimal hyperparameter
+tuning and no differentiable reward model, and naturally supports pairwise
+feedback and small rollout groups for scalable post-training.
 
-This repository provides one configurable framework for DiffusionART and six
-baselines across **text-to-image, text-to-video and image-to-video** generation.
+This repository provides a comprehensive framework for fine-tuning visual
+generation models, supporting widely used open-source **base models, reward
+models and state-of-the-art algorithms** across text-to-image, text-to-video
+and image-to-video generation.
 
-<table>
-  <tr>
-    <td width="50%" align="center" valign="top">
-      <img src="assets/readme/t2v-gpu-hours.png" width="460" alt="Text-to-video: raw VQ/MQ reward versus elapsed GPU hours, with VQ:MQ = 1:1 for all methods">
-    </td>
-    <td width="50%" align="center" valign="top">
-      <img src="assets/readme/i2v-gpu-hours.png" width="460" alt="Image-to-video: raw VQ/MQ reward versus elapsed GPU hours, with VQ:MQ = 1:1 for all methods">
-    </td>
-  </tr>
-</table>
+<p align="center">
+  <img src="assets/readme/t2v-gpu-hours.png" width="460" alt="Text-to-video training reward versus GPU hours; all methods use VQ:MQ = 1:1">
+  <img src="assets/readme/i2v-gpu-hours.png" width="460" alt="Image-to-video training reward versus GPU hours; all methods use VQ:MQ = 1:1">
+</p>
 
-Both comparisons use **VQ:MQ = 1:1**. The vertical axis is the mean of raw VQ
-and MQ scores; elapsed GPU hours include evaluation and waiting time.
-[Curve sources](assets/readme/efficiency.json).
+*Fine-tuning [HunyuanVideo (13B)](https://huggingface.co/tencent/HunyuanVideo)
+(left) and [Wan2.1-I2V-14B-480P, CFG/step-distilled (14B)](https://huggingface.co/lightx2v/Wan2.1-I2V-14B-480P-StepDistill-CfgDistill-Lightx2v)
+(right) using [VideoReward](https://huggingface.co/KlingTeam/VideoReward), with
+**Visual Quality (VQ):Motion Quality (MQ) = 1:1**. Mean train reward is the mean
+of raw VQ and MQ scores; GPU hours include evaluation and waiting time.
+[Curve sources](assets/readme/efficiency.json).*
 
 ## Method
 
-**Motivation.** NFT-style forward-process training contains a hidden
-**self-consistency force** beyond reward guidance. Its incomplete cancellation
-can destabilize learning and slow reward improvement.
+### Motivations and Insights
 
-**Insight.** Off-policy **restoration** is the key stabilizer: even a small
-output-space restoration MSE can produce a large aggregated parameter gradient.
-DiffusionART removes the consistency force by aggregating endpoint guidance
-first, then obtains drift-adaptive restoration through a second MSE update.
+1. NFT-style forward-process training contains a hidden **forward-reverse
+   consistency force** in its objective, slowing and destabilizing training.
+2. Off-policy strategies stabilize post-training of continuous-space generative
+   models through a **strong restoration force**. Even a small output-space
+   restoration MSE can produce a large aggregated parameter gradient.
+
+### Aggregation-First Guidance and Adaptive Restoration
+
+We call the covariance-form reward-improving direction **guidance**, bringing
+a classifier-free guidance (CFG)-like idea into post-training: the model learns
+to internalize reward guidance, much like distilling CFG. For a reward-tilted
+endpoint distribution with tilt strength $\eta$,
+
+$$
+p_\eta(x_0\mid c)\propto p_{\mathrm{old}}(x_0\mid c)\exp(\eta R(x_0,c)),
+\qquad
+\left.\frac{\partial}{\partial\eta}\mathbb{E}_{p_\eta}[x_0]\right|_{\eta=0}
+=\operatorname{Cov}_{p_{\mathrm{old}}}(R,x_0).
+$$
+
+Here $c$ is a prompt, $x_0$ is a clean latent endpoint, and $R$ is its reward.
+DiffusionART inherits DiffusionNFT's reward-tilting principle while systematically
+removing the self-consistency force: it aggregates reward evidence **before**
+applying the normalized guidance to reverse-process rollout states, without
+relying on an ideal forward-process velocity field. The second update retains
+guidance while adaptively restoring velocity drift toward the rollout policy,
+without an EMA off-policy strategy.
 
 <table>
   <tr>
-    <th width="55%" nowrap>Aggregation-first guidance</th>
-    <th width="45%" nowrap>One rollout, two disjoint updates</th>
+    <th width="50%">Guidance geometry and state assignment</th>
+    <th width="50%">Paper pseudocode</th>
   </tr>
   <tr>
     <td align="center" valign="middle">
-      <img src="assets/readme/method-flow.png" width="500" alt="Paper algorithm diagram: endpoint reward covariance is normalized and shared across each prompt's ODE denoising states">
+      <img src="assets/readme/method-overview.png" width="460" alt="Two stacked paper diagrams: reward guidance geometry above, covariance guidance assigned to ODE rollout states below">
     </td>
     <td valign="middle">
-<pre># Scalar DiffusionART (schematic)
-cache = ode_rollout(prompts, K)
-rewards = score(cache.endpoints)
-g, active = covariance_guidance(
-    rewards, cache.endpoints)
-g, active = share_by_prompt(g, active, cache)
-if not any_global(active):
-    skip_rollout()
-else:
-    target = stopgrad(cache.v_old - g)
-    for batch in disjoint_split(cache, 2):
-        v = model(batch.states, batch.t)
-        w = batch.t * active[batch.rows]
-        w *= corrective_mask(v, batch, g)
-        loss = mean(w * mse(v, target[batch]))
-        optimizer_step(loss)</pre>
+      <img src="assets/readme/paper-algorithm.png" width="460" alt="Paper Algorithm 1: ODE sampling, covariance guidance, frozen targets, and two disjoint MSE updates">
+      <p>Implementation: <a href="src/visual_rl/algorithms/covariance.py">covariance guidance</a>, <a href="src/visual_rl/algorithms/art.py">ART loss</a>, and <a href="src/visual_rl/training/objectives.py">disjoint update objectives</a>.</p>
     </td>
   </tr>
 </table>
 
-Generate **K samples per prompt**, score their endpoints, and normalize the
-reward-endpoint covariance **after aggregation**. Both disjoint updates use
-the same frozen rollout predictions and targets. The second update retains
-guidance while restoring velocity drift toward the rollout policy, without EMA.
-Corrective masking limits excessive outward drift. The pseudocode uses the
-code's decreasing-noise velocity convention; zero-signal scalar rows keep their
-place in the original loss denominator but contribute no loss.
+### DiffusionART-Pairwise
 
-**Pairwise feedback** replaces reward magnitudes with winner/loser labels when
-forming the guidance. The video recipes support **K = 2, 4, 8** videos per prompt.
-See [algorithm details](docs/algorithm-provenance.md) for the exact objectives
-and pairwise handling.
+**DiffusionART-Pairwise** is a variant in which the reward model gives preference
+scores for two visual outputs: **1** for the winner, **0** for the loser, and
+**0.5** for a tie. It accommodates pairwise feedback by simply replacing scalar
+rewards with these labels when computing the shared guidance.
+See the [preference-label and pairwise-guidance implementation](src/visual_rl/algorithms/covariance.py#L113).
+
+<p align="center">
+  <img src="assets/readme/pairwise-gpu-hours.png" width="460" alt="Scalar K=8 and pairwise K=2,4,8: VQ reward versus GPU hours">
+  <img src="assets/readme/visual-improvements.png" width="460" alt="Selected paper examples: pre-trained versus DiffusionART images and four video frames">
+</p>
+
+*Left: pairwise T2V training with **K = 2, 4, 8** videos per prompt, alongside
+scalar K = 8. Right: selected image and video improvements from the paper;
+video strips show four frames. [Curve sources](assets/readme/efficiency.json)
+and [visual provenance](assets/readme/provenance.json).*
+
+### Why DiffusionART?
+
+- **ODE solver:** deterministic rollouts, with no reverse-transition likelihood.
+- **Rollout efficiency:** reuse rollout states and cached predictions, without
+  adding noise again or recomputing predictions on newly noised states.
+- **Sample efficiency:** smaller groups retain strong performance while using
+  fewer samples and GPU hours.
+- **Training efficiency:** remove forward-process RL's unstable self-consistency
+  force and address reverse-process RL's inefficient credit assignment.
+- **Simple and scalable:** two disjoint MSE updates, minimal tuning, and
+  compatibility with black-box rewards and pairwise feedback.
 
 ## News
 

@@ -18,15 +18,21 @@ from matplotlib.ticker import MaxNLocator
 
 ROOT = Path(__file__).resolve().parent
 METHODS = {
-    "DiffusionART": ("#E54763", "-"),
-    "Flow-GRPO-Fast": ("#2685A7", "--"),
-    "DiffusionNFT (EMA)": ("#7775B5", "-"),
-    "DanceGRPO": ("#278B67", "-."),
+    "DiffusionART": ("#E54763", "o", "DiffusionART (ours)"),
+    "Flow-GRPO-Fast": ("#2685A7", "s", "Flow-GRPO-Fast"),
+    "DiffusionNFT (EMA)": ("#7775B5", "D", "DiffusionNFT"),
+    "DanceGRPO": ("#278B67", "^", "DanceGRPO"),
+}
+PAIRWISE = {
+    "Scalar, K=8": ("#E54763", "o", "Scalar, K=8"),
+    "Pairwise, K=2": ("#278B67", "^", "Pairwise, K=2"),
+    "Pairwise, K=4": ("#7775B5", "D", "Pairwise, K=4"),
+    "Pairwise, K=8": ("#2685A7", "s", "Pairwise, K=8"),
 }
 
 
-def smooth(values):
-    decay = 2 ** (-1 / 8)
+def smooth(values, half_life=8):
+    decay = 2 ** (-1 / half_life)
     result = [values[0]]
     for value in values[1:]:
         result.append(decay * result[-1] + (1 - decay) * value)
@@ -49,11 +55,15 @@ def load(task):
         assert len({row["run"] for row in rows}) == 1
         hours = [float(row["elapsed_gpu_hours" if task == "t2v" else "gpu_hours"])
                  for row in rows]
-        rewards = [float(row["reward_raw"]) if task == "t2v" else
-                   (float(row["VQ"]) + float(row["MQ"])) / 2 for row in rows]
+        if task == "t2v":
+            rewards = [float(row["reward_raw"]) for row in rows]
+        elif task == "pairwise":
+            rewards = [float(row["VQ"]) for row in rows]
+        else:
+            rewards = [(float(row["VQ"]) + float(row["MQ"])) / 2 for row in rows]
         assert all(math.isfinite(value) for value in hours + rewards)
         assert all(left <= right for left, right in zip(hours, hours[1:]))
-        display = smooth(rewards)
+        display = smooth(rewards, 5 if task == "pairwise" else 8)
         if task == "t2v":
             assert all(math.isclose(value, float(row["reward_ema8"]), abs_tol=1e-10)
                        for value, row in zip(display, rows))
@@ -77,15 +87,19 @@ def render(task, title):
         "xtick.color": "#596570", "ytick.color": "#596570",
         "figure.facecolor": "white", "axes.facecolor": "white",
     })
-    fig, ax = plt.subplots(figsize=(5.0, 3.9))
-    fig.subplots_adjust(left=.15, right=.97, bottom=.27, top=.88)
-    for name, (color, style) in METHODS.items():
+    fig, ax = plt.subplots(figsize=(5.0, 4.0))
+    fig.subplots_adjust(left=.15, right=.97, bottom=.16, top=.88)
+    for name, (color, marker, label) in (PAIRWISE if task == "pairwise" else METHODS).items():
         if name in series:
-            ax.plot(*series[name], color=color, linestyle=style,
-                    linewidth=2.1, label=name, zorder=4 if name == "DiffusionART" else 3)
+            count = len(series[name][0])
+            marks = sorted({round(i * (count - 1) / 8) for i in range(9)})
+            ax.plot(*series[name], color=color, linestyle="-", solid_capstyle="round",
+                    linewidth=1.8, marker=marker, markevery=marks, markersize=4,
+                    markeredgecolor="white", markeredgewidth=.45, label=label,
+                    zorder=4 if name == "DiffusionART" else 3)
     ax.set_title(title, fontsize=14, pad=14)
-    ax.set_xlabel("Elapsed GPU hours", labelpad=7)
-    ax.set_ylabel("Mean raw reward", labelpad=7)
+    ax.set_xlabel("GPU hours", labelpad=7)
+    ax.set_ylabel("VQ train reward" if task == "pairwise" else "Mean train reward", labelpad=7)
     ax.set_xlim(0, max(hours[-1] for hours, _ in series.values()) * 1.03)
     ax.set_ylim(bottom=0)
     ax.xaxis.set_major_locator(MaxNLocator(nbins=4))
@@ -94,9 +108,8 @@ def render(task, title):
     ax.grid(color="#E9EDF1", linewidth=.7)
     ax.spines[["top", "right"]].set_visible(False)
     ax.tick_params(length=3.5, width=.8)
-    legend = fig.legend(*ax.get_legend_handles_labels(), loc="lower center",
-                        bbox_to_anchor=(.55, .015), ncol=2, fontsize=8.5,
-                        handlelength=2.0, columnspacing=1.25, frameon=False)
+    legend = ax.legend(loc="lower right", fontsize=9, handlelength=2.0,
+                       labelspacing=.45, borderaxespad=.8, frameon=False)
     for text in legend.get_texts():
         text.set_fontweight("bold")
     fig.savefig(ROOT / f"{task}-gpu-hours.png", dpi=240)
@@ -106,7 +119,7 @@ def render(task, title):
 
 if __name__ == "__main__":
     provenance = {
-        "training_weights": "VQ:MQ = 1:1; TA = 0",
+        "comparison_training_weights": "VQ:MQ = 1:1; TA = 0",
         "display_reward": "(raw VQ + raw MQ) / 2",
         "cost": "W&B _runtime * 32 / 3600; includes evaluation and waits",
         "smoothing": "Causal EMA half-life 8 optimizer updates for every curve",
@@ -118,5 +131,19 @@ if __name__ == "__main__":
         },
         "t2v": render("t2v", "Text-to-video"),
         "i2v": render("i2v", "Image-to-video"),
+        "pairwise": {
+            **render("pairwise", "Pairwise feedback"),
+            "training_weights": "VQ only; MQ = TA = 0",
+            "display_reward": "Raw VQ mean",
+            "smoothing": "Unchanged causal EMA half-life 5 optimizer updates for every curve",
+            "source_export": "wandb_history_raw.json",
+            "source_export_sha256": "55a28a09964bd3ee91f66f3b1ac07c711d4b2fc4897fb815f43e0cc1cd486357",
+        },
+        "presentation": {
+            "line": "Solid, rounded stroke; nine markers at observed indices per curve",
+            "legend": "Inside the axes, lower right; no frame",
+            "comparison_labels": ["DiffusionART (ours)", "Flow-GRPO-Fast", "DiffusionNFT", "DanceGRPO"],
+            "comparison_axes": ["GPU hours", "Mean train reward"],
+        },
     }
     (ROOT / "efficiency.json").write_text(json.dumps(provenance, indent=2) + "\n")
