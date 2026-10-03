@@ -99,7 +99,7 @@ without an EMA off-policy strategy.
 scores for two visual outputs: **1** for the winner, **0** for the loser, and
 **0.5** for a tie. It accommodates pairwise feedback by simply replacing scalar
 rewards with these labels when computing the shared guidance.
-See the [preference-label and pairwise-guidance implementation](src/visual_rl/algorithms/covariance.py#L113).
+See the [preference-label and pairwise-guidance implementation](src/visual_rl/algorithms/covariance.py).
 
 <p align="center">
   <img src="assets/readme/pairwise-gpu-hours.png" width="460" alt="Scalar K=8 and pairwise K=2,4,8: VQ reward versus GPU hours">
