@@ -1,0 +1,24 @@
+HPSv2 1.2.0 packaging repair, build 2
+
+Upstream: https://github.com/tgxs002/HPSv2
+Authors: Zhiheng Wang et al. (upstream package metadata).
+Upstream license: Apache License 2.0, retained byte-for-byte inside the wheel
+at hpsv2-1.2.0.dist-info/LICENSE. A readable copy accompanies this artifact.
+Upstream Python files retain all original copyright and attribution notices,
+including OpenAI CLIP attribution in tokenizer.py and model.py.
+
+This local redistribution is not an official upstream release or endorsement.
+It adds the missing official BPE vocabulary, inserts wheel build tag 2, and
+regenerates RECORD. It removes exactly one unused import from factory.py:
+    from turtle import forward
+No other Python source or dependency metadata is changed. The unused import
+removal avoids a needless Tk/turtle prerequisite on headless hosts; it does not
+replace the tokenizer, model architecture, preprocessing, or scoring arithmetic.
+
+The Python-source exception is verified by repack.py against the SHA256-pinned
+official PyPI wheel, with an AST check that the imported name is never used.
+The BPE comes from the pinned official Git revision identified in provenance.json.
+This NOTICE accompanies the repaired distribution and must be retained when
+redistributing this wheel together with its build/provenance material.
+
+No HPS model checkpoint is bundled, downloaded, or relicensed by this repair.

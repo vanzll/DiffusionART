@@ -1,0 +1,3 @@
+-r video-common.txt
+diffusers==0.32.0
+huggingface-hub==0.26.1

@@ -1,0 +1,43 @@
+{
+  "artifact": "third_party/hpsv2/hpsv2-1.2.0-2-py3-none-any.whl",
+  "wheel_sha256": "402a5f6ad8d18868dc3d9545718ef01e12cc8cfc4b106fadd8e89d7173f784ad",
+  "host": "macOS 15.7.7 arm64",
+  "python": "3.10.20",
+  "environment": "Existing isolated test venv, reusing the available CPU Torch dependencies; build 1 replaced by build 2 through normal pip installation.",
+  "commands_use_active_test_environment_python": true,
+  "install": {
+    "command": "python -m pip install --no-deps --force-reinstall --disable-pip-version-check third_party/hpsv2/hpsv2-1.2.0-2-py3-none-any.whl",
+    "exit_code": 0,
+    "result": "Successfully installed hpsv2-1.2.0",
+    "post_install_site_packages_edits": false
+  },
+  "focused_tests": {
+    "command": "HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 python -m pytest -q tests/test_hpsv2.py",
+    "exit_code": 0,
+    "passed": 97,
+    "skipped": 0,
+    "elapsed_seconds": 8.70,
+    "real_vendor_tiny_model_test_included": true,
+    "full_HPS_checkpoint_used": false
+  },
+  "headless_import_guard": {
+    "command": "HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 python -c \"import builtins,sys; original=builtins.__import__; blocked=('turtle','tkinter','_tkinter'); denied=[]\ndef guarded(name,*args,**kwargs):\n if name.split('.')[0] in blocked:\n  denied.append(name); raise ImportError('Tk/turtle deliberately blocked: '+name)\n return original(name,*args,**kwargs)\nbuiltins.__import__=guarded\nfrom hpsv2.src.open_clip import create_model_and_transforms,get_tokenizer\nassert not denied, denied\nassert not any(x in sys.modules for x in blocked)\nprint('vendor import succeeded with Tk/turtle blocked')\"",
+    "exit_code": 0,
+    "result": "vendor import succeeded with Tk/turtle blocked",
+    "blocked_import_attempts": 0,
+    "Tk_or_turtle_loaded": false,
+    "Linux_host_test": false
+  },
+  "artifact_identity": {
+    "byte_identical_deterministic_rebuild": true,
+    "strict_member_diff_verified": true,
+    "factory_unused_name_AST_verified": true,
+    "other_36_Python_files_byte_identical": true,
+    "METADATA_and_LICENSE_byte_identical": true,
+    "all_RECORD_hashes_and_sizes_valid": true
+  },
+  "downloads_during_install_or_tests": false,
+  "GPU_tasks": false,
+  "CUDA_numerical_parity_verified": false,
+  "full_1_97_GB_checkpoint_acceptance_verified": false
+}

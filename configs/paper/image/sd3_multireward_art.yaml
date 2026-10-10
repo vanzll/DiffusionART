@@ -1,0 +1,116 @@
+# Archived joint-four recipe, with explicitly approved public scalar semantics.
+extends: ../../examples/sd3_multireward.yaml
+name: paper-sd3_multireward_art-candidate
+seed: 42
+algorithm:
+  name: diffusionart
+  options:
+    updates_per_rollout: 2
+    restore_zero_signal: false
+    multi_reward_advantage:
+      weights: {geneval: 0.25, pickscore: 0.25, clipscore: 0.25, hpsv2: 0.25}
+      score_space: fixed_normalized
+      eps: 0.0001
+      renormalize_combined: false
+    covariance:
+      reduction: unbiased
+      direction_mode: historical
+      scale_mode: unit_normalized_covariance
+      guidance_gain: 1.0
+      zero_signal_mode: exact
+    loss:
+      loss_space: velocity_linear_sigma
+      direction_normalization: rms
+      mask_space: velocity
+      velocity_mask_metric: scheduler_reference_metric
+      corrective_mask_enabled: true
+      q2_reference_sde_noise_level: 0.8
+      q2_reference_kl_threshold: 0.00001
+model:
+  name: sd3
+  checkpoint: ${SD3_MODEL}
+  revision: b940f670f0eda2d07fbb75229e779da1ad11eb80
+  options:
+    gradient_checkpointing: false
+data:
+  manifest: ${GENEVAL_TRAIN_MANIFEST}
+  sha256: ${GENEVAL_TRAIN_SHA256}
+  shuffle: true
+sampling:
+  steps: 10
+  prompts_per_rollout: 48
+  samples_per_prompt: 24
+  microbatch: 9
+  guidance_scale: 1.0
+  height: 512
+  width: 512
+  frames: 1
+  options:
+    shift: 3.0
+    train_timesteps: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+training:
+  max_updates: 1000
+  learning_rate: 0.0003
+  microbatch: 9
+  precision: fp16
+  allow_tf32: true
+  grad_clip: 1.0
+  optimizer: adamw
+  weight_decay: 0.0001
+  betas: [0.9, 0.999]
+  epsilon: 1.0e-08
+evaluation:
+  every_updates: 0
+  at_updates: [60, 120, 180, 240, 300, 360, 420, 480, 540, 600, 660, 720, 780, 840, 900, 960, 1000]
+  manifest: ${GENEVAL_EVAL_MANIFEST}
+  manifest_sha256: ${GENEVAL_EVAL_SHA256}
+  sampling_steps: 40
+  height: 512
+  width: 512
+  seed: 42
+runtime:
+  log: wandb
+  output_dir: ${PAPER_OUTPUT_ROOT}/sd3_multireward_art
+  device: cuda
+  distributed: ddp
+  checkpoint_every: 200
+  checkpoint_at_updates: [1000]
+provenance:
+  kind: training_candidate_not_fullhistorical_reproduction
+  source_run: 3t35bwps
+  source_url: https://wandb.ai/vanzl3386-chinese-university-of-hong-kong-shenzhen/flow-grpo-algo/runs/3t35bwps
+  runtime_commit: c81b12bab6a7594f23a0398cb49b30442a5b0f27
+  runtime_source_status: inspected_git_source
+  release_base_commit: 6570fd2
+  research_reference_commit: c81b12bab6a7594f23a0398cb49b30442a5b0f27
+  evidence: docs/paper-multireward-evidence.json
+  archived_model: stabilityai/stable-diffusion-3.5-medium
+  archived_model_revision: main
+  source_world_size: 8
+  source_world_size_basis: archived_accelerate_launcher_num_processes
+  source_train_batch_size: 9
+  source_num_batches_per_epoch: 16
+  source_gradient_accumulation_steps: 8
+  source_updates_per_rollout: 2
+  candidate_updates_per_rollout: 2
+  source_timestep_fraction: 1
+  source_sde_type: ode
+  source_covariance_guidance_reward_source: combined_multi_reward_advantage
+  source_resume_global_step: 0
+  main_paper_plotted_steps: 500
+  source_max_wandb_step: 1000
+  budget_basis: 1000_successful_optimizer_updates_not_500_plot_truncation
+  cadence_basis: archived_explicit_update_steps_with_runner_initial_eval_at_zero
+  dataset_contract: GenEval_full_prompt_train_with_structured_metadata
+  reporting_scalar: GenEval+PickScore_logit/26+CLIPScore_logit/30+HPSv2.1_cosine
+  guidance_scalar: equal_weight_mean_of_independently_prompt_group_normalized_fixed_scores
+  approved_public_scalar_semantics:
+    restore_zero_signal: false
+    denominator: original_full_update_window
+    zero_signal_mode: exact
+  semantic_gaps:
+    - Prompt-major groups and release RNG ordering are not certified identical to the historical distributed sampler.
+    - Public model and reward revision pins are not recovered historical artifact hashes; archived SD3 revision was main.
+    - Successful optimizer updates do not certify historical W&B indexing, skipped FP16 steps, or overshoot parity.
+    - Public scalar zero-signal protection and restore_zero_signal=false with the original full-window denominator are intentional approved semantics, not the later active-item-denominator no-mask repair.
+    - GenEval worker, manifest bundle and full structured training/evaluation data are user-bound as documented in docs/geneval.md; common assets prepare only the five model snapshots. No dataset or scorer was downloaded or GPU-validated here.

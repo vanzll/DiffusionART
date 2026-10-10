@@ -1,0 +1,18 @@
+# Native scorer integration example; not a historical paper recipe.
+extends: sd3_pickscore.yaml
+name: sd35-aesthetic-integration
+reward:
+  name: aesthetic
+  checkpoint: openai/clip-vit-large-patch14
+  revision: 32bd64288804d66eefd0ccbe215aa642df71cc41
+  normalization: raw
+  weights: {aesthetic: 1.0}
+  options:
+    local_files_only: true
+    processor: openai/clip-vit-large-patch14
+    processor_revision: 32bd64288804d66eefd0ccbe215aa642df71cc41
+    microbatch: 1
+    head_path: ${AESTHETIC_HEAD_PATH}
+    head_sha256: 21dd590f3ccdc646f0d53120778b296013b096a035a2718c9cb0d511bff0f1e0
+runtime:
+  output_dir: outputs/sd35-aesthetic-integration

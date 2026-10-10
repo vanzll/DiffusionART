@@ -1,0 +1,27 @@
+extends: hunyuan_art_721.yaml
+name: paper-hunyuan-refl-11
+algorithm:
+  name: refl
+  options:
+    reward_loss_scale: 1.0
+reward:
+  weights: {VQ: 0.5, MQ: 0.5, TA: 0.0}
+sampling:
+  samples_per_prompt: 1
+  options:
+    train_timestep_count: 1
+    train_timestep_pool: [15]
+runtime:
+  output_dir: ${PAPER_VIDEO_OUTPUT_ROOT}/hunyuan-refl-11
+  checkpoint_every: 100
+provenance:
+  inventory_group: refl-t2v
+  run_id: a0ba6dc83810b89403515067
+  runtime_sha: 14379aefd6c205e33d18c0504a69a55e8e29413d
+  runtime_sha_status: inspected_local_git_object
+  reference_sha: 14379aefd6c205e33d18c0504a69a55e8e29413d
+  reference_location: runners/t2v_refl32_v1/vqmq11-final-gpu.json
+  runtime_location: flow_grpo_alg/video/backends/hunyuan_public_refl.py
+  historical_evaluation: video8_shift7_sparse_steps_retained32
+  budget_basis: 400_global_optimizer_updates_400_rollouts
+  artifact_policy: native_full_resume_checkpoint_every100_updates_all_scored_media

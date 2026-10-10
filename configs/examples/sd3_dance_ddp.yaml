@@ -1,0 +1,5 @@
+extends: sd3_dance_pickscore.yaml
+name: sd35-dance-ddp-integration
+runtime:
+  distributed: ddp
+  output_dir: outputs/sd35-dance-ddp-integration

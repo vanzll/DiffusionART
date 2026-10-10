@@ -1,0 +1,33 @@
+# Two-scorer integration example, NOT the paper's joint-four-reward recipe.
+extends: sd3_pickscore.yaml
+name: sd35-composite-integration
+reward:
+  name: composite
+  normalization: fixed
+  weights: {pickscore: 1.0, aesthetic: 0.1}
+  options:
+    microbatch: 2
+    fixed_statistics:
+      pickscore: {mean: 0.0, std: 26.0, source: research-pickscore-logit-divisor-26}
+      aesthetic: {mean: 0.0, std: 1.0, source: native-aesthetic-identity-scale}
+    components:
+      pickscore:
+        checkpoint: yuvalkirstain/PickScore_v1
+        revision: a4e4367c6dfa7288a00c550414478f865b875800
+        options:
+          local_files_only: true
+          processor: laion/CLIP-ViT-H-14-laion2B-s32B-b79K
+          processor_revision: 1c2b8495b28150b8a4922ee1c8edee224c284c0c
+          microbatch: 1
+      aesthetic:
+        checkpoint: openai/clip-vit-large-patch14
+        revision: 32bd64288804d66eefd0ccbe215aa642df71cc41
+        options:
+          local_files_only: true
+          processor: openai/clip-vit-large-patch14
+          processor_revision: 32bd64288804d66eefd0ccbe215aa642df71cc41
+          head_path: ${AESTHETIC_HEAD_PATH}
+          head_sha256: 21dd590f3ccdc646f0d53120778b296013b096a035a2718c9cb0d511bff0f1e0
+          microbatch: 1
+runtime:
+  output_dir: outputs/sd35-composite-integration

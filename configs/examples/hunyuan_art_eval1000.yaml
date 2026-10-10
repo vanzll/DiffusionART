@@ -1,0 +1,9 @@
+# Optional larger evaluation; the paper reproduction keeps the original eval100.
+extends: [../paper/video/hunyuan_art_721.yaml, ../paper/hunyuan-eval1000-assets.yaml]
+name: hunyuan-art-721-eval1000
+runtime:
+  output_dir: ${PAPER_VIDEO_OUTPUT_ROOT}/hunyuan-art-721-eval1000
+provenance:
+  kind: evaluation_extension
+  run_id: null
+  evaluation_protocol: corrected_common_video8_rm4_shift7_every10_eval1000

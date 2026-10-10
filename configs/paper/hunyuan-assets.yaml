@@ -1,0 +1,156 @@
+extends: video-common-assets.yaml
+assets:
+  defaults:
+    HUNYUAN_REVISION: e8c2aaa66fe3742a32c11a6766aecbf07c56e773
+  # Lists replace inherited lists. Keep the shared reward/backbone pins here.
+  snapshots:
+    - env: VIDEO_REWARD_MODEL
+      repo_id: KwaiVGI/VideoReward
+      revision: 4f26600130683e6f1de9f5d463887f28e8ef995c
+    - env: VIDEO_REWARD_BACKBONE
+      repo_id: Qwen/Qwen2-VL-2B-Instruct
+      revision: 895c3a49bc3fa70a340399125c650a463535e71c
+    - env: HUNYUAN_MODEL
+      repo_id: hunyuanvideo-community/HunyuanVideo
+      revision: e8c2aaa66fe3742a32c11a6766aecbf07c56e773
+  prompts:
+    - env: HUNYUAN_TRAIN_RAW_MANIFEST
+      sha_env: HUNYUAN_TRAIN_RAW_SHA256
+      for_env: HUNYUAN_TRAIN_MANIFEST
+      url: https://raw.githubusercontent.com/XueZeyue/DanceGRPO/15cc71d53cc2e6e18a68ee607d5fb6ba9a99e344/assets/video_prompts.txt
+      source_sha256: c96ceb6c93c16809f6fef53d6d488c34c78823e5edd20f6d907d90c9e5653db1
+      sha256: b54fe7c10e7530d24e5f928f3f40f9d6c160191301631235463945575b499194
+      prefix: train
+      format: text
+    - env: HUNYUAN_EVAL_RAW_MANIFEST
+      sha_env: HUNYUAN_EVAL_RAW_SHA256
+      for_env: HUNYUAN_EVAL_MANIFEST
+      url: https://huggingface.co/datasets/WenhaoWang/VidProM/resolve/0c0900e6a037b058b1903bc1de9bcb6037d9fc24/example/VidProM_unique_example.csv
+      source_sha256: 7253eec343d7239f0cc177ce37c26580d95d32190c14be3e3ad114079005095b
+      sha256: af1cecf6f794db3bbcd85d90cbca0e10cb196bc8f043a2a3724c00635383e70f
+      prefix: eval
+      format: vidprom_ids
+      # Frozen t2v-vidprom-val100-v1 UUID order, not a new selection/official test set.
+      # Source selection: research 3ca2a36f, assets/evaluation/t2v-vidprom-val100-v1.
+      # VidProM data license is CC-BY-NC-4.0, separate from the code license.
+      ids:
+        - 03f2a25a-2e2c-539f-8004-93caa403ada8
+        - c021e2b2-0784-5534-bb40-33c2728870ad
+        - 5411379d-a52c-5028-a297-1470b3bb94bc
+        - 6562acab-e8cd-5221-9993-beddea344111
+        - 5298fc9b-b840-5b2c-a8b6-0bee6e359772
+        - 45a57410-74d8-56c2-bb2b-4a440ef9011d
+        - 64099424-560a-51f0-b81b-f9c93dfb820b
+        - 8de48621-e039-5705-8a57-339d51ce6a6f
+        - 6e3ad4da-02f6-5975-bb3a-63e7e3ee98c8
+        - bc1fa4f6-a54c-5cdb-93b1-cef1e7b23210
+        - 146321c1-7e34-5597-a4eb-58aa0e4734e1
+        - 6fa2581b-2147-5774-b1fb-5e1f068ba865
+        - 75e8b4a0-b444-574e-ae9f-e832ea0006db
+        - 5d8f1c42-01ba-53bc-a3a8-c346d5f6ee01
+        - 17ae4fe3-5084-57c8-8c99-6b6c788d93c1
+        - cba5d3ff-1402-53a4-b840-4cfed3027606
+        - 05af24e7-0086-5f4d-bc63-2163dc9911c3
+        - c7866fc2-f174-50ee-b418-be952a003447
+        - fe6636b4-0be7-50b9-b331-d4bf40645be6
+        - 96cdff39-88ff-5dc9-8e1c-41557b09241e
+        - 2e6a80f5-5194-589b-a748-0740eb2dd573
+        - 7d9a895a-4a08-5cc1-9edf-bedbd4c8df0e
+        - 8c9e7b8c-edfc-5725-a698-78bb2048a724
+        - 792be5e0-a2c9-5fa4-9a5a-f838df3fd9d8
+        - afe504c8-7f6e-5e74-9fce-7867c85c2235
+        - 9097531a-a7b3-598a-97a3-0e66e87f1918
+        - 828526e5-d448-5c45-9460-579011789257
+        - ce56f747-64fb-5d89-92ea-3d18532e94e7
+        - c2d273c1-f518-5cb6-b90b-d3956c344751
+        - a0eb47b5-4037-5f9f-b538-90c3b924c93b
+        - 4bd7a957-87a9-5d1a-885a-1299c0d3f4fa
+        - e5729e04-3a42-54c5-a538-726098e55077
+        - 31f35793-2c06-5d31-ad95-0b1c56bd85fa
+        - 19027a4d-2710-5cd3-a918-a2486a3c01f1
+        - dedfeefb-9a59-54ff-9a67-0675c1d3bd4b
+        - 962c5a73-e59a-5e6b-8db7-c448e3a50c62
+        - cf64c147-f4e4-5332-9af5-f822613bdcbe
+        - db242491-d01b-52b2-9877-a8b1008f0947
+        - 50cdf703-4015-5a41-a946-6eded623603e
+        - bad19b76-9747-5fe2-9b74-0153c7b1b0a1
+        - dc170fe7-9785-5873-9386-c2ca5293f79c
+        - 6c0d41f3-f5e6-5b6d-90df-547d26530ad5
+        - ca9f8c6b-16d1-5c9f-8df3-dfb2275fa48f
+        - dea77daf-08d6-5f73-b4b7-f5c1f90bdc3b
+        - 9c4f65af-5fb4-5278-9783-9b16ab796845
+        - 2bae2991-908e-5c9c-97ad-5819a5def68c
+        - 91524a17-523d-5655-beb6-d4f99ff53ba1
+        - 65a425c4-c0c8-5d0f-aa77-c78dff458804
+        - 521f7e92-17f1-5119-b35c-8411c2de906d
+        - 6ce8e5e8-6b38-5317-bed1-9f2f61f66bc2
+        - ad29ef04-e310-5049-ad87-e775465278c3
+        - 25e1f576-1647-58a8-adf6-5b1677d45738
+        - c3b580fd-f0a0-5dcb-b771-806f53b8fe4e
+        - 83e147ce-59f2-561b-8485-fc7565b0dfeb
+        - 39613cbb-0436-5e7b-9c94-15f43274851c
+        - 664dff57-1ff8-5a40-b59d-2f8673b85fa4
+        - 2b7be961-21fa-5a1d-ac1a-d83e6d27d2b9
+        - 650c031a-64ce-55c3-8e30-7fe7b3b771c7
+        - 9e33caf8-542b-51e8-be4d-419599df1dbf
+        - ca0e03c6-fde9-57b9-b218-89fc777a68a9
+        - 83d307d2-2e54-556c-935a-1a65c67afe1b
+        - b7198848-1e0b-50c2-a322-84ede13cce45
+        - a4270b40-dbbd-5abd-9052-a383e299a473
+        - 69f81177-87d1-5cc6-b19c-a649181ef9e1
+        - 8714c79c-32d0-5a0a-aa01-6a4bb8db1f79
+        - 2f361ce2-7ff8-5543-ba58-0b71eb10eb32
+        - 1127acf5-2286-5782-8ee4-72c509e24fbc
+        - df52fa16-9e0c-55d8-bc1d-23cf58ff071c
+        - 496966d3-c134-5d2c-a6aa-a39057061361
+        - 91a99923-024b-53aa-8f3c-8f7a4d8bf216
+        - d45797d3-18ac-5396-91ab-ad98fa0e01ae
+        - 53da5692-1de3-5da5-a5d1-671c49a29efd
+        - c4ac6b64-a4c6-5396-b45f-7e00e55cdcf3
+        - e0639739-a571-5aaa-8180-56d1ec8af005
+        - 0ec07ada-4b99-5140-b4f5-85dc7dc96dcd
+        - 4cd5d52f-0783-5fa7-b050-c2e433b86362
+        - abfbc284-c5f6-51a2-9207-3a22c5134392
+        - 272c97b3-b088-5812-9ec6-383508380c2d
+        - cce03d66-a06c-5bc1-bde7-a6b0c3b75b5d
+        - a4eb72ee-8ebe-573d-9a8b-a43dcd150002
+        - 43355bf7-2e8d-50f6-960a-21c12facec07
+        - 736c2556-a1f7-5b2d-bdc4-408bc1cb4adc
+        - 1c5d2f42-b9a1-5d5f-b278-5580d4c8225b
+        - b8bd3686-0f96-52f8-9c3a-9ae63198f94a
+        - 13757ba6-95a2-5e54-9716-48c4eefd88b1
+        - 2c9b77f6-9558-5353-93b0-b009a9089f0e
+        - 01625a4a-9187-5d6f-bb24-1d8a86f921df
+        - d7f04a1e-3eb8-5f58-beb4-608aa6f76e1b
+        - fbc4b22e-a819-52b5-bb99-91b3e33183ce
+        - 0e7fbaed-36c5-5307-b343-2718f6768352
+        - 51acf2fa-e55a-5b12-99bd-a8abfa06c48f
+        - 52bfce23-2465-58e4-a374-5c51c8ba4105
+        - b6a2ec22-904b-5653-8707-70624bf8d515
+        - b4795c10-e7cb-5599-b0ff-6230e97055da
+        - 7e7d82c2-c9b6-5a7c-8011-237b7ecb3608
+        - 0177867e-1f29-5bba-b39e-a8ded69aa8ca
+        - b27d3860-9b30-58d8-97dc-4b694794651a
+        - 3dcadb84-c88c-5654-acce-0c729105a304
+        - 7285a083-b968-5d37-8c86-d8c8fb4ccd9d
+        - 25aa4269-4504-517b-b9da-b6958c3ca686
+  transformations:
+    - action: hunyuan_text_view
+      env: HUNYUAN_TEXT_MODEL
+      model_env: HUNYUAN_MODEL
+    - action: hunyuan_conditioning
+      env: HUNYUAN_TRAIN_MANIFEST
+      sha_env: HUNYUAN_TRAIN_SHA256
+      source_env: HUNYUAN_TRAIN_RAW_MANIFEST
+      source_sha_env: HUNYUAN_TRAIN_RAW_SHA256
+      model_env: HUNYUAN_TEXT_MODEL
+      native_env: DANCEGRPO_ROOT
+      device: cuda
+    - action: hunyuan_conditioning
+      env: HUNYUAN_EVAL_MANIFEST
+      sha_env: HUNYUAN_EVAL_SHA256
+      source_env: HUNYUAN_EVAL_RAW_MANIFEST
+      source_sha_env: HUNYUAN_EVAL_RAW_SHA256
+      model_env: HUNYUAN_TEXT_MODEL
+      native_env: DANCEGRPO_ROOT
+      device: cuda

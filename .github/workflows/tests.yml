@@ -1,0 +1,45 @@
+name: Tests
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  cpu-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CUDA_VISIBLE_DEVICES: ""
+      WANDB_MODE: offline
+      HF_HUB_OFFLINE: "1"
+      TOKENIZERS_PARALLELISM: "false"
+      OMP_NUM_THREADS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install Locked Test Environment
+        run: uv sync --locked --python 3.10 --extra dev --extra diffusers --extra image-rewards --extra ocr --extra wandb
+      - name: Lint and Test
+        run: |
+          uv run --locked --no-sync ruff check src tests
+          mkdir -p test-results
+          uv run --locked --no-sync pytest -q --junitxml=test-results/junit.xml --basetemp=test-results/work
+      - name: Preserve Test Diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpu-test-diagnostics
+          retention-days: 7
+          if-no-files-found: ignore
+          path: |
+            test-results/junit.xml
+            test-results/work/**/rank-*-phase.json
+            test-results/work/**/rank-*-passed.json
+      - name: Build Source and Wheel
+        run: uv build

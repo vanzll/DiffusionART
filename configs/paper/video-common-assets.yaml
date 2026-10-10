@@ -1,0 +1,12 @@
+# Native checkout/setup is separate: bind DANCEGRPO_ROOT from the installer.
+assets:
+  defaults:
+    PAPER_VIDEO_OUTPUT_ROOT: outputs/paper-video
+    VIDEO_REWARD_REVISION: 4f26600130683e6f1de9f5d463887f28e8ef995c
+  snapshots:
+    - env: VIDEO_REWARD_MODEL
+      repo_id: KwaiVGI/VideoReward
+      revision: 4f26600130683e6f1de9f5d463887f28e8ef995c
+    - env: VIDEO_REWARD_BACKBONE
+      repo_id: Qwen/Qwen2-VL-2B-Instruct
+      revision: 895c3a49bc3fa70a340399125c650a463535e71c

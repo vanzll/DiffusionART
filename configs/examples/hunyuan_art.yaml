@@ -1,0 +1,85 @@
+# Short native integration recipe, NOT an accepted paper reproduction profile.
+# See docs/hunyuan-runner.md for the required local assets and conditioning.
+name: hunyuan-art-integration
+task: t2v
+seed: 42
+algorithm:
+  name: diffusionart
+  options:
+    restore_zero_signal: false
+    covariance:
+      reduction: unbiased
+      direction_mode: historical
+      scale_mode: unit_normalized_covariance
+      guidance_gain: 1.0
+      zero_signal_mode: exact
+    loss:
+      loss_space: velocity_linear_sigma
+      direction_normalization: rms
+      mask_space: velocity
+      velocity_mask_metric: scheduler_reference_metric
+      corrective_mask_enabled: true
+      q2_reference_sde_noise_level: 0.8
+      q2_reference_kl_threshold: 0.00001
+model:
+  name: hunyuan_public
+  checkpoint: ${HUNYUAN_MODEL}
+  revision: ${HUNYUAN_REVISION}
+  options:
+    native_root: ${DANCEGRPO_ROOT}
+    finetune: {mode: full}
+    gradient_checkpointing: true
+    allow_tf32: false
+    ffmpeg: ffmpeg
+    ffprobe: ffprobe
+reward:
+  name: video_reward
+  checkpoint: ${VIDEO_REWARD_MODEL}
+  revision: ${VIDEO_REWARD_REVISION}
+  normalization: fixed
+  weights: {VQ: 0.2, MQ: 0.1, TA: 0.7}
+  options:
+    backbone: ${VIDEO_REWARD_BACKBONE}
+data:
+  manifest: ${HUNYUAN_TRAIN_MANIFEST}
+  sha256: ${HUNYUAN_TRAIN_SHA256}
+  shuffle: true
+sampling:
+  steps: 16
+  prompts_per_rollout: 32
+  samples_per_prompt: 8
+  microbatch: 1
+  guidance_scale: 1.0
+  height: 480
+  width: 480
+  frames: 53
+  fps: 8.0
+  options:
+    shift: 5.0
+    train_timestep_count: 9
+    train_timestep_pool: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+training:
+  max_updates: 4
+  learning_rate: 0.00001
+  microbatch: 1
+  precision: bf16
+  grad_clip: 1.0
+evaluation:
+  every_updates: 2
+  manifest: ${HUNYUAN_EVAL_MANIFEST}
+  manifest_sha256: ${HUNYUAN_EVAL_SHA256}
+  sampling_steps: 30
+  seed: 312
+  height: 640
+  width: 640
+  retain_all: true
+  fps: 8.0
+  reward_fps: 4.0
+runtime:
+  output_dir: outputs/hunyuan-art-integration
+  device: cuda
+  distributed: fsdp
+  checkpoint_every: 2
+  log: jsonl
+provenance:
+  kind: native_integration_example_not_paper_result

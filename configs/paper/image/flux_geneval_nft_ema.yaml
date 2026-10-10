@@ -1,0 +1,92 @@
+# Native full-budget candidate mapped to the verified asge8y6v runtime.
+extends: ../../examples/flux_nft_pickscore.yaml
+name: paper-flux_geneval_nft_ema-candidate
+seed: 42
+algorithm:
+  name: diffusionnft
+  options:
+    updates_per_rollout: 1
+    loss: {nft_beta: 1.0, adv_clip_max: 5.0, adv_mode: all, eps: 1.0e-05}
+    old_policy: {rate: 0.001, maximum: 0.5, delay: 0}
+    evaluation_ema: {enabled: true, decay: 0.9}
+model:
+  name: flux
+  checkpoint: ${FLUX_MODEL}
+  revision: 3de623fc3c33e44ffbe2bad470d0f45bccf2eb21
+reward:
+  name: geneval
+  checkpoint: ${GENEVAL_MANIFEST}
+  revision: ${GENEVAL_MANIFEST_SHA256}
+  normalization: raw
+  weights: {geneval: 1.0}
+  options:
+    worker_python: ${GENEVAL_PYTHON}
+    microbatch: 1
+    detector_microbatch: 1
+    color_workers: 0
+    startup_timeout: 300
+    request_timeout: 300
+data:
+  manifest: ${GENEVAL_TRAIN_MANIFEST}
+  sha256: ${GENEVAL_TRAIN_SHA256}
+  shuffle: true
+sampling:
+  steps: 6
+  prompts_per_rollout: 48
+  samples_per_prompt: 24
+  microbatch: 6
+  guidance_scale: 3.5
+  height: 512
+  width: 512
+  options: {solver: euler, train_timestep_count: 5, timestep_selection: random_per_row}
+training:
+  max_updates: 1000
+  learning_rate: 0.0003
+  microbatch: 6
+  precision: bf16
+  allow_tf32: true
+  grad_clip: 1.0
+  optimizer: adamw
+  weight_decay: 0.0001
+  betas: [0.9, 0.999]
+  epsilon: 1.0e-08
+evaluation:
+  every_updates: 0
+  at_updates: [10, 50, 100, 250, 500, 800, 1000]
+  manifest: ${GENEVAL_EVAL_MANIFEST}
+  manifest_sha256: ${GENEVAL_EVAL_SHA256}
+  sampling_steps: 28
+  height: 512
+  width: 512
+  seed: 42
+runtime:
+  log: wandb
+  output_dir: ${PAPER_OUTPUT_ROOT}/flux_geneval_nft_ema
+  device: cuda
+  distributed: ddp
+  checkpoint_every: 200
+  checkpoint_at_updates: [100, 250, 500, 800, 1000]
+provenance:
+  kind: training_candidate_not_fullhistorical_reproduction
+  source_run: asge8y6v
+  source_url: https://wandb.ai/vanzl3386-chinese-university-of-hong-kong-shenzhen/flow-grpo-algo/runs/asge8y6v
+  runtime_commit: 98d76252de5f194df39a6441f33ddf7e2843e06d
+  runtime_source_status: source_verified_from_local_git_and_archived_wandb_config
+  source_config_snapshot_sha256: 44cc464e67e93655da5b0847570772cf5fea444470032102003576b85db94819
+  research_reference_commit: 3ca2a36f6b20c53a06813013234666d9c033a660
+  archived_model: black-forest-labs/FLUX.1-dev
+  archived_model_revision: main
+  source_world_size: 8
+  source_local_rows: 144
+  source_gradient_accumulation_steps: 24
+  source_updates_per_rollout: 1
+  candidate_updates_per_rollout: 1
+  source_timestep_fraction: 0.99
+  source_eval_microbatch: 8
+  budget_basis: archived_nft_flux_max_successful_updates
+  cadence_basis: archived_nft_flux_explicit_updates
+  semantic_gaps:
+    - Prompt-major complete groups replace the historical mixed-rank sampler; row/noise order parity remains pending.
+    - The archived main model revision has no recovered asset/data hashes; release pins do not establish historical identity.
+    - Physical evaluation batching follows the release runner rather than historical batch eight; per-sample identities are preserved.
+    - The original run resumed a prior attempt; this candidate starts from base weights, without splicing historical curves.

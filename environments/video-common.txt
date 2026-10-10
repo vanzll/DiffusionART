@@ -1,0 +1,30 @@
+# Direct runtime versions inspected in the accepted video environment.
+# FlashAttention is installed separately after the CUDA PyTorch wheel.
+torch==2.6.0
+torchvision==0.21.0
+transformers==4.46.1
+tokenizers==0.20.1
+accelerate==1.0.1
+peft==0.13.2
+trl==0.8.6
+# TRL imports rich from trainer.utils without declaring it in its base extra.
+rich==13.9.4
+datasets==2.18.0
+numpy==1.26.3
+safetensors==0.8.0
+Pillow==10.2.0
+pandas==2.2.3
+pyarrow==25.0.1
+av==13.1.0
+decord==0.6.0
+einops==0.8.0
+liger-kernel==0.4.1
+omegaconf==2.3.0
+loguru==0.7.3
+sentencepiece==0.2.0
+ftfy==6.3.0
+imageio==2.36.0
+imageio-ffmpeg==0.5.1
+protobuf==5.28.3
+wandb==0.18.5
+PyYAML==6.0.1

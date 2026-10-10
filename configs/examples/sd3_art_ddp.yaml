@@ -1,0 +1,6 @@
+# Two-rank integration example, not a frozen paper reproduction profile.
+extends: sd3_pickscore.yaml
+name: sd35-art-pickscore-ddp-integration
+runtime:
+  distributed: ddp
+  output_dir: outputs/sd35-art-pickscore-ddp-integration

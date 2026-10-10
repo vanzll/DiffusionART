@@ -1,0 +1,83 @@
+# Composition fragment only; no algorithm, sampler or training defaults.
+reward:
+  name: composite
+  normalization: fixed
+  weights:
+    geneval: 1.0
+    pickscore: 1.0
+    clipscore: 1.0
+    hpsv2: 1.0
+  options:
+    microbatch: 1
+    fixed_statistics:
+      geneval:
+        mean: 0.0
+        std: 1.0
+        source: research-geneval-identity-scale
+      pickscore:
+        mean: 0.0
+        std: 26.0
+        source: research-pickscore-logit-divisor-26
+      clipscore:
+        mean: 0.0
+        std: 30.0
+        source: research-clipscore-logit-divisor-30
+      hpsv2:
+        mean: 0.0
+        std: 1.0
+        source: research-hpsv21-cosine-identity-scale
+    components:
+      geneval:
+        checkpoint: ${GENEVAL_MANIFEST}
+        revision: ${GENEVAL_MANIFEST_SHA256}
+        options:
+          worker_python: ${GENEVAL_PYTHON}
+          microbatch: 1
+          detector_microbatch: 1
+          color_workers: 0
+          startup_timeout: 300
+          request_timeout: 300
+      pickscore:
+        checkpoint: ${PICKSCORE_MODEL}
+        revision: a4e4367c6dfa7288a00c550414478f865b875800
+        options:
+          local_files_only: true
+          processor: ${PICKSCORE_PROCESSOR}
+          processor_revision: 1c2b8495b28150b8a4922ee1c8edee224c284c0c
+          microbatch: 1
+      clipscore:
+        checkpoint: ${CLIP_MODEL}
+        revision: 32bd64288804d66eefd0ccbe215aa642df71cc41
+        options:
+          local_files_only: true
+          processor: ${CLIP_MODEL}
+          processor_revision: 32bd64288804d66eefd0ccbe215aa642df71cc41
+          microbatch: 1
+          antialias: true
+      hpsv2:
+        checkpoint: ${HPS_MODEL}/HPS_v2.1_compressed.pt
+        revision: 697403c78157020a1ae59d23f111aa58ced35b0a
+        options:
+          microbatch: 1
+          checkpoint_sha256: c57a38fb4a2f7e7c15bf00da2ea377cdf165448b4dd1052a484c215a998c9837
+assets:
+  defaults:
+    PAPER_OUTPUT_ROOT: outputs
+  snapshots:
+  - env: SD3_MODEL
+    repo_id: stabilityai/stable-diffusion-3.5-medium
+    revision: b940f670f0eda2d07fbb75229e779da1ad11eb80
+  - env: PICKSCORE_MODEL
+    repo_id: yuvalkirstain/PickScore_v1
+    revision: a4e4367c6dfa7288a00c550414478f865b875800
+  - env: PICKSCORE_PROCESSOR
+    repo_id: laion/CLIP-ViT-H-14-laion2B-s32B-b79K
+    revision: 1c2b8495b28150b8a4922ee1c8edee224c284c0c
+  - env: CLIP_MODEL
+    repo_id: openai/clip-vit-large-patch14
+    revision: 32bd64288804d66eefd0ccbe215aa642df71cc41
+  - env: HPS_MODEL
+    repo_id: xswu/HPSv2
+    revision: 697403c78157020a1ae59d23f111aa58ced35b0a
+    allow_patterns:
+    - HPS_v2.1_compressed.pt

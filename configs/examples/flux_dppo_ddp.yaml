@@ -1,0 +1,5 @@
+extends: flux_dppo_pickscore.yaml
+name: flux-dppo-pickscore-ddp-integration
+runtime:
+  distributed: ddp
+  output_dir: outputs/flux-dppo-pickscore-ddp-integration

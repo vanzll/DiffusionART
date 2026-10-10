@@ -1,0 +1,59 @@
+{
+  "artifact": "third_party/hpsv2/hpsv2-1.2.0-2-py3-none-any.whl",
+  "distribution": "hpsv2",
+  "version": "1.2.0",
+  "build_tag": "2",
+  "wheel_sha256": "402a5f6ad8d18868dc3d9545718ef01e12cc8cfc4b106fadd8e89d7173f784ad",
+  "wheel_bytes": 9017341,
+  "upstream_wheel": {
+    "url": "https://files.pythonhosted.org/packages/46/f3/4ff37b7e5c5079bdc2880c9a72300c5b962e62ac0ebdcda2af358c3ddc4f/hpsv2-1.2.0-py3-none-any.whl",
+    "sha256": "3ee638b06847bef24e1de43d0b5e3890a4a850034b4bf618e4bb3e78e2d806a1"
+  },
+  "official_bpe": {
+    "repository": "https://github.com/tgxs002/HPSv2",
+    "git_revision": "866735ecaae999fa714bd9edfa05aa2672669ee3",
+    "url": "https://raw.githubusercontent.com/tgxs002/HPSv2/866735ecaae999fa714bd9edfa05aa2672669ee3/hpsv2/src/open_clip/bpe_simple_vocab_16e6.txt.gz",
+    "sha256": "924691ac288e54409236115652ad4aa250f48203de50a9e4722a6ecd48d6804a",
+    "wheel_member": "hpsv2/src/open_clip/bpe_simple_vocab_16e6.txt.gz"
+  },
+  "declared_changes": [
+    "Add the official missing BPE asset.",
+    "Remove exactly the unused CRLF line 'from turtle import forward' from factory.py; AST verifies that the imported name has no references.",
+    "Add Build: 2 to WHEEL without changing distribution version or dependency metadata.",
+    "Regenerate RECORD hashes and sizes; normalize ZIP order, timestamps and permissions."
+  ],
+  "source_identity": {
+    "unchanged_python_files": 36,
+    "sole_python_exception": "hpsv2/src/open_clip/factory.py",
+    "factory_before_sha256": "870f45d49665b4717805134a794bd4b70c45d31f2daeb1103291952b9e41bbd2",
+    "factory_after_sha256": "1a045b5c3e86e50c1cef494eaa8092e86e099fcd5e7ea3a50df59be35eab2cbf",
+    "all_other_member_contents_byte_identical_except_WHEEL_and_RECORD": true,
+    "dependency_metadata_byte_identical": true,
+    "model_math_changed": false
+  },
+  "license": {
+    "identifier": "Apache-2.0",
+    "upstream_license_member": "hpsv2-1.2.0.dist-info/LICENSE",
+    "upstream_license_sha256": "1eb85fc97224598dad1852b5d6483bbcf0aa8608790dcc657a5a2a761ae9c8c6",
+    "wheel_license_byte_identical": true,
+    "readable_copy": "third_party/hpsv2/LICENSE",
+    "readable_copy_normalization": "CRLF to LF only",
+    "modification_notice": "third_party/hpsv2/NOTICE",
+    "original_python_attribution_comments_retained": true
+  },
+  "reproduction": {
+    "script": "third_party/hpsv2/repack.py",
+    "command": "python third_party/hpsv2/repack.py",
+    "verify_command": "python third_party/hpsv2/repack.py --verify-only",
+    "offline_arguments": "--upstream-wheel ORIGINAL_WHEEL --bpe OFFICIAL_BPE",
+    "python": "3.10.20",
+    "zlib_runtime": "1.2.12",
+    "zip_timestamp": [2026, 10, 10, 0, 0, 0],
+    "compression": "DEFLATE level 6",
+    "byte_identical_rebuild_verified": true,
+    "verification_report": "third_party/hpsv2/verification.json",
+    "host_acceptance_report": "third_party/hpsv2/validation.json"
+  },
+  "model_checkpoints_bundled_or_downloaded": false,
+  "official_upstream_release": false
+}

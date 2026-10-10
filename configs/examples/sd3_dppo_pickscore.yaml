@@ -1,0 +1,14 @@
+extends: sd3_fast_pickscore.yaml
+name: sd35-dppo-pickscore-integration
+algorithm:
+  name: flow_dppo
+  options:
+    loss: {kl_mask_threshold: 0.00001, advantage_clip: 5.0}
+    updates_per_rollout: 2
+    training_batches: 4
+    shuffle_rows: true
+    zero_advantage_mode: filter_pad
+    max_empty_rollouts: 100
+    evaluation_ema: {enabled: true, decay: 0.9, refresh: logical_batch}
+runtime:
+  output_dir: outputs/sd35-dppo-pickscore-integration

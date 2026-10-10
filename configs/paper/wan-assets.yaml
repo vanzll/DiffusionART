@@ -1,0 +1,47 @@
+extends: video-common-assets.yaml
+assets:
+  defaults:
+    WAN_DISTILLED_REVISION: fef288b326f4fed6d2983b9800c35363da31fcfe
+    WAN_BASE_REVISION: b184e23a8a16b20f108f727c902e769e873ffc73
+    FLUX_REFERENCE_REVISION: 3de623fc3c33e44ffbe2bad470d0f45bccf2eb21
+  snapshots:
+    - env: VIDEO_REWARD_MODEL
+      repo_id: KwaiVGI/VideoReward
+      revision: 4f26600130683e6f1de9f5d463887f28e8ef995c
+    - env: VIDEO_REWARD_BACKBONE
+      repo_id: Qwen/Qwen2-VL-2B-Instruct
+      revision: 895c3a49bc3fa70a340399125c650a463535e71c
+    - env: WAN_BASE_MODEL
+      repo_id: Wan-AI/Wan2.1-I2V-14B-480P-Diffusers
+      revision: b184e23a8a16b20f108f727c902e769e873ffc73
+    - env: FLUX_REFERENCE_MODEL
+      repo_id: black-forest-labs/FLUX.1-dev
+      revision: 3de623fc3c33e44ffbe2bad470d0f45bccf2eb21
+    - env: WAN_DISTILLED_SOURCE
+      for_env: WAN_DISTILLED_TRANSFORMER
+      repo_id: lightx2v/Wan2.1-I2V-14B-480P-StepDistill-CfgDistill-Lightx2v
+      revision: fef288b326f4fed6d2983b9800c35363da31fcfe
+      allow_patterns: [distill_models/distill_model.safetensors]
+  prompts:
+    - env: WAN_TRAIN_MANIFEST
+      sha_env: WAN_TRAIN_SHA256
+      url: https://raw.githubusercontent.com/XueZeyue/DanceGRPO/15cc71d53cc2e6e18a68ee607d5fb6ba9a99e344/assets/consist-id.txt
+      source_sha256: 85096428c4aa4467345a1ddd0855f004d26c1ba39cffafd4a06d8b8d798a4f6f
+      sha256: 63356edb1372c1dd814f951e8dddfa69204426eb72f8127ec57eb268f0db2251
+      prefix: train
+      format: text
+  transformations:
+    - action: wan_transformer
+      env: WAN_DISTILLED_TRANSFORMER
+      source_env: WAN_DISTILLED_SOURCE
+      source_file: distill_models/distill_model.safetensors
+      config_env: WAN_BASE_MODEL
+      config_file: transformer/config.json
+      source_sha256: 12869d6856085d97cbf502fecbed85d1a67ce108174f95d82547497522479599
+      revision: fef288b326f4fed6d2983b9800c35363da31fcfe
+    # The research fixed JPEGs have no verified public download. User input only.
+    - action: fixed_images
+      env: WAN_EVAL_MANIFEST
+      sha_env: WAN_EVAL_SHA256
+      source_env: WAN_EVAL_RAW_MANIFEST
+      format: jsonl

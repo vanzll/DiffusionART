@@ -1,0 +1,19 @@
+extends: wan_art_11.yaml
+name: paper-wan-fast-11
+algorithm:
+  name: flow_grpo_fast
+  options:
+    advantage_epsilon: 0.0001
+    loss: {ratio_clip: 0.00001, advantage_clip: 5.0}
+sampling:
+  options:
+    noise_level: 0.8
+    train_timestep_count: 1
+runtime:
+  output_dir: ${PAPER_VIDEO_OUTPUT_ROOT}/wan-fast-11
+provenance:
+  run_id: 31223c0be629580537f55ae2
+  runtime_sha: c56245ec9034b62c0db5548c1cbf145f72616e1a
+  runtime_sha_status: inspected_local_git_object
+  reference_sha: c56245ec9034b62c0db5548c1cbf145f72616e1a
+  reference_location: runners/wan_i2v_distilled32_v1/fastsde.json

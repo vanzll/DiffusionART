@@ -1,0 +1,24 @@
+extends: wan_art_11.yaml
+name: paper-wan-refl-11
+algorithm:
+  name: refl
+  options:
+    reward_loss_scale: 1.0
+sampling:
+  samples_per_prompt: 1
+  microbatch: 1
+  options:
+    train_timestep_count: 1
+    train_timestep_pool: [3]
+training:
+  microbatch: 1
+runtime:
+  output_dir: ${PAPER_VIDEO_OUTPUT_ROOT}/wan-refl-11
+  checkpoint_every: 100
+provenance:
+  inventory_group: refl-i2v
+  run_id: 16cc3f7450393e017fd6e1de
+  reference_location: runners/wan_i2v_distilled32_v1/refl-gpu.json
+  runtime_location: flow_grpo_alg/video/backends/wan_i2v_refl.py
+  budget_basis: 400_global_optimizer_updates_400_rollouts
+  artifact_policy: native_full_resume_checkpoint_every100_updates_all_scored_media

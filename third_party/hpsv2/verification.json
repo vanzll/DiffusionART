@@ -1,0 +1,38 @@
+{
+  "wheel": "hpsv2-1.2.0-2-py3-none-any.whl",
+  "wheel_sha256": "402a5f6ad8d18868dc3d9545718ef01e12cc8cfc4b106fadd8e89d7173f784ad",
+  "wheel_bytes": 9017341,
+  "upstream_url": "https://files.pythonhosted.org/packages/46/f3/4ff37b7e5c5079bdc2880c9a72300c5b962e62ac0ebdcda2af358c3ddc4f/hpsv2-1.2.0-py3-none-any.whl",
+  "upstream_sha256": "3ee638b06847bef24e1de43d0b5e3890a4a850034b4bf618e4bb3e78e2d806a1",
+  "bpe_url": "https://raw.githubusercontent.com/tgxs002/HPSv2/866735ecaae999fa714bd9edfa05aa2672669ee3/hpsv2/src/open_clip/bpe_simple_vocab_16e6.txt.gz",
+  "bpe_sha256": "924691ac288e54409236115652ad4aa250f48203de50a9e4722a6ecd48d6804a",
+  "official_git_revision": "866735ecaae999fa714bd9edfa05aa2672669ee3",
+  "python": "3.10.20",
+  "platform": "macOS-15.7.7-arm64-arm-64bit",
+  "zlib_runtime": "1.2.12",
+  "zip_timestamp": [
+    2026,
+    10,
+    10,
+    0,
+    0,
+    0
+  ],
+  "zip_compression_level": 6,
+  "rebuild_byte_identical": true,
+  "changed_members": [
+    "hpsv2-1.2.0.dist-info/RECORD",
+    "hpsv2-1.2.0.dist-info/WHEEL",
+    "hpsv2/src/open_clip/factory.py"
+  ],
+  "added_members": [
+    "hpsv2/src/open_clip/bpe_simple_vocab_16e6.txt.gz"
+  ],
+  "unchanged_python_files": 36,
+  "factory_only_change": "removed exact unused `from turtle import forward` line",
+  "factory_before_sha256": "870f45d49665b4717805134a794bd4b70c45d31f2daeb1103291952b9e41bbd2",
+  "factory_after_sha256": "1a045b5c3e86e50c1cef494eaa8092e86e099fcd5e7ea3a50df59be35eab2cbf",
+  "metadata_byte_identical": true,
+  "license_byte_identical": true,
+  "record_hashes_and_sizes_valid": true
+}

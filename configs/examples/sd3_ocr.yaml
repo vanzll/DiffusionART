@@ -1,0 +1,20 @@
+# Native integration candidate; real Paddle/Linux acceptance remains pending.
+extends: sd3_pickscore.yaml
+name: sd35-ocr-integration
+reward:
+  name: ocr
+  checkpoint: ${OCR_MANIFEST}
+  revision: ${OCR_MANIFEST_SHA256}
+  normalization: raw
+  weights: {ocr: 1.0}
+  options:
+    microbatch: 1
+    error_policy: zero
+data:
+  manifest: configs/examples/ocr_prompts.jsonl
+  sha256: ab76cb8b5c4ad4222fa0c902ee71f4ca39748f4fe27ba2994a2092014dde89a9
+evaluation:
+  manifest: configs/examples/ocr_prompts.jsonl
+  manifest_sha256: ab76cb8b5c4ad4222fa0c902ee71f4ca39748f4fe27ba2994a2092014dde89a9
+runtime:
+  output_dir: outputs/sd35-ocr-integration

@@ -1,0 +1,24 @@
+# Native integration candidate, not a frozen distributed paper reproduction.
+extends: sd3_pickscore.yaml
+name: sd35-geneval-integration
+reward:
+  name: geneval
+  checkpoint: ${GENEVAL_MANIFEST}
+  revision: ${GENEVAL_MANIFEST_SHA256}
+  normalization: raw
+  weights: {geneval: 1.0}
+  options:
+    worker_python: ${GENEVAL_PYTHON}
+    microbatch: 1
+    detector_microbatch: 1
+    color_workers: 0
+    startup_timeout: 300
+    request_timeout: 300
+data:
+  manifest: configs/examples/geneval_prompts.jsonl
+  sha256: e29f5d704a7f32c2a7561513317cabd56741a72d8d29ef770b5a15639e0e436c
+evaluation:
+  manifest: configs/examples/geneval_prompts.jsonl
+  manifest_sha256: e29f5d704a7f32c2a7561513317cabd56741a72d8d29ef770b5a15639e0e436c
+runtime:
+  output_dir: outputs/sd35-geneval-integration

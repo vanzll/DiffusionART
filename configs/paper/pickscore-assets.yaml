@@ -1,0 +1,28 @@
+assets:
+  defaults:
+    PAPER_OUTPUT_ROOT: outputs
+  snapshots:
+    - env: SD3_MODEL
+      repo_id: stabilityai/stable-diffusion-3.5-medium
+      revision: b940f670f0eda2d07fbb75229e779da1ad11eb80
+    - env: PICKSCORE_MODEL
+      repo_id: yuvalkirstain/PickScore_v1
+      revision: a4e4367c6dfa7288a00c550414478f865b875800
+    - env: PICKSCORE_PROCESSOR
+      repo_id: laion/CLIP-ViT-H-14-laion2B-s32B-b79K
+      revision: 1c2b8495b28150b8a4922ee1c8edee224c284c0c
+  prompts:
+    - env: PICKSCORE_TRAIN_MANIFEST
+      sha_env: PICKSCORE_TRAIN_SHA256
+      url: https://raw.githubusercontent.com/yifan123/flow_grpo/879042cf5707f8b90daa98d147d7deac2317c5da/dataset/pickscore/train.txt
+      source_sha256: 2f425adcbb9a6d0feee7c6c448e1cb83a1f71deca9434b803907e2578eca837f
+      sha256: 25ec5eb3d187edc109f9191eb173e03c6cdeea41acd35486ece2ad494189c8b0
+      prefix: train
+      format: text
+    - env: PICKSCORE_EVAL_MANIFEST
+      sha_env: PICKSCORE_EVAL_SHA256
+      url: https://raw.githubusercontent.com/yifan123/flow_grpo/879042cf5707f8b90daa98d147d7deac2317c5da/dataset/pickscore/test.txt
+      source_sha256: d75c025fa451866e70f7e36243f7cdd93095523cb51f5f9651f2ce3236d20262
+      sha256: 23fa0857b1ee49097d94a5410db8944c3859dfddf54ca45e35491991de11e4e0
+      prefix: eval
+      format: text

@@ -1,0 +1,39 @@
+extends: [../../examples/wan_art.yaml, ../wan-assets.yaml]
+name: paper-wan-art-11
+model:
+  options:
+    base_revision: b184e23a8a16b20f108f727c902e769e873ffc73
+    reference_revision: 3de623fc3c33e44ffbe2bad470d0f45bccf2eb21
+    allow_tf32: true
+reward:
+  revision: 4f26600130683e6f1de9f5d463887f28e8ef995c
+training:
+  max_updates: 400
+  learning_rate: 0.00001
+  optimizer: adamw
+  betas: [0.9, 0.999]
+  epsilon: 0.00000001
+  weight_decay: 0.0001
+  grad_clip: 1.0
+  precision: bf16
+evaluation:
+  every_updates: 10
+runtime:
+  log: wandb
+  output_dir: ${PAPER_VIDEO_OUTPUT_ROOT}/wan-art-11
+  checkpoint_every: 200
+provenance:
+  kind: corrected_eval_training_reproduction
+  inventory_group: i2v-main-vqmq11
+  run_id: 08ca4146a532752c473f1f37
+  runtime_sha: null
+  runtime_sha_status: unresolved_in_inventory
+  reference_sha: 3ca2a36f6b20c53a06813013234666d9c033a660
+  reference_location: runners/wan_i2v_distilled32_v1/flowart.json
+  runtime_location: flow_grpo_alg/video/backends/wan_i2v_distilled_algorithms.py
+  evaluation_protocol: corrected_common_video8_rm4_shift5_every10_retain_all
+  historical_evaluation: video8_shift5_sparse_steps_retained32
+  budget_basis: 400_global_optimizer_updates_200_rollouts
+  artifact_policy: native_full_resume_checkpoint_every200_updates_all_scored_media
+  distilled_source_revision: fef288b326f4fed6d2983b9800c35363da31fcfe
+  distilled_source_sha256: 12869d6856085d97cbf502fecbed85d1a67ce108174f95d82547497522479599

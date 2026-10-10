@@ -1,0 +1,110 @@
+# Source-mapped candidate, NOT certified execution of the archived runtime.
+extends: [sd3_geneval_dppo.yaml, sd3_multireward_rewards.yaml]
+name: paper-sd3_multireward_dppo-candidate
+seed: 42
+algorithm:
+  name: flow_dppo
+  options:
+    multi_reward_advantage:
+      weights: {geneval: 0.25, pickscore: 0.25, clipscore: 0.25, hpsv2: 0.25}
+      score_space: fixed_normalized
+      eps: 0.0001
+      renormalize_combined: false
+    loss: {kl_mask_threshold: 0.00001, advantage_clip: 5}
+    updates_per_rollout: 2
+    training_batches: 16
+    shuffle_rows: true
+    zero_advantage_mode: filter_pad
+    max_empty_rollouts: 100
+    evaluation_ema: {enabled: true, decay: 0.9, refresh: logical_batch}
+model:
+  name: sd3
+  options:
+    gradient_checkpointing: false
+data:
+  manifest: ${GENEVAL_TRAIN_MANIFEST}
+  sha256: ${GENEVAL_TRAIN_SHA256}
+  shuffle: true
+sampling:
+  steps: 10
+  prompts_per_rollout: 48
+  samples_per_prompt: 24
+  microbatch: 9
+  guidance_scale: 1
+  height: 512
+  width: 512
+  options:
+    shift: 3
+    transition_kind: sde
+    likelihood: gaussian
+    noise_level: 0.8
+    selection: fixed
+    pool: [0,1,2,3,4,5,6,7,8]
+    count: 9
+    logical_batch_size: 9
+    unselected_noise: all
+training:
+  max_updates: 1000
+  learning_rate: 0.0003
+  microbatch: 9
+  precision: fp16
+  allow_tf32: true
+  grad_clip: 1
+  optimizer: adamw
+  weight_decay: 0.0001
+  betas: [0.9, 0.999]
+  epsilon: 1.0e-08
+evaluation:
+  every_updates: 0
+  at_updates: [60,120,180,240,300,360,420,480,540,600,660,720,780,840,900,960]
+  manifest: ${GENEVAL_EVAL_MANIFEST}
+  manifest_sha256: ${GENEVAL_EVAL_SHA256}
+  sampling_steps: 40
+  height: 512
+  width: 512
+  seed: 42
+runtime:
+  log: wandb
+  output_dir: ${PAPER_OUTPUT_ROOT}/sd3_multireward_dppo
+  device: cuda
+  distributed: ddp
+  checkpoint_every: 200
+  checkpoint_at_updates: [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]
+provenance:
+  kind: training_candidate_not_fullhistorical_reproduction
+  source_run: dvmnd177
+  source_url: https://wandb.ai/stableNFT-baselines/baselines/runs/dvmnd177
+  runtime_commit: b4c419f397029c1477d9d81dca3b003024cb9ba2
+  runtime_source_status: commit_recorded_source_unrecovered
+  release_base_commit: 6570fd2
+  research_reference_commit: c81b12bab6a7594f23a0398cb49b30442a5b0f27
+  evidence: docs/paper-multireward-evidence.json
+  source_world_size: 8
+  source_world_size_basis: canonical_8_rank_mapping_not_archived_runtime_proof
+  source_train_batch_size: 9
+  source_num_batches_per_epoch: 16
+  source_gradient_accumulation_steps: 8
+  source_updates_per_rollout: 2
+  candidate_updates_per_rollout: 2
+  source_timestep_fraction: 0.99
+  source_sde_type: sde
+  source_logprob_type: gaussian
+  source_global_std: true
+  source_same_latent: false
+  source_resume_global_step: 600
+  source_multi_reward_advantage_enabled: true
+  candidate_advantage_branch: joint_component_prompt_group_std
+  candidate_advantage_branch_basis: inspected_canonical_source_not_archived_runtime_certification
+  main_paper_plotted_steps: 500
+  source_max_optimizer_steps: 1000
+  budget_basis: 1000_successful_optimizer_updates_not_500_plot_truncation
+  cadence_basis: archived_eval_freq_epochs_times_candidate_updates_per_rollout
+  dataset_contract: GenEval_full_prompt_train_with_structured_metadata
+  reporting_scalar: GenEval+PickScore_logit/26+CLIPScore_logit/30+HPSv2.1_cosine
+  semantic_gaps:
+    - "Actual archived baseline runtime commit source unavailable; the inspected canonical reference is not execution proof for this run."
+    - "Public asset pins, prompt-major sampling, RNG and text/LoRA conventions are not certified historical parity."
+    - "Candidate starts from base model weights; historical W&B indexing and successful-update/FP16 overflow parity are not certified."
+    - "Evaluation EMA decay and logical-batch refresh are mapped from the canonical reference, not recovered runtime state."
+    - "GenEval worker, scorer bundle and full structured data remain user-bound per docs/geneval.md; shared assets prepare five model snapshots only."
+    - "Archived run resumes at global step 600; predecessor checkpoint and optimizer/EMA/RNG state are unavailable."

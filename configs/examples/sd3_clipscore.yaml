@@ -1,0 +1,17 @@
+# Native scorer integration example; not a historical paper recipe.
+extends: sd3_pickscore.yaml
+name: sd35-clipscore-integration
+reward:
+  name: clipscore
+  checkpoint: openai/clip-vit-large-patch14
+  revision: 32bd64288804d66eefd0ccbe215aa642df71cc41
+  normalization: fixed
+  weights: {clipscore: 1.0}
+  options:
+    local_files_only: true
+    processor: openai/clip-vit-large-patch14
+    processor_revision: 32bd64288804d66eefd0ccbe215aa642df71cc41
+    microbatch: 1
+    antialias: true
+runtime:
+  output_dir: outputs/sd35-clipscore-integration

@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "visual-diffusion-rl"
+version = "0.1.0.dev0"
+description = "Configurable reinforcement learning for visual generation"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["torch>=2.4,<3", "numpy>=1.24", "PyYAML>=6.0", "wandb>=0.18"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6"]
+diffusers = ["diffusers>=0.30", "transformers>=4.44", "accelerate>=1.0", "safetensors>=0.4", "sentencepiece>=0.2", "peft>=0.13", "Pillow>=10"]
+wandb = ["wandb>=0.18"]
+image-rewards = ["torchvision>=0.19"]
+hpsv2 = ["hpsv2==1.2.0", "Pillow>=10"]
+ocr = ["rapidfuzz>=3.9", "Pillow>=10"]
+
+[project.scripts]
+visual-rl = "visual_rl.train:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.uv]
+# HPSv2 incorrectly pins its upstream test tools as scoring dependencies.
+override-dependencies = ["pytest>=8", "pytest-split>=0.10"]
+
+[tool.uv.sources]
+# Complete tokenizer assets and remove an unused GUI import for headless hosts.
+hpsv2 = { path = "third_party/hpsv2/hpsv2-1.2.0-2-py3-none-any.whl" }
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
