@@ -20,13 +20,34 @@ SETTINGS = dict(use_dynamic_shifting=True, shift=1.0, base_image_seq_len=256,
                 max_image_seq_len=4096, base_shift=0.5, max_shift=1.15)
 
 
-@pytest.mark.parametrize("change", [{"shift": 2}, {"use_dynamic_shifting": False},
+@pytest.mark.parametrize("change", [{"use_dynamic_shifting": False},
                                   {"invert_sigmas": True}, {"time_shift_type": "linear"},
                                   {"shift_terminal": .05}, {"num_train_timesteps": 500}])
 def test_asset_scheduler_must_match_configuration(change):
     validate_asset_scheduler(SETTINGS, SETTINGS)
     with pytest.raises(ValueError, match="scheduler asset"):
         validate_asset_scheduler(dict(SETTINGS, **change), SETTINGS)
+
+
+@pytest.mark.parametrize("size,steps", [(512,10), (768,20), (1024,40)])
+def test_published_inactive_shift_preserves_exact_dynamic_sigma_grid(size, steps):
+    published = dict(SETTINGS, shift=3.0)
+    validate_asset_scheduler(published, SETTINGS)
+    actual = flux_schedule(steps, height=size, width=size, spatial_factor=8, scheduler=published)
+    declared = flux_schedule(steps, height=size, width=size, spatial_factor=8, scheduler=SETTINGS)
+    assert torch.equal(actual, declared)
+
+
+@pytest.mark.parametrize("bad", [0, -1, float("nan"), True, "3"])
+def test_invalid_inactive_asset_shift_is_still_rejected(bad):
+    with pytest.raises(ValueError, match="shift"):
+        validate_asset_scheduler(dict(SETTINGS, shift=bad), SETTINGS)
+
+
+def test_active_static_asset_shift_must_still_match():
+    declared = dict(SETTINGS, use_dynamic_shifting=False)
+    with pytest.raises(ValueError, match="shift"):
+        validate_asset_scheduler(dict(declared, shift=3.0), declared)
 
 
 @pytest.mark.parametrize("size", [256, 512, 1024])

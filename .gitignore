@@ -10,6 +10,7 @@ playwright-report/
 .venv-*/
 third_party/*
 !third_party/hpsv2/
+!third_party/decord/
 .pytest_cache/
 .ruff_cache/
 *.egg-info/

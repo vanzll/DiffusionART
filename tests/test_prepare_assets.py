@@ -105,6 +105,29 @@ def test_download_conversion_cache_reuse_and_integrity(tmp_path, monkeypatch):
         prepare_assets(plan)
 
 
+def test_only_pinned_pickscore_processor_omits_unrelated_weights(tmp_path, monkeypatch):
+    from fnmatch import fnmatch
+    files = ["config.json", "preprocessor_config.json", "tokenizer_config.json",
+             "special_tokens_map.json", "vocab.json", "merges.txt", "tokenizer.json",
+             "README.md", "pytorch_model.bin", "model.safetensors"]
+    calls = []
+    def download(**kwargs):
+        patterns = kwargs.get("allow_patterns", ["*"])
+        calls.append((kwargs, [name for name in files if any(fnmatch(name, p) for p in patterns)]))
+    monkeypatch.setitem(sys.modules, "huggingface_hub", SimpleNamespace(snapshot_download=download))
+    processor = {"env": "PICKSCORE_PROCESSOR", "repo_id": "laion/CLIP-ViT-H-14-laion2B-s32B-b79K",
+                 "revision": "1c2b8495b28150b8a4922ee1c8edee224c284c0c"}
+    model = {**processor, "env": "PICKSCORE_MODEL"}
+    custom = {**processor, "revision": "a" * 40}
+    explicit = {**processor, "allow_patterns": ["model.safetensors"]}
+    entries = [processor, model, custom, explicit]
+    prepare_assets(([(e, tmp_path / str(i)) for i, e in enumerate(entries)], []))
+    assert calls[0][1] == files[:-2]
+    assert calls[1][1] == files and calls[2][1] == files
+    assert calls[3][1] == ["model.safetensors"]
+    assert [c[0]["revision"] for c in calls] == [e["revision"] for e in entries]
+
+
 def test_wrong_source_never_publishes_manifest(tmp_path, monkeypatch):
     plan = plan_environment(write_config(tmp_path))
     monkeypatch.setattr("urllib.request.urlopen", lambda *a, **k: io.BytesIO(b"wrong\n"))

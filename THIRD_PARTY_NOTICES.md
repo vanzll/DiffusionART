@@ -34,6 +34,11 @@ SOFTWARE.
 
 ## Algorithm References
 
+- Decord: https://github.com/dmlc/decord. `third_party/decord` contains a
+  repackaged official PyPI 0.6.0 Linux wheel under the retained Apache-2.0
+  license. Only its internal wheel tag and RECORD are corrected; runtime
+  code and shared libraries are unchanged. Source hashes, the rebuild script,
+  and license notices are included alongside the wheel.
 - GenEval training scorer: https://github.com/yifan123/reward-server at
   `8245af22b75fe640950a880ad31fe702a5d9a014`, `reward_server/gen_eval.py`.
   Its MIT license (Copyright 2023 Jie Liu) is preserved in

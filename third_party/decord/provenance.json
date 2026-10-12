@@ -1,0 +1,12 @@
+{
+  "source_url": "https://files.pythonhosted.org/packages/11/79/936af42edf90a7bd4e41a6cac89c913d4b47fa48a26b042d5129a9242ee3/decord-0.6.0-py3-none-manylinux2010_x86_64.whl",
+  "source_sha256": "51997f20be8958e23b7c4061ba45d0efcd86bffd5fe81c695d0befee0d442976",
+  "output": "decord-0.6.0-1-py3-none-manylinux2010_x86_64.whl",
+  "output_sha256": "3609068af8b6caef7b6a7d598ff76673162361d07d2afa9403b404bf0f0a6be8",
+  "changed_members": [
+    "decord-0.6.0.dist-info/RECORD",
+    "decord-0.6.0.dist-info/WHEEL"
+  ],
+  "runtime_members_identical": true,
+  "rationale": "Public filename advertises py3-none, but internal WHEEL incorrectly declares cp36-cp36m. Runtime uses ctypes/CFFI, no CPython extension ABI change."
+}

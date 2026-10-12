@@ -105,6 +105,40 @@ def test_zero_weight_component_is_still_scored_and_invalid_values_fail():
         composite(images, ["one", "two"], microbatch=1)
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="requires actual CUDA score transport")
+@pytest.mark.parametrize("first_device", ["cpu", "cuda:0"])
+def test_mixed_cpu_cuda_scores_preserve_bits_and_once_only_normalization(first_device):
+    class DeviceScore(torch.nn.Module):
+        def __init__(self, name, values, device):
+            super().__init__()
+            self.name = name
+            self.values = values.to(device=device)
+        def forward(self, images, prompts, **kwargs):
+            return weighted_score({self.name: self.values}, {self.name: 1}, space="raw")
+    a = torch.tensor([13.0, 26.0], dtype=torch.float32)
+    b = torch.tensor([0.25, 0.75], dtype=torch.float32)
+    other = "cuda:0" if first_device == "cpu" else "cpu"
+    scorer = CompositeImageReward(
+        {"a": DeviceScore("a", a, first_device), "b": DeviceScore("b", b, other)},
+        {"a": 1, "b": 1}, space="fixed_normalized",
+        normalization={"a": FixedNormalization(0, 26, "test"), "b": FixedNormalization(0, 1, "test")})
+    result = scorer(torch.ones(2, 3, 2, 2), ["one", "two"], microbatch=2)
+    assert result.weighted.device == torch.device(first_device)
+    assert result.weighted.dtype == torch.float32
+    assert torch.equal(result.raw["a"].cpu(), a) and torch.equal(result.raw["b"].cpu(), b)
+    expected = a.to(first_device) / 26 + b.to(first_device)
+    assert torch.equal(result.weighted, expected)
+
+
+def test_mixed_dtypes_remain_an_error_after_device_transport():
+    class DoubleScore(Scorer):
+        def forward(self, images, prompts, **kwargs):
+            return weighted_score({self.name: torch.ones(len(prompts), dtype=torch.float64)}, {self.name: 1}, space="raw")
+    scorer = CompositeImageReward({"a": Scorer("a", 1), "b": DoubleScore("b", 1)}, {"a": 1, "b": 1}, space="raw")
+    with pytest.raises(ValueError, match="dtype"):
+        scorer(torch.ones(2, 3, 2, 2), ["one", "two"], microbatch=1)
+
+
 def test_misnamed_or_scalar_component_is_not_silently_broadcast():
     class Invalid(torch.nn.Module):
         def __init__(self, name, value):

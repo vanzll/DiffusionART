@@ -1,5 +1,10 @@
 # Full Experiment Quick Start
 
+Automatic preparation downloads tokenizer, image-preprocessing configuration
+and license files for the pinned PickScore processor. `CLIPProcessor` does not
+use the LAION model weights; the scorer loads its separate pinned PickScore
+model. This keeps the PIL preprocessing and every model revision unchanged.
+
 Install from the repository root:
 
 ```bash

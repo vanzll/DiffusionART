@@ -203,6 +203,19 @@ def plan_environment(path):
         destination = directory / "prompts.jsonl" if "sha_env" in entry else directory
         os.environ[name] = str(destination)
         prompts.append((entry, destination))
+    evaluation = document.get("evaluation", {})
+    if evaluation.get("every_updates") == 0 and not evaluation.get("at_updates", []):
+        # A training-only check keeps the planned evaluation binding dormant.
+        # Missing historical eval images must not prevent online-reference I2V
+        # training; re-enabling cadence restores the required fixed-image gate.
+        deferred = {entry["env"] for entry in transformations
+                    if entry["action"] == "fixed_images"
+                    and evaluation.get("manifest") == "${" + entry["env"] + "}"}
+        if deferred:
+            prompts = [(entry, destination) for entry, destination in prompts
+                       if entry.get("env") not in deferred]
+            print("Evaluation paused; deferring fixed eval assets: " + ", ".join(sorted(deferred)),
+                  file=sys.stderr, flush=True)
     return snapshots, prompts
 
 
@@ -247,6 +260,19 @@ def validate_bindings(config, plan):
                     raise ConfigError("configured component revision differs from its automatic asset pin")
 
 
+def _snapshot_options(entry):
+    if "allow_patterns" in entry:
+        return {"allow_patterns": entry["allow_patterns"]}
+    # CLIPProcessor/PIL preprocessing needs tokenizer/config bytes here.
+    # PickScore's CLIPModel loads its separate pinned model snapshot.
+    if (entry.get("env"), entry.get("repo_id"), entry.get("revision")) == (
+        "PICKSCORE_PROCESSOR", "laion/CLIP-ViT-H-14-laion2B-s32B-b79K",
+        "1c2b8495b28150b8a4922ee1c8edee224c284c0c",
+    ):
+        return {"allow_patterns": ["*.json", "*.txt", "*.model", "README*", "LICENSE*", ".gitattributes"]}
+    return {}
+
+
 def prepare_assets(plan):
     snapshots, prompts = plan
     # Reject missing inputs before downloading large weights.
@@ -283,8 +309,7 @@ def prepare_assets(plan):
                                   local_dir=str(destination), max_workers=4,
                                   **({"repo_type": entry["repo_type"]}
                                      if "repo_type" in entry else {}),
-                                  **({"allow_patterns": entry["allow_patterns"]}
-                                     if "allow_patterns" in entry else {}))
+                                  **_snapshot_options(entry))
             except Exception as exc:
                 # HTTP exception text can expose signed URLs or credentials.
                 raise ConfigError(f"download failed for {entry['repo_id']} ({type(exc).__name__}); "

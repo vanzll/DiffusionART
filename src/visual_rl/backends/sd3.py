@@ -167,8 +167,9 @@ def validate_config(c):
             or not c.evaluation.retain_all
         ):
             raise ConfigError("evaluation requires a manifest and retain_all=true")
-    elif c.evaluation.manifest is not None or c.evaluation.manifest_sha256 is not None:
-        raise ConfigError("disabled evaluation must not silently ignore a manifest")
+    # Cadence zero explicitly pauses evaluation. Keep an inherited manifest and
+    # its identity in the resolved config so training-only checks can preserve
+    # the full experiment's data/protocol without running evaluation.
     try:
         FineTuneConfig(**m["finetune"])
         (FluxConfig if is_flux else SD3Config)(m["scaling_factor"], m["shift_factor"], m["latent_channels"])

@@ -132,6 +132,13 @@ JSONL) is supplied. It never generates replacement evaluation images or
 substitutes cached images for online FLUX training references. A default Wan
 command is therefore not one-command paper-ready. In the Wan environment:
 
+A training-only short config may explicitly set `evaluation.every_updates: 0`
+and `evaluation.at_updates: []`. Preparation then defers only the fixed eval
+images; online FLUX training references, all training prompts, policy and reward
+assets remain required. No substitute eval images or manifest are created.
+Re-enabling evaluation restores the original fixed-image requirement, so this
+route does not establish complete I2V performance or lifecycle acceptance.
+
 ```bash
 export DANCEGRPO_ROOT="$VENV/third_party/DanceGRPO"
 export WAN_EVAL_RAW_MANIFEST=/absolute/path/to/fixed-eval.jsonl

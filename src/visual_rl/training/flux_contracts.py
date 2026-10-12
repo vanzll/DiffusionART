@@ -9,6 +9,16 @@ import torch
 def validate_asset_scheduler(config, expected):
     """The config freezes the published asset grid, not a silent override."""
     for name, wanted in expected.items():
+        if (name == "shift" and config.get("use_dynamic_shifting") is True
+                and expected.get("use_dynamic_shifting") is True):
+            # Explicit sigma input + dynamic time shifting uses mu, not this
+            # static constructor field. The published asset has shift3 while
+            # the release config declares1; both produce identical actual grids.
+            value = config.get(name)
+            if (isinstance(value, bool) or not isinstance(value, (int, float))
+                    or not math.isfinite(value) or value <= 0):
+                raise ValueError("FLUX scheduler asset shift is invalid")
+            continue
         if config.get(name) != wanted:
             raise ValueError(f"FLUX scheduler asset {name} differs from experiment config")
     defaults = dict(num_train_timesteps=1000, invert_sigmas=False, shift_terminal=None,

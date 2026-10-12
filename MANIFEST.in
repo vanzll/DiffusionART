@@ -5,5 +5,6 @@ recursive-include scripts *.sh
 recursive-include licenses *.txt
 recursive-include assets/readme *.jpg *.json
 recursive-include third_party/hpsv2 *.whl *.py *.md *.json LICENSE NOTICE
+recursive-include third_party/decord *.whl *.py *.md *.json LICENSE NOTICE
 include THIRD_PARTY_NOTICES.md
 include uv.lock

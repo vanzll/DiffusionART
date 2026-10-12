@@ -61,6 +61,7 @@ class CompositeImageReward(torch.nn.Module):
         validate_image_metadata(self, prompts, metadata)
         self.eval()
         raw = {}
+        score_device = None
         diagnostics = {}
         for name, scorer in self.scorers.items():
             limit = min(microbatch, self.microbatches.get(name, microbatch))
@@ -71,7 +72,12 @@ class CompositeImageReward(torch.nn.Module):
             value = result.raw[name]
             if not isinstance(value, torch.Tensor) or value.shape != (len(prompts),):
                 raise ValueError(f"scorer {name} must return one tensor score per image")
-            raw[name] = value
+            # Vendor HPS preserves historical AMP then returns CPU FP32;
+            # CLIP/PickScore return tensors beside their CUDA model. Copies
+            # preserve score bits/dtype; scalar normalization remains unchanged.
+            if score_device is None:
+                score_device = value.device
+            raw[name] = value.to(device=score_device)
             if result.diagnostics is not None:
                 if diagnostics.keys() & result.diagnostics.keys():
                     raise ValueError("duplicate component diagnostic names")

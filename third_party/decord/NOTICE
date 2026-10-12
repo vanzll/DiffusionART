@@ -1,0 +1,4 @@
+Decord 0.6.0 is distributed by the Decord authors under Apache License 2.0.
+This wheel retains all upstream runtime code, binaries and bundled attribution.
+Acceptance packaging repair: correct internal compatibility tag to the existing
+public filename's py3-none-manylinux2010_x86_64 and regenerate RECORD hashes.

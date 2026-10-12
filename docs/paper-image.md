@@ -89,6 +89,12 @@ not a remote launcher or GPU-allocation authorization.
 
 ## Budgets And Cadence
 
+For a training-only short check, set `evaluation.every_updates: 0` and
+`evaluation.at_updates: []`. The inherited evaluation manifest, hash and sampling
+protocol remain recorded but inactive. Also clear explicit checkpoint points
+when shortening the update budget. Restoring the original cadence reactivates
+the original evaluation protocol; a short check does not validate that lifecycle.
+
 All candidates stop at **1000 successful optimizer updates**, the plotted
 horizon. Explicit archived `paper_max_wandb_step=1000` is preserved; legacy
 `num_epochs=100000` is not treated as the release budget. Historical W&B
