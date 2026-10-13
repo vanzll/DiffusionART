@@ -276,14 +276,15 @@ on disk. Set `runtime.log: wandb` for [scalar logging](docs/logging.md).
 
 **Reward quality matters.** As with ReFL and other reward-based fine-tuning
 methods, DiffusionART depends on how well the reward model captures the desired
-behavior. Its fast reward improvement can also expose reward-model weaknesses
-sooner: a higher score does not necessarily mean better generations.
+behavior. Our experiments use open-source reward models. For practical
+applications, we recommend higher-quality reward models better aligned with
+the intended use case: DiffusionART improves rewards quickly, which can also
+expose weaknesses in the reward model and lead to reward hacking sooner.
 
-In our experiments, different algorithms can exhibit comparable visual
-degradation at similar reward levels. This suggests a shared limitation of the
-reward model rather than a failure unique to DiffusionART. Reward hacking should
-therefore be assessed alongside generated samples and independent quality
-metrics, not reward curves alone.
+In our experiments, when different algorithms reach a comparable score on an
+optimized dimension, they tend to exhibit similar levels of degradation in
+other dimensions. This suggests a shared limitation of the reward model
+rather than a failure unique to DiffusionART.
 
 ## Learn More
 
