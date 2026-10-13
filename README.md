@@ -210,12 +210,21 @@ uv run --locked --extra diffusers visual-rl \
 ```
 
 Video recipes use the same entrypoint inside the video environment.
+For shared multi-node preparation, generate a fresh launch ID once:
+
+```bash
+python -c 'import uuid; print(uuid.uuid4().hex)'
+```
+
+Export that **same value** as `PREPARATION_RUN_ID` on every node. This lets
+peers reuse one full asset validation within this launch; use a new ID on restart.
 T2V (400 updates):
 
 ```bash
 visual-rl --config configs/paper/video/hunyuan_art_721.yaml \
   --nproc-per-node 8 --nnodes 4 --node-rank "$NODE_RANK" \
-  --master-addr "$MASTER_ADDR"
+  --master-addr "$MASTER_ADDR" --preparation-run-id "$PREPARATION_RUN_ID" \
+  --rendezvous-timeout-seconds 7200
 ```
 
 I2V (400 updates, automatically generated evaluation references):
@@ -223,7 +232,8 @@ I2V (400 updates, automatically generated evaluation references):
 ```bash
 visual-rl --config configs/examples/wan_art_online_eval.yaml \
   --nproc-per-node 8 --nnodes 4 --node-rank "$NODE_RANK" \
-  --master-addr "$MASTER_ADDR"
+  --master-addr "$MASTER_ADDR" --preparation-run-id "$PREPARATION_RUN_ID" \
+  --rendezvous-timeout-seconds 7200
 ```
 
 Run on each node with its rank and a shared asset/output root. Models and

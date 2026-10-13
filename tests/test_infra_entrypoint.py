@@ -104,7 +104,9 @@ def test_multinode_launcher_preserves_global_prompt_count(tmp_path, monkeypatch)
     path = tmp_path / "config.yaml"
     path.write_text(yaml.safe_dump(c))
     monkeypatch.setattr(train, "get_backend", lambda c: SimpleNamespace(load=lambda: pytest.fail("GPU load")))
-    monkeypatch.setattr("visual_rl.prepare_distributed.prepare_shared_assets", lambda *a: None)
+    preparation_calls = []
+    monkeypatch.setattr("visual_rl.prepare_distributed.prepare_shared_assets",
+                        lambda *a, **kw: preparation_calls.append(kw))
     commands = []
 
     def execute(executable, command):
@@ -114,13 +116,32 @@ def test_multinode_launcher_preserves_global_prompt_count(tmp_path, monkeypatch)
     monkeypatch.setattr(train.os, "execv", execute)
     with pytest.raises(SystemExit):
         main(["--config", str(path), "--nproc-per-node", "8", "--nnodes", "4",
-              "--node-rank", "2", "--master-addr", "10.0.0.1", "--max-updates", "6"])
+              "--node-rank", "2", "--master-addr", "10.0.0.1", "--max-updates", "6",
+              "--rendezvous-timeout-seconds", "7200", "--preparation-run-id", "one-launch"])
     assert "--nnodes=4" in commands[0] and "--node-rank=2" in commands[0]
+    assert "--rdzv-conf=timeout=7200" in commands[0]
+    assert preparation_calls == [{"run_id": "one-launch"}]
     assert commands[0][-2:] == ["--max-updates", "6"]
     assert load_config(path).sampling.prompts_per_rollout == 32
 
 
-def test_shared_preparation_reuses_generated_manifest(tmp_path, monkeypatch):
+@pytest.mark.parametrize("arguments", [
+    ["--rendezvous-timeout-seconds", "0"],
+    ["--rendezvous-timeout-seconds", "-1"],
+    ["--preparation-run-id", ""],
+    ["--preparation-run-id", "   "],
+    ["--preparation-run-id", "x" * 129],
+])
+def test_invalid_launch_options_fail_before_preparation(arguments, monkeypatch):
+    monkeypatch.setattr("visual_rl.prepare_assets.plan_environment",
+                        lambda *a: pytest.fail("invalid launch prepared assets"))
+    with pytest.raises(SystemExit) as error:
+        main(["--config", str(EXAMPLE), *arguments])
+    assert error.value.code == 2
+
+
+@pytest.mark.parametrize("run_id", [None, "unique-launch-a"])
+def test_shared_preparation_reuses_generated_manifest(tmp_path, monkeypatch, run_id):
     from visual_rl.prepare_distributed import prepare_shared_assets
 
     config = tmp_path / "config.yaml"
@@ -138,14 +159,20 @@ def test_shared_preparation_reuses_generated_manifest(tmp_path, monkeypatch):
         destination.write_text("generated")
         os.environ["TRAIN_SHA"] = "recorded"
 
-    prepare_shared_assets(config, plan, prepare)
+    prepare_shared_assets(config, plan, prepare, run_id=run_id)
     monkeypatch.delenv("TRAIN_SHA")
-    prepare_shared_assets(config, plan, prepare)
-    assert len(calls) == 2 and os.environ["TRAIN_SHA"] == "recorded"
-    assert calls[1] == ([], plan[1])
+    prepare_shared_assets(config, plan, prepare, run_id=run_id)
+    assert len(calls) == (2 if run_id is None else 1)
+    assert os.environ["TRAIN_SHA"] == "recorded"
+    if run_id is None:
+        assert calls[1] == ([], plan[1])
+    else:
+        monkeypatch.delenv("TRAIN_SHA")
+        prepare_shared_assets(config, plan, prepare, run_id="unique-launch-b")
+        assert len(calls) == 2  # A new launch fully validates again.
     destination.unlink()
     monkeypatch.delenv("TRAIN_SHA")
-    prepare_shared_assets(config, plan, prepare)
+    prepare_shared_assets(config, plan, prepare, run_id=run_id)
     assert len(calls) == 3
 
 
@@ -161,7 +188,8 @@ def test_resume_execution_digest_checks_active_budget(tmp_path):
     assert replace(bound, runtime=replace(bound.runtime, checkpoint_keep=1)).execution_fingerprint() != bound.execution_fingerprint()
 
 
-def test_failed_shared_preparation_is_not_cached(tmp_path, monkeypatch):
+@pytest.mark.parametrize("run_id", [None, "unique-failed-launch"])
+def test_failed_shared_preparation_is_not_cached(tmp_path, monkeypatch, run_id):
     from visual_rl.prepare_distributed import prepare_shared_assets
 
     config = tmp_path / "config.yaml"
@@ -172,5 +200,5 @@ def test_failed_shared_preparation_is_not_cached(tmp_path, monkeypatch):
         raise ConfigError("download failed")
 
     with pytest.raises(ConfigError, match="download failed"):
-        prepare_shared_assets(config, ([], []), fail)
+        prepare_shared_assets(config, ([], []), fail, run_id=run_id)
     assert not list((tmp_path / "cache/prepared").glob("*.json"))

@@ -29,12 +29,17 @@ def _bindings(spec):
     return names
 
 
-def prepare_shared_assets(config_path, plan, prepare, *, timeout=7200):
+def prepare_shared_assets(config_path, plan, prepare, *, timeout=7200, run_id=None):
     """Serialize preparation, then share its generated environment bindings.
 
     Nodes must use the same shared cache, model/data bindings and recipe. The
     lock wait is bounded; this is not a hard deadline for filesystem calls.
     Standard Hub machinery still owns model download/cache integrity.
+
+    A fresh run_id shared by all nodes makes the receipt specific to this
+    launch. The first node fully prepares and validates the assets; peers reuse
+    that completed validation on the same shared filesystem. Without run_id,
+    existing receipts are revalidated as before.
     """
     spec = _read(Path(config_path)).get("assets", {})
     if not spec:
@@ -53,6 +58,11 @@ def prepare_shared_assets(config_path, plan, prepare, *, timeout=7200):
                  and Path(value).is_file()}
     identity = hashlib.sha256(json.dumps({"assets": spec, "bindings": inputs, "manifests": manifests},
                                         sort_keys=True).encode()).hexdigest()
+    if run_id is not None:
+        if not isinstance(run_id, str) or not run_id.strip() or len(run_id) > 128:
+            raise ConfigError("shared preparation run_id must be a nonempty string of at most 128 characters")
+        identity = hashlib.sha256(json.dumps({"asset_identity": identity, "run_id": run_id},
+                                            sort_keys=True).encode()).hexdigest()
     directory = root / "prepared"
     directory.mkdir(parents=True, exist_ok=True)
     receipt = directory / f"{identity}.json"
@@ -72,6 +82,8 @@ def prepare_shared_assets(config_path, plan, prepare, *, timeout=7200):
             if (record.get("identity") == identity and set(values) <= names
                     and all(Path(path).exists() for path in record.get("paths", []))):
                 os.environ.update(values)
+                if run_id is not None:
+                    return
                 # Reuse conversion/conditioning, but still validate its existing
                 # receipts and inventory. Never redownload model snapshots here.
                 prepare(([], plan[1]))

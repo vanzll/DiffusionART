@@ -35,7 +35,12 @@ explicit loopback address; this is not a GPU training acceptance result.
 Use the same normal entrypoint and change the configuration. For multiple nodes,
 use torchrun's allocation-appropriate rendezvous/node settings and a reachable
 master address, not loopback; no private launcher or agent skill is required. Each node needs
-the same package/environment/assets. `VISUAL_RL_COLLECTIVE_TIMEOUT_SECONDS`
+the same package/environment/assets. With `visual-rl --nproc-per-node`, use a
+fresh `--preparation-run-id` shared by every node to validate shared assets
+once per launch. Keep these assets unchanged until the launch finishes.
+Without this ID, each node revalidates cached transformations serially.
+`--rendezvous-timeout-seconds` controls torchrun's peer-joining wait (default
+900 seconds); it is separate from `VISUAL_RL_COLLECTIVE_TIMEOUT_SECONDS`, which
 controls the collective timeout (default 300 seconds); it does not bound disk
 operations. Do not launch a `distributed: none` configuration with multiple
 workers: that combination is rejected before loading models or writing output.

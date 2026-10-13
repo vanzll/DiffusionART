@@ -30,6 +30,10 @@ def main(argv=None):
     parser.add_argument("--node-rank", type=int, default=0)
     parser.add_argument("--master-addr")
     parser.add_argument("--master-port", type=int, default=29500)
+    parser.add_argument("--rendezvous-timeout-seconds", type=int, default=900,
+                        help="multi-node launch wait after shared asset preparation")
+    parser.add_argument("--preparation-run-id",
+                        help="fresh ID shared by this launch's nodes for one full shared asset validation")
     parser.add_argument("--prepare-only", action="store_true", help="prepare assets without starting training")
     parser.add_argument("--max-updates", type=int, help="override total optimizer-update budget")
     parser.add_argument(
@@ -42,6 +46,11 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.nproc_per_node is not None and args.nproc_per_node < 1:
         parser.error("--nproc-per-node must be positive")
+    if args.rendezvous_timeout_seconds < 1:
+        parser.error("--rendezvous-timeout-seconds must be positive")
+    if args.preparation_run_id is not None and (
+            not args.preparation_run_id.strip() or len(args.preparation_run_id) > 128):
+        parser.error("--preparation-run-id must be nonempty and at most 128 characters")
     if (args.nnodes < 1 or not 0 <= args.node_rank < args.nnodes
             or not 1 <= args.master_port <= 65535):
         parser.error("invalid node count/rank or master port")
@@ -112,7 +121,8 @@ def main(argv=None):
         if args.nnodes > 1:
             from .prepare_distributed import prepare_shared_assets
 
-            prepare_shared_assets(args.config, plan, prepare_assets)
+            preparation_options = {"run_id": args.preparation_run_id} if args.preparation_run_id else {}
+            prepare_shared_assets(args.config, plan, prepare_assets, **preparation_options)
         else:
             prepare_assets(plan)
         config = load_config(args.config, overrides)
@@ -127,7 +137,8 @@ def main(argv=None):
                 command.append("--standalone")
             else:
                 command.extend([f"--nnodes={args.nnodes}", f"--node-rank={args.node_rank}",
-                                f"--master-addr={args.master_addr}", f"--master-port={args.master_port}"])
+                                f"--master-addr={args.master_addr}", f"--master-port={args.master_port}",
+                                f"--rdzv-conf=timeout={args.rendezvous_timeout_seconds}"])
             command.extend([f"--nproc-per-node={args.nproc_per_node}", "-m", "visual_rl.train",
                             "--config", args.config])
             for option, value in (("--output-dir", args.output_dir), ("--resume", args.resume)):

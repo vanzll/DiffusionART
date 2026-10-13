@@ -467,6 +467,16 @@ on every node with a shared rendezvous address and distinct `--node-rank`;
 global prompt count must divide the total rank count. Algorithm configs change
 the algorithm; they do not replace the launcher or runtime.
 
+For automatic preparation on a shared filesystem, the `visual_rl.train`
+launcher accepts `--preparation-run-id ID`. Generate a fresh ID for each launch
+and supply the same ID to every node. One node fully prepares and verifies the
+assets before publishing this launch's bindings; peers then reuse that completed
+verification. Failed preparation does not publish readiness. Reusing an old ID
+would reuse its validation, so never carry it across launches or asset changes.
+Without this option, cached transformations are reverified by each node.
+`--rendezvous-timeout-seconds` controls the subsequent torchrun wait (default
+900 seconds); it changes no sampling or optimizer settings.
+
 The supplied examples are short integration runs, not frozen paper recipes.
 Full pretrained memory, historical prompt order and paper-result reproduction
 remain separate acceptance steps. Logging and cost-axis setup are described in
