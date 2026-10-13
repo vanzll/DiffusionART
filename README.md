@@ -306,8 +306,8 @@ If you find DiffusionART inspiring or useful for your projects, please consider 
 
 <a href="https://www.star-history.com/#vanzll/DiffusionART&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/readme/star-history-dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset="assets/readme/star-history-light.svg">
-    <img alt="DiffusionART stars since October 12, 2026" src="assets/readme/star-history-light.svg" width="800">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/vanzll/DiffusionART/star-history/star-history-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/vanzll/DiffusionART/star-history/star-history-light.svg">
+    <img alt="DiffusionART stars since October 12, 2026" src="https://raw.githubusercontent.com/vanzll/DiffusionART/star-history/star-history-light.svg" width="800">
   </picture>
 </a>
