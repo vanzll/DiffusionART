@@ -27,8 +27,9 @@ uv run --locked --extra diffusers visual-rl \
 
 This runs 1000 successful optimizer updates, not a smoke test. The parent
 process downloads pinned SD3, PickScore and processor snapshots using the Hub
-cache/download APIs. It downloads the pinned public Flow-GRPO PickScore prompt
-lists (25,432 train / 2,048 eval), checks their SHA256, converts them without
+cache/download APIs. It downloads the PickScore prompt lists from our
+[HF dataset](https://huggingface.co/datasets/vanzl/DiffusionART-Prompts)
+(25,432 train / 2,048 eval), checks their SHA256, converts them without
 changing order and verifies the resulting manifest SHA256. GPU workers start
 only after preparation completes. A gated-model error requires granting model
 access; the launcher cannot accept licenses for you.
@@ -44,14 +45,20 @@ remain strict integrity checks. Using custom data does not certify it as the
 paper dataset. The public default dataset is not claimed byte-identical to an
 unavailable historical training snapshot.
 
-The seven SD3 PickScore paper configs share this asset preparation. Other paper
-configs also default to online W&B, but keep their task-specific data setup.
+Paper PickScore, GenEval, OCR and four-reward configs download their benchmark
+prompts from the same pinned HF dataset. GenEval and OCR still need their
+task-specific reward-worker setup. Other paper configs also default to online W&B.
 After [video environment installation](video-installation.md), the same
 entrypoint downloads video models and training texts, prepares Hunyuan
 conditioning, or converts the distilled Wan policy. Initial Hunyuan text
 encoding uses a GPU and may take hours, with row-level progress. Wan's fixed
-evaluation images currently need one user-supplied manifest path; they are not
-replaced with newly generated images.
+evaluation images need a user-supplied manifest for the historical protocol.
+For a self-contained I2V dataset path, use
+`configs/examples/wan_art_online_eval.yaml` (400 updates). It downloads the
+frozen evaluation prompts from HF and generates FLUX references on first use,
+then reuses their cached pixels for every checkpoint. This is a new evaluation
+protocol, not the original fixed-JPEG evaluation. The corresponding `wan_nft`,
+`wan_fast`, `wan_dance` and `wan_refl` online-eval recipes use the same protocol.
 
 `--validate` and `--print-config` plan default paths without downloads.
 `--prepare-only` prepares assets without starting workers or requiring W&B

@@ -1,5 +1,5 @@
 # OCR restoration ablation candidate; not certified historical reproduction.
-extends: sd3_ocr_art.yaml
+extends: ["sd3_ocr_art.yaml","../ocr-assets.yaml"]
 name: paper-sd3_ocr_art_one_update-candidate
 algorithm:
   options:

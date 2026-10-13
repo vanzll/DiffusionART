@@ -1,5 +1,5 @@
 # Full-budget training candidate; not certified historical reproduction.
-extends: ../../examples/sd3_nft_pickscore.yaml
+extends: ["../../examples/sd3_nft_pickscore.yaml","../ocr-assets.yaml"]
 name: paper-sd3_ocr_nft_ema-candidate
 seed: 42
 algorithm:

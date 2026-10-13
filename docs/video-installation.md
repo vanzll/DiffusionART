@@ -108,14 +108,19 @@ Pretrained GPU execution and memory acceptance have **not** been verified.
 
 ### Exact Public Data And Blocker
 
+All dataset downloads below now use our public
+[HF mirror](https://huggingface.co/datasets/vanzl/DiffusionART-Prompts), revision
+`9d947fb510d67a8e5334ec1d8c7d8927f7658c08`. Source bytes, converted hashes and
+frozen selections are unchanged. Upstream attribution is retained in the dataset.
+
 On 2026-10-04, the following pinned URLs were fetched and converted on CPU.
 All source and output SHA256 values matched the asset YAML pins:
 
 | Binding | Exact source | Rows |
 | --- | --- | --- |
-| Hunyuan train raw | [DanceGRPO video_prompts.txt at15cc71d](https://raw.githubusercontent.com/XueZeyue/DanceGRPO/15cc71d53cc2e6e18a68ee607d5fb6ba9a99e344/assets/video_prompts.txt) | 50,000 |
-| Hunyuan eval raw | [VidProM example CSV at0c0900e](https://huggingface.co/datasets/WenhaoWang/VidProM/resolve/0c0900e6a037b058b1903bc1de9bcb6037d9fc24/example/VidProM_unique_example.csv) | Frozen100 |
-| Wan train | [DanceGRPO consist-id.txt at15cc71d](https://raw.githubusercontent.com/XueZeyue/DanceGRPO/15cc71d53cc2e6e18a68ee607d5fb6ba9a99e344/assets/consist-id.txt) | 27,815 |
+| Hunyuan train raw | [DanceGRPO video_prompts.txt at15cc71d](https://huggingface.co/datasets/vanzl/DiffusionART-Prompts/resolve/9d947fb510d67a8e5334ec1d8c7d8927f7658c08/sources/e22c29dba55a-video_prompts.txt) | 50,000 |
+| Hunyuan eval raw | [VidProM example CSV at0c0900e](https://huggingface.co/datasets/vanzl/DiffusionART-Prompts/resolve/9d947fb510d67a8e5334ec1d8c7d8927f7658c08/sources/1e07955405d5-VidProM_unique_example.csv) | Frozen100 |
+| Wan train | [DanceGRPO consist-id.txt at15cc71d](https://huggingface.co/datasets/vanzl/DiffusionART-Prompts/resolve/9d947fb510d67a8e5334ec1d8c7d8927f7658c08/sources/91943875adfe-consist-id.txt) | 27,815 |
 
 Hunyuan eval extracts the original ordered UUIDs of `t2v-vidprom-val100-v1`,
 inspected read-only in research commit `3ca2a36f6b20c53a06813013234666d9c033a660`.
@@ -131,6 +136,12 @@ download** in the inspected provenance. Wan fails before model downloads unless
 JSONL) is supplied. It never generates replacement evaluation images or
 substitutes cached images for online FLUX training references. A default Wan
 command is therefore not one-command paper-ready. In the Wan environment:
+
+For a new evaluation protocol that needs only public HF prompts, use
+`configs/examples/wan_art_online_eval.yaml` (or the NFT/Fast/Dance/ReFL variants).
+FLUX generates fixed-seed evaluation references lazily and caches their exact
+pixels. These full-budget recipes leave training unchanged and do not require
+the old JPEGs. See [reference caching and comparisons](wan-runner.md#automatic-evaluation-references).
 
 A training-only short config may explicitly set `evaluation.every_updates: 0`
 and `evaluation.at_updates: []`. Preparation then defers only the fixed eval
@@ -166,10 +177,10 @@ public source files (CPU only):
 export DATA_ROOT=/absolute/writable/shared/i2v-assets
 mkdir -p "$DATA_ROOT/sources"
 curl --fail --location --max-time 120 \
-  https://raw.githubusercontent.com/XueZeyue/DanceGRPO/15cc71d53cc2e6e18a68ee607d5fb6ba9a99e344/assets/consist-id.txt \
+  https://huggingface.co/datasets/vanzl/DiffusionART-Prompts/resolve/9d947fb510d67a8e5334ec1d8c7d8927f7658c08/sources/91943875adfe-consist-id.txt \
   --output "$DATA_ROOT/sources/consist-id.txt"
 curl --fail --location --max-time 120 \
-  https://huggingface.co/datasets/WenhaoWang/VidProM/resolve/0c0900e6a037b058b1903bc1de9bcb6037d9fc24/example/VidProM_unique_example.csv \
+  https://huggingface.co/datasets/vanzl/DiffusionART-Prompts/resolve/9d947fb510d67a8e5334ec1d8c7d8927f7658c08/sources/1e07955405d5-VidProM_unique_example.csv \
   --output "$DATA_ROOT/sources/vidprom.csv"
 python -m visual_rl.evaluation.prepare_i2v plan \
   --train-prompts "$DATA_ROOT/sources/consist-id.txt" \
@@ -243,7 +254,7 @@ python -m visual_rl.train --config configs/examples/hunyuan_art_eval1000.yaml \
   --nproc-per-node 8
 ```
 
-No duplicate dataset is hosted: preparation downloads the original VidProM CSV
+Preparation downloads the byte-identical VidProM CSV from our HF dataset
 and extracts the frozen ordered UUIDs in `configs/paper/hunyuan-eval1000-assets.yaml`.
 The raw JSONL SHA256 is `3b3392989d399ec0b840fc1161d83858872d3843806f4800162dd728958f7e69`.
 To reproduce the selection itself with local copies of the two pinned sources:

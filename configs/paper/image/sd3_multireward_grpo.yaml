@@ -1,5 +1,5 @@
 # Source-mapped candidate, NOT certified execution of the archived runtime.
-extends: [sd3_geneval_grpo.yaml, sd3_multireward_rewards.yaml]
+extends: ["sd3_geneval_grpo.yaml","sd3_multireward_rewards.yaml","../geneval-assets.yaml"]
 name: paper-sd3_multireward_grpo-candidate
 seed: 42
 algorithm:

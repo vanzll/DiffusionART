@@ -1,0 +1,9 @@
+# Full training recipe with newly generated FLUX evaluation references.
+extends: [../paper/video/wan_art_11.yaml, ../paper/wan-online-eval-assets.yaml]
+name: wan-art-online-eval
+runtime:
+  output_dir: ${PAPER_VIDEO_OUTPUT_ROOT}/wan-art-online-eval
+provenance:
+  kind: public_online_reference_evaluation
+  run_id: null
+  evaluation_protocol: flux_fixed_seed_cached_references_video8_rm4_shift5

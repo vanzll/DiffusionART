@@ -25,7 +25,7 @@ assets:
   prompts:
     - env: WAN_TRAIN_MANIFEST
       sha_env: WAN_TRAIN_SHA256
-      url: https://raw.githubusercontent.com/XueZeyue/DanceGRPO/15cc71d53cc2e6e18a68ee607d5fb6ba9a99e344/assets/consist-id.txt
+      url: https://huggingface.co/datasets/vanzl/DiffusionART-Prompts/resolve/9d947fb510d67a8e5334ec1d8c7d8927f7658c08/sources/91943875adfe-consist-id.txt
       source_sha256: 85096428c4aa4467345a1ddd0855f004d26c1ba39cffafd4a06d8b8d798a4f6f
       sha256: 63356edb1372c1dd814f951e8dddfa69204426eb72f8127ec57eb268f0db2251
       prefix: train

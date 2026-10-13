@@ -52,8 +52,12 @@ while `--validate` checks the planned config without downloading assets.
 ### Other Benchmarks And Local Overrides
 
 Each YAML inherits its integration recipe and overrides scientific values from
-its own run. GenEval/OCR still need their task-specific worker setup and benchmark
-manifests; see [GenEval](geneval.md), [OCR](sd3-ocr.md) and
+its own run. GenEval/OCR prompts are downloaded from the pinned
+[HF dataset](https://huggingface.co/datasets/vanzl/DiffusionART-Prompts).
+Their public Flow-GRPO splits preserve annotations and repeated evaluation rows;
+they are not certified byte-identical copies of private historical data.
+GenEval/OCR still need their task-specific worker setup; see
+[GenEval](geneval.md), [OCR](sd3-ocr.md) and
 [four-reward setup](multireward.md). The four-reward recipe also prepares its
 declared HF model/scorer snapshots automatically, but not the separate GenEval
 worker bundle. Recipes without automatic asset declarations use the local-asset
@@ -69,8 +73,8 @@ the PickScore Quick Start:
 - `OCR_MANIFEST`, `OCR_MANIFEST_SHA256`: OCR worker assets.
 - For each selected benchmark, `GENEVAL`, `OCR`, or `PICKSCORE` prefix:
   `*_TRAIN_MANIFEST`, `*_TRAIN_SHA256`, `*_EVAL_MANIFEST`, `*_EVAL_SHA256`.
-  Supply the full benchmark manifests and their actual SHA256 values, not the
-  small example manifests. Historical data hashes are not recoverable here.
+  These are optional overrides of the automatically prepared public splits.
+  Use full benchmark manifests rather than the small example fixtures.
 - `PAPER_OUTPUT_ROOT`: caller-selected writable output root.
 
 Only variables required by the chosen inheritance chain need to be set. Model

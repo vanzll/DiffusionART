@@ -14,14 +14,14 @@ assets:
   prompts:
     - env: PICKSCORE_TRAIN_MANIFEST
       sha_env: PICKSCORE_TRAIN_SHA256
-      url: https://raw.githubusercontent.com/yifan123/flow_grpo/879042cf5707f8b90daa98d147d7deac2317c5da/dataset/pickscore/train.txt
+      url: https://huggingface.co/datasets/vanzl/DiffusionART-Prompts/resolve/9d947fb510d67a8e5334ec1d8c7d8927f7658c08/sources/84b2fc9bb85c-train.txt
       source_sha256: 2f425adcbb9a6d0feee7c6c448e1cb83a1f71deca9434b803907e2578eca837f
       sha256: 25ec5eb3d187edc109f9191eb173e03c6cdeea41acd35486ece2ad494189c8b0
       prefix: train
       format: text
     - env: PICKSCORE_EVAL_MANIFEST
       sha_env: PICKSCORE_EVAL_SHA256
-      url: https://raw.githubusercontent.com/yifan123/flow_grpo/879042cf5707f8b90daa98d147d7deac2317c5da/dataset/pickscore/test.txt
+      url: https://huggingface.co/datasets/vanzl/DiffusionART-Prompts/resolve/9d947fb510d67a8e5334ec1d8c7d8927f7658c08/sources/f61ace68ff56-test.txt
       source_sha256: d75c025fa451866e70f7e36243f7cdd93095523cb51f5f9651f2ce3236d20262
       sha256: 23fa0857b1ee49097d94a5410db8944c3859dfddf54ca45e35491991de11e4e0
       prefix: eval

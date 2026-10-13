@@ -1,5 +1,35 @@
 # Wan I2V Integration
 
+## Automatic Evaluation References
+
+Use the full-budget recipe below for HF prompt downloads and on-demand FLUX
+evaluation references, without supplying historical images:
+
+```bash
+python -m visual_rl.train --config configs/examples/wan_art_online_eval.yaml \
+  --nproc-per-node 8
+```
+
+Use `wan_nft_online_eval.yaml`, `wan_fast_online_eval.yaml`,
+`wan_dance_online_eval.yaml` or `wan_refl_online_eval.yaml` to change algorithm.
+These inherit the 400-update training recipes and change only evaluation inputs
+and output location. Install the native video environment and configure HF/W&B
+credentials as usual; GenEval is not required for this video setup.
+
+FLUX generates each evaluation image once. Its seed depends on the evaluation
+seed and sample ID, never the optimizer step, rank or sample order. The decoded
+reference is cached losslessly as PNG under `evaluation/wan_references` in the
+run output, with its settings and image hash. Later evaluations and resumed
+runs reuse those pixels; a corrupt entry raises an error instead of silently
+changing the evaluation input. First-use generation time belongs to evaluation.
+
+For comparisons across algorithms, set `model.options.evaluation_reference_cache`
+to the same writable directory in all configs. Model identity, geometry,
+generation settings and runtime versions must match for shared reuse.
+This opt-in protocol does not reproduce the archived fixed JPEGs. Compare all
+methods with the same references rather than combining these new eval scores
+with historical scores. The existing paper profiles retain fixed-image evaluation.
+
 The `wan_i2v_distilled` backend connects DiffusionART, DiffusionNFT, Flow-GRPO-Fast
 DanceGRPO and final-step ReFL to the same single-device/FSDP lifecycle used by Hunyuan: MP4
 scoring, fixed-reference evaluation, retained local videos, optimizer-step/cost
@@ -54,8 +84,9 @@ silently replaced by cached references.
 
 Set `WAN_EVAL_MANIFEST`/`WAN_EVAL_SHA256` to a hashed I2V JSONL manifest. Each
 row has `sample_id`, `prompt`, `image` and `image_sha256`; image paths resolve
-relative to the manifest. Evaluation always uses these fixed images, never
-fresh FLUX outputs. See [prompt data](prompt-data.md) for the schema.
+relative to the manifest. The default fixed-image evaluation uses these exact
+images. Online-eval recipes instead bind the same variable to text-only prompts
+and explicitly enable the mode described above. See [prompt data](prompt-data.md).
 
 ### Precomputed References
 

@@ -1,5 +1,5 @@
 # Archived joint-four recipe, with explicitly approved public scalar semantics.
-extends: ../../examples/sd3_multireward.yaml
+extends: ["../../examples/sd3_multireward.yaml","../geneval-assets.yaml"]
 name: paper-sd3_multireward_art-candidate
 seed: 42
 algorithm:

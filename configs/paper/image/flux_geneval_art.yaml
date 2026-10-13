@@ -1,5 +1,5 @@
 # Full-budget training candidate; not certified historical reproduction.
-extends: ../../examples/flux_pickscore.yaml
+extends: ["../../examples/flux_pickscore.yaml","../geneval-assets.yaml"]
 name: paper-flux_geneval_art-candidate
 seed: 42
 algorithm:

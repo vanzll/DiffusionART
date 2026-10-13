@@ -1,5 +1,12 @@
 # Prompt Datasets
 
+Paper recipes download prompts exclusively from
+[vanzl/DiffusionART-Prompts](https://huggingface.co/datasets/vanzl/DiffusionART-Prompts)
+at a pinned revision. The dataset includes PickScore, GenEval, OCR, T2V and I2V
+training prompts, plus frozen VidProM validation100/1000. Its source files and
+converted manifests retain upstream provenance. No upstream GitHub dataset
+download is needed by these recipes. Base/reward models are separate assets.
+
 Native image runners consume UTF-8 JSONL with one sample per line. Each row has
 a unique, nonempty `sample_id` and nonempty `prompt`. Keep repeated benchmark
 prompts as separate sample IDs when they represent separate evaluation samples.
@@ -63,6 +70,9 @@ image paths resolve against the manifest's directory. Each referenced image is
 hashed before use. For custom images, `image_sha256` may be omitted; their
 contents become part of the automatically recorded dataset identity. A supplied
 image hash remains strict. Text-only tasks reject image fields rather than ignoring them.
-The native Wan runner accepts fixed, hashed images for evaluation; training uses
-its explicitly configured online FLUX reference-image path. See the
+The native Wan runner defaults to fixed, hashed evaluation images. Explicit
+`model.options.evaluation_reference_mode: online_flux` instead accepts text-only
+evaluation prompts and generates deterministic, cached FLUX references on first
+use. This is a separate evaluation protocol. Training retains its configured
+reference-image path. See the
 [Wan guide](wan-runner.md) for preparation and launch commands.

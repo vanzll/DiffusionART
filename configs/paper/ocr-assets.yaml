@@ -1,0 +1,18 @@
+assets:
+  defaults:
+    PAPER_OUTPUT_ROOT: outputs
+  prompts:
+    - env: OCR_TRAIN_MANIFEST
+      sha_env: OCR_TRAIN_SHA256
+      url: https://huggingface.co/datasets/vanzl/DiffusionART-Prompts/resolve/9d947fb510d67a8e5334ec1d8c7d8927f7658c08/sources/83eab552dd5c-train.txt
+      source_sha256: 2eb32ce1c5fd1ffec94070be84252419ec848329d9adde9c2708867882fbce5f
+      sha256: e3c48ad7e87294983b08fff348fa7e56e44084fd0c49f9624b4664e9c70bff17
+      prefix: train
+      format: text
+    - env: OCR_EVAL_MANIFEST
+      sha_env: OCR_EVAL_SHA256
+      url: https://huggingface.co/datasets/vanzl/DiffusionART-Prompts/resolve/9d947fb510d67a8e5334ec1d8c7d8927f7658c08/sources/ec03c305066e-test.txt
+      source_sha256: 4dd8caf3ab6ade73bd376c7d14c6ca49b6eacfb1bd321e22c40714ae4a98d4dc
+      sha256: 1d90afacf793304c55047633c3659e459b659c45897e4b712fc020aad4ca8226
+      prefix: eval
+      format: text

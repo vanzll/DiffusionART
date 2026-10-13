@@ -1,0 +1,18 @@
+assets:
+  defaults:
+    PAPER_OUTPUT_ROOT: outputs
+  prompts:
+    - env: GENEVAL_TRAIN_MANIFEST
+      sha_env: GENEVAL_TRAIN_SHA256
+      url: https://huggingface.co/datasets/vanzl/DiffusionART-Prompts/resolve/9d947fb510d67a8e5334ec1d8c7d8927f7658c08/sources/297ba37de16a-train_metadata.jsonl
+      source_sha256: 34ff787e05efab6fb0c54742f5357d7a850360835818e401a4e55de77f8c9923
+      sha256: ba30e2e37dc8fa3e144ad02a6d38536a4ef1b5f7542522008ecc1216641b5836
+      prefix: train
+      format: geneval
+    - env: GENEVAL_EVAL_MANIFEST
+      sha_env: GENEVAL_EVAL_SHA256
+      url: https://huggingface.co/datasets/vanzl/DiffusionART-Prompts/resolve/9d947fb510d67a8e5334ec1d8c7d8927f7658c08/sources/87e99bf218ad-test_metadata.jsonl
+      source_sha256: cec4b24b9fee7bac21c8f787054ecc8dc9ff831674037713a4cd35e0f0a74a28
+      sha256: c295cb7e2cd70cd2c1df7ee549e526f0bb37d2d05804ce3159ef7cdc84945e1b
+      prefix: eval
+      format: geneval

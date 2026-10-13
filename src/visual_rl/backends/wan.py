@@ -2,7 +2,7 @@
 
 Online FLUX references are generated inside the measured training phase.
 Fixed training references require an explicit fixed_images opt-in.
-Evaluation uses fixed, hashed reference images, never regenerated references.
+Evaluation defaults to fixed images; online FLUX references require opt-in.
 """
 
 import json
@@ -15,6 +15,7 @@ from PIL import Image
 
 from ..config import ConfigError
 from ..data import PromptDataset
+from ..evaluation.wan_references import cached_reference, evaluation_reference_mode
 from ..models.hunyuan_assets import load_reward
 from ..models.wan import WanI2VConditioning
 from ..models.wan_assets import load_fixed_reference, reference_mode
@@ -28,6 +29,7 @@ _shape = hunyuan._shape
 def validate_config(c):
     try:
         fixed = reference_mode(c.model.options) == "fixed_images"
+        evaluation_reference_mode(c.model.options)
     except ValueError as error:
         raise ConfigError(str(error)) from error
     required = ASSET_KEYS[:2] if fixed else ASSET_KEYS
@@ -36,6 +38,8 @@ def validate_config(c):
         extra.extend(key for key in ASSET_KEYS[2:] if key in c.model.options)
     if "reference_mode" in c.model.options:
         extra.append("reference_mode")
+    extra.extend(key for key in ("evaluation_reference_mode", "evaluation_reference_cache")
+                 if key in c.model.options)
     hunyuan.validate_config(c, model_name="wan_i2v_distilled", task="i2v", extra_model_keys=extra)
     if c.algorithm.name not in wan_video.ALGORITHMS:
         raise ConfigError("choose ART, NFT, Fast-SDE, Dance or final-step ReFL")
@@ -91,6 +95,7 @@ def load_components(c, device):
 
 def load_datasets(c):
     fixed = reference_mode(c.model.options) == "fixed_images"
+    online_evaluation = evaluation_reference_mode(c.model.options) == "online_flux"
     data = PromptDataset.load(c.data.manifest, expected_sha256=c.data.sha256, task="i2v" if fixed else "t2v")
     if fixed:
         # The generic I2V loader also accepts unpinned images; fixed training does not.
@@ -101,7 +106,7 @@ def load_datasets(c):
                     raise ValueError("Wan fixed training requires explicit image_sha256 for every row")
                 load_fixed_reference(row.image, row.image_sha256)
     validation = PromptDataset.load(c.evaluation.manifest, expected_sha256=c.evaluation.manifest_sha256,
-                                    task="i2v") if c.evaluation.enabled else None
+                                    task="t2v" if online_evaluation else "i2v") if c.evaluation.enabled else None
     return data, validation
 
 
@@ -109,10 +114,13 @@ def _predict(c, parts, rows, manifest, repeats, device, *, attempt=0, rank=0, ev
     from ..models.wan_assets import condition_image, generate_reference
 
     fixed = reference_mode(c.model.options) == "fixed_images"
+    online_evaluation = evaluation and evaluation_reference_mode(c.model.options) == "online_flux"
     conditions = []
     for index, row in enumerate(rows):
         stream = "flux" if index == 0 else f"flux:{index}"
-        if evaluation:
+        if online_evaluation:
+            image = cached_reference(c, row, parts.flux, device)
+        elif evaluation:
             if row.image is None:
                 raise ValueError("Wan evaluation requires a fixed reference image")
             with Image.open(row.image) as source:

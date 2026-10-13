@@ -5,7 +5,7 @@ assets:
   - env: HUNYUAN_TRAIN_RAW_MANIFEST
     sha_env: HUNYUAN_TRAIN_RAW_SHA256
     for_env: HUNYUAN_TRAIN_MANIFEST
-    url: https://raw.githubusercontent.com/XueZeyue/DanceGRPO/15cc71d53cc2e6e18a68ee607d5fb6ba9a99e344/assets/video_prompts.txt
+    url: https://huggingface.co/datasets/vanzl/DiffusionART-Prompts/resolve/9d947fb510d67a8e5334ec1d8c7d8927f7658c08/sources/e22c29dba55a-video_prompts.txt
     source_sha256: c96ceb6c93c16809f6fef53d6d488c34c78823e5edd20f6d907d90c9e5653db1
     sha256: b54fe7c10e7530d24e5f928f3f40f9d6c160191301631235463945575b499194
     prefix: train
@@ -13,7 +13,7 @@ assets:
   - env: HUNYUAN_EVAL_RAW_MANIFEST
     sha_env: HUNYUAN_EVAL_RAW_SHA256
     for_env: HUNYUAN_EVAL_MANIFEST
-    url: https://huggingface.co/datasets/WenhaoWang/VidProM/resolve/0c0900e6a037b058b1903bc1de9bcb6037d9fc24/example/VidProM_unique_example.csv
+    url: https://huggingface.co/datasets/vanzl/DiffusionART-Prompts/resolve/9d947fb510d67a8e5334ec1d8c7d8927f7658c08/sources/1e07955405d5-VidProM_unique_example.csv
     source_sha256: 7253eec343d7239f0cc177ce37c26580d95d32190c14be3e3ad114079005095b
     sha256: 3b3392989d399ec0b840fc1161d83858872d3843806f4800162dd728958f7e69
     prefix: eval

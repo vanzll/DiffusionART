@@ -1,5 +1,5 @@
 # Full-budget training candidate; not certified historical reproduction.
-extends: ../../examples/sd3_grpo_pickscore.yaml
+extends: ["../../examples/sd3_grpo_pickscore.yaml","../geneval-assets.yaml"]
 name: paper-sd3_geneval_grpo-candidate
 seed: 42
 algorithm:
