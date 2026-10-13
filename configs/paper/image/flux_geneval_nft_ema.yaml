@@ -1,5 +1,5 @@
 # Native full-budget candidate mapped to the verified asge8y6v runtime.
-extends: ["../../examples/flux_nft_pickscore.yaml","../geneval-assets.yaml"]
+extends: ["../../examples/flux_nft_pickscore.yaml","../geneval-assets.yaml","../flux-model-assets.yaml"]
 name: paper-flux_geneval_nft_ema-candidate
 seed: 42
 algorithm:

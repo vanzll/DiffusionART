@@ -195,8 +195,11 @@ uv run --locked --extra diffusers visual-rl \
 The command prepares pinned models and prompt data before starting **1000
 training updates**. Missing models are downloaded from Hugging Face automatically;
 existing assets are reused. No manual model download is required for this recipe.
-Other benchmarks use their
-matching [recipes and setup guides](docs/paper-image.md).
+GenEval and OCR also download benchmark prompts from
+[our HF dataset](https://huggingface.co/datasets/vanzl/DiffusionART-Prompts).
+First complete the [GenEval scorer setup](docs/geneval.md) or
+[OCR scorer setup](docs/sd3-ocr.md), then use the full training command in that
+guide. See [all image recipes](docs/paper-image.md) for other algorithms.
 
 Resume the latest complete checkpoint, optionally extending the total budget:
 
@@ -206,7 +209,8 @@ uv run --locked --extra diffusers visual-rl \
   --resume latest --max-updates 1500
 ```
 
-Video recipes use the same entrypoint inside the video environment:
+Video recipes use the same entrypoint inside the video environment.
+T2V (400 updates):
 
 ```bash
 visual-rl --config configs/paper/video/hunyuan_art_721.yaml \
@@ -214,9 +218,21 @@ visual-rl --config configs/paper/video/hunyuan_art_721.yaml \
   --master-addr "$MASTER_ADDR"
 ```
 
+I2V (400 updates, automatically generated evaluation references):
+
+```bash
+visual-rl --config configs/examples/wan_art_online_eval.yaml \
+  --nproc-per-node 8 --nnodes 4 --node-rank "$NODE_RANK" \
+  --master-addr "$MASTER_ADDR"
+```
+
 Run on each node with its rank and a shared asset/output root. Models and
-training data are prepared automatically. Wan I2V additionally requires a
-fixed-image eval manifest; see [video setup](docs/video-installation.md).
+prompt data are prepared from HF automatically. I2V generates FLUX evaluation
+images on first use and caches them for later evaluations and resume; no
+pre-existing image manifest is needed. This is a new evaluation protocol,
+separate from historical fixed-image results. See the
+[I2V guide](docs/wan-runner.md#automatic-evaluation-references) for baseline
+recipes and shared reference caches.
 Add `--prepare-only` to prepare without training, or `--validate` for network-free checks. See
 [distributed execution](docs/distributed-execution.md) for multi-node launches and
 [checkpoint/resume](docs/checkpoint-resume.md) for recovery and evaluation.

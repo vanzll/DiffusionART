@@ -36,8 +36,8 @@ python3.10 -m venv .venv-ocr
   'numpy<2' 'paddleocr==2.9.1' 'paddlepaddle==2.6.2'
 ```
 
-Prepare SD3 model assets following the [SD3 guide](sd3-runner.md). Prepare the
-OCR bundle from the exact selected model artifacts, in this layout:
+The full training recipe downloads SD3 automatically. Prepare the OCR bundle
+from the exact selected model artifacts, in this layout:
 
 ```text
 assets/ocr/
@@ -73,15 +73,25 @@ file before constructing the engine. Missing files or dependency drift fail
 instead of selecting another OCR version. These are local synchronous asset
 checks, not network-filesystem deadlines.
 
+## Full Training
+
+After setting `OCR_MANIFEST` and `OCR_MANIFEST_SHA256`, accept the base-model
+license and configure HF/W&B credentials. Run with the OCR-capable interpreter:
+
 ```bash
-.venv-ocr/bin/visual-rl --config configs/examples/sd3_ocr.yaml --validate
-.venv-ocr/bin/visual-rl --config configs/examples/sd3_ocr.yaml
+.venv-ocr/bin/visual-rl \
+  --config configs/paper/image/sd3_ocr_art.yaml --nproc-per-node 8
 ```
 
-The example has four updates and two illustrative prompts, not the paper OCR
-dataset. `--validate` checks configuration; it does not load native models or
-validate GPU memory. Train/eval artifacts and full local checkpoints use the
-same runner as other image rewards.
+This runs 1000 updates and prepares the base model and benchmark prompts from
+HF automatically. The OCR subprocess uses the trainer's Python interpreter,
+so Paddle must be installed in this environment; unlike GenEval, there is no
+separate worker-interpreter setting. No manual prompt download is needed.
+
+The optional `configs/examples/sd3_ocr.yaml` has four updates and two
+illustrative prompts with manually supplied SD3 assets; it is not the full
+experiment. `--validate` checks configuration, not native models or GPU memory.
+Train/eval artifacts and checkpoints use the same runner as other image rewards.
 
 ## Exact Reward Rule
 

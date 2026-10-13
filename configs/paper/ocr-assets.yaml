@@ -1,3 +1,4 @@
+extends: sd3-model-assets.yaml
 assets:
   defaults:
     PAPER_OUTPUT_ROOT: outputs

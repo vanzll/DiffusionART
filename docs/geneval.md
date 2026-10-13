@@ -8,8 +8,8 @@ optimization targets. See [migration provenance](geneval-migration.md).
 **Acceptance status:** scoring rules have CPU fixtures and pinned-upstream
 comparisons; process transport has actual subprocess failure tests. Clean-Linux
 installation, compiled detector operators and pretrained GPU/result parity are
-not yet accepted. The configurations below are short integration candidates,
-not frozen paper-reproduction recipes.
+not yet accepted across all supported environments. A successful short run
+does not certify full paper-performance reproduction.
 
 ## Separate Worker Environment
 
@@ -91,18 +91,27 @@ existing manifest. Every declared file and package version is checked again
 when loading; the class vocabulary is additionally checked against its reference
 hash. Hashing is synchronous local I/O, not a network-filesystem deadline.
 
-Prepare SD3 or FLUX model assets using their respective guides, then:
+## Full Training
+
+After preparing the worker and exporting `GENEVAL_PYTHON`, `GENEVAL_MANIFEST`
+and `GENEVAL_MANIFEST_SHA256`, accept the base-model license and configure
+HF/W&B credentials. Launch from the trainer environment:
 
 ```bash
-uv run --locked --extra diffusers visual-rl --config configs/examples/sd3_geneval.yaml --validate
-uv run --locked --extra diffusers visual-rl --config configs/examples/sd3_geneval.yaml
-# Alternatively: configs/examples/flux_geneval.yaml
+uv run --locked --extra diffusers visual-rl \
+  --config configs/paper/image/sd3_geneval_art.yaml --nproc-per-node 8
+# For FLUX, use configs/paper/image/flux_geneval_art.yaml instead.
 ```
 
-The four illustrative prompts in these examples are not the paper benchmark.
-For real data, preserve every original metadata row in the
-[hashed manifest format](prompt-data.md). The original evaluation manifest is
-already expanded four times per prompt; do not expand it again.
+These full-budget recipes prepare base models and benchmark prompts from HF
+automatically; they do not install the separate detector worker. No manual
+prompt download or conversion is needed. The public evaluation manifest is
+already expanded four times per prompt; do not expand it again. See
+[image recipes](paper-image.md) for budgets and other algorithms.
+
+The optional `configs/examples/sd3_geneval.yaml` and `flux_geneval.yaml` are
+small integration checks with illustrative prompts and manually supplied model
+assets, not the recommended full-experiment entrypoints.
 
 ## Execution And Metrics
 

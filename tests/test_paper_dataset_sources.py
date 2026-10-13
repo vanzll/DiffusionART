@@ -63,3 +63,16 @@ def test_image_benchmarks_have_automatic_train_and_eval_prompts():
         for key, field in (("data", "manifest"), ("evaluation", "manifest")):
             binding = doc[key][field]
             assert binding[2:-1] in variables, path
+
+
+def test_image_paper_base_models_are_prepared_at_the_configured_revision(tmp_path, monkeypatch):
+    for path in (ROOT / "configs/paper/image").glob("*.yaml"):
+        doc = _read(path)
+        if "data" not in doc:
+            continue
+        monkeypatch.setattr(os, "environ", {"VISUAL_RL_ASSET_ROOT": str(tmp_path)})
+        snapshots, _ = plan_environment(path)
+        binding = doc["model"]["checkpoint"][2:-1]
+        matches = [entry for entry, _ in snapshots if entry["env"] == binding]
+        assert len(matches) == 1, path
+        assert matches[0]["revision"] == doc["model"]["revision"], path

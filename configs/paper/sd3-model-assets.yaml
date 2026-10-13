@@ -1,0 +1,5 @@
+assets:
+  snapshots:
+    - env: SD3_MODEL
+      repo_id: stabilityai/stable-diffusion-3.5-medium
+      revision: b940f670f0eda2d07fbb75229e779da1ad11eb80
