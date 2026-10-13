@@ -119,9 +119,10 @@ round-trip loading test are still needed for the complete release workflow.
 
 ### 6. Licensing and GPU-cost parity are release gates
 
-There is no project-wide license yet; `THIRD_PARTY_NOTICES.md` explicitly says
-so. Preserved upstream notices do not choose a license for the whole project
-or authorize model/data redistribution. Resolve those rights before publishing.
+At the time of this review, there was no project-wide license. This item was
+resolved on 2026-10-13 by adopting Apache-2.0 for original project code.
+Preserved upstream notices and separate model/data redistribution terms still
+apply; see `LICENSE` and `THIRD_PARTY_NOTICES.md`.
 
 CPU-backed policy/EMA shadows add host transfers. This does not by itself
 change a loss, but hardware-matched timing is untested and may differ from the

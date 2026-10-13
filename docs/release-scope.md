@@ -122,8 +122,9 @@ configurable rather than encoding a particular cluster's disk failover policy.
    baseline config snapshots lack an exact runtime SHA; check W&B code metadata
    and original source snapshots before calling them exactly reproducible.
 2. Audit licenses and redistribution terms for upstream code, models, rewards,
-   benchmark data and visual assets. Preserve notices; do not select a license
-   or redistribute restricted assets without resolving compatibility.
+   benchmark data and visual assets. Original project code uses Apache-2.0.
+   Preserve notices; do not redistribute restricted assets without resolving
+   compatibility.
 3. Compare migrated kernels with pinned reference/runtime code: outputs, losses,
    gradients and optimizer/EMA transitions. Test zero signal, ties, masking,
    loss denominators, timestep selection and accumulation invariance.
@@ -148,5 +149,5 @@ variants. Keep implemented core variants easy to expose, but do not port every
 historical failed attempt or exploratory script. Cancelled image pairwise
 cross-algorithm panels are not mandatory main-paper reproductions.
 
-Open decisions: final framework name, compatible license, appendix priorities,
+Open decisions: final framework name, appendix priorities,
 and the minimum advertised hardware for each validated profile.

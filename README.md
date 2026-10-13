@@ -286,6 +286,12 @@ Thanks to the authors of [Flow-GRPO](https://github.com/yifan123/flow_grpo),
 [DanceGRPO](https://github.com/XueZeyue/DanceGRPO) and
 [UniRL](https://github.com/Tencent-Hunyuan/UniRL) for open-sourcing their work.
 
+## License
+
+The code is released under the [Apache License 2.0](LICENSE). Third-party code,
+model weights and datasets retain their respective licenses; see
+[Third-Party Notices](THIRD_PARTY_NOTICES.md).
+
 ## Citation
 
 If you find DiffusionART inspiring or useful for your projects, please consider starring this repository and citing our paper:

@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,6 +7,8 @@ name = "visual-diffusion-rl"
 version = "0.1.0.dev0"
 description = "Configurable reinforcement learning for visual generation"
 readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md", "licenses/*.txt", "third_party/*/LICENSE", "third_party/*/NOTICE"]
 requires-python = ">=3.10"
 dependencies = ["torch==2.6.0", "numpy>=1.24", "PyYAML>=6.0", "wandb>=0.18"]
 

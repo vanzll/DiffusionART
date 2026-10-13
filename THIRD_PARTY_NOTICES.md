@@ -1,8 +1,9 @@
 # Third-Party Notices
 
-The release is in development. A project-wide license has not yet been chosen;
-this file does not grant rights over model weights or datasets. Review each
-asset's terms separately before downloading or redistributing it.
+Original project code is licensed under the Apache License, Version 2.0; see
+`LICENSE` and `NOTICE`. Third-party portions retain the terms and notices below.
+The project license does not grant rights over model weights or datasets.
+Review each asset's terms separately before downloading or redistributing it.
 
 ## Flow-GRPO
 
@@ -108,4 +109,9 @@ Kernel and model-contract documents identify adapted equations and source
 revisions. These links are not a blanket license to vendor further source.
 Model libraries remain separately installed dependencies; native DanceGRPO and
 UniRL modules have not been bundled. Their notices must be preserved if later
-vendored. The package itself is not yet licensed for a public release.
+vendored.
+
+## Visual Assets
+
+The Star History chart uses Patrick Hand SC, licensed under the SIL Open Font
+License 1.1. Its license is preserved in `assets/readme/fonts/OFL.txt`.
