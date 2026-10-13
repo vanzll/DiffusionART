@@ -44,6 +44,13 @@ EXPECTED_RUNS = {
     "flux_geneval_nft_ema.yaml": "asge8y6v",
 }
 METHODS = ("art", "grpo", "fast", "dppo", "nft_ema", "nft_onpolicy", "dance")
+FLUX_METHODS = ("art", "fast", "dppo", "nft_ema")
+# Runtime sources: train_flux.py at b52a36d / 7325877 and train_nft_flux.py at 98d7625.
+FLUX_LORA_TARGETS = (
+    "attn.to_k", "attn.to_q", "attn.to_v", "attn.to_out.0",
+    "attn.add_k_proj", "attn.add_q_proj", "attn.add_v_proj", "attn.to_add_out",
+    "ff.net.0.proj", "ff.net.2", "ff_context.net.0.proj", "ff_context.net.2",
+)
 
 
 @pytest.fixture(autouse=True)
@@ -71,6 +78,42 @@ def test_candidate_coverage():
         for method in METHODS:
             assert (PROFILES / f"sd3_{benchmark}_{method}.yaml").is_file()
     assert (PROFILES / "flux_geneval_nft_ema.yaml").is_file()
+
+
+@pytest.mark.parametrize("method", FLUX_METHODS)
+def test_flux_lora_matches_historical_comparison(method):
+    c = load_config(PROFILES / f"flux_geneval_{method}.yaml")
+    finetune = c.model.options["finetune"]
+    assert finetune["mode"] == "lora"
+    assert finetune["rank"] == 32
+    assert finetune["alpha"] == 64
+    assert tuple(finetune["target_modules"]) == FLUX_LORA_TARGETS
+
+
+def test_flux_comparison_has_identical_trainable_parameter_inventory():
+    torch = pytest.importorskip("torch")
+    diffusers = pytest.importorskip("diffusers")
+    pytest.importorskip("peft")
+    from visual_rl.models.finetune import FineTuneConfig, prepare_policy
+
+    inventories = []
+    with torch.random.fork_rng():
+        for method in FLUX_METHODS:
+            c = load_config(PROFILES / f"flux_geneval_{method}.yaml")
+            model = diffusers.FluxTransformer2DModel(
+                patch_size=1, in_channels=8, out_channels=8,
+                num_layers=1, num_single_layers=1,
+                attention_head_dim=16, num_attention_heads=2,
+                joint_attention_dim=24, pooled_projection_dim=8,
+                guidance_embeds=True, axes_dims_rope=(4, 6, 6),
+            )
+            model = prepare_policy(model, FineTuneConfig(**c.model.options["finetune"]))
+            trainable = {name: (tuple(p.shape), p.dtype)
+                         for name, p in model.named_parameters() if p.requires_grad}
+            assert trainable and all("lora_" in name for name in trainable)
+            assert all(dtype == torch.float32 for _, dtype in trainable.values())
+            inventories.append(trainable)
+    assert all(inventory == inventories[0] for inventory in inventories[1:])
 
 
 @pytest.mark.parametrize("filename", sorted(EXPECTED_RUNS))

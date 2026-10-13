@@ -21,6 +21,17 @@ alone does not contain it. Its dedicated runtime freezes P48/K24, 144 rows per
 rank, one full-rollout update, five of six fresh-noising positions, BF16,
 rollout/update microbatch six and independent old/evaluation shadows.
 
+All four FLUX profiles use the same 12 LoRA target suffixes, rank 32 and
+alpha 64. These match ART's `train_flux.py` at `b52a36d`, Fast/DPPO's
+`train_flux.py` at `7325877`, and NFT EMA's `train_nft_flux.py` at `98d7625`.
+The ART example previously selected only four attention projections; it now
+also includes the historical context-attention and feed-forward projections.
+Regression tests check the exact targets and identical trainable parameter
+inventories on a small native FLUX model. Per-method update counts, EMA,
+learning rates and mask settings are unchanged; this is not a new GPU
+performance reproduction result. Adapters trained with the old four-target
+config require that original config to resume.
+
 ## Assets And Validation
 
 The four-reward profiles use a separate
