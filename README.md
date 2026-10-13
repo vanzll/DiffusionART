@@ -272,6 +272,19 @@ and checkpoint cadence live in the same file. Required asset paths use `${ENV_VA
 Metrics are saved to `metrics.jsonl`; evaluation images, videos and scores stay
 on disk. Set `runtime.log: wandb` for [scalar logging](docs/logging.md).
 
+## Discussion
+
+**Reward quality matters.** As with ReFL and other reward-based fine-tuning
+methods, DiffusionART depends on how well the reward model captures the desired
+behavior. Its fast reward improvement can also expose reward-model weaknesses
+sooner: a higher score does not necessarily mean better generations.
+
+In our experiments, different algorithms can exhibit comparable visual
+degradation at similar reward levels. This suggests a shared limitation of the
+reward model rather than a failure unique to DiffusionART. Reward hacking should
+therefore be assessed alongside generated samples and independent quality
+metrics, not reward curves alone.
+
 ## Learn More
 
 [Documentation](docs/README.md) &nbsp;/&nbsp;
