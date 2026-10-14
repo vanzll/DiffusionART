@@ -32,6 +32,22 @@ generation models, supporting widely used open-source **base models, reward
 models and state-of-the-art algorithms** across text-to-image, text-to-video
 and image-to-video generation.
 
+## News
+
+- 🎉 **[2026.10.12]** Our [paper](https://arxiv.org/abs/2610.12572), code, [models](#released-models) and [project page](https://vanzll.github.io/diffusionart-project/) are now public! DiffusionART and six baselines share one framework for **T2I, T2V and I2V**. Explore the [training recipes](configs/paper/)!
+
+<details>
+<summary><strong>Changelog</strong></summary>
+
+- **2026.10.14:** Fixed Hunyuan paper recipes that defaulted to rollout/update
+  microbatches of 1 instead of 8 (ReFL remains 1/1). Microbatch size can strongly
+  affect GPU utilization and training throughput. Use
+  [commit `0fb23a7`](https://github.com/vanzll/DiffusionART/commit/0fb23a703358958b68c5f6c41798e04933f6001b)
+  or a later version containing this fix. Smaller microbatches remain supported
+  for memory-constrained devices; see [batch-size guidance](#discussion).
+
+</details>
+
 <p align="center">
   <img src="assets/readme/efficiency-comparison.png" width="900" alt="Side-by-side T2V and I2V comparisons: DiffusionART, Flow-GRPO-Fast and DiffusionNFT; matched-reward GPU-hours ratios on T2V only">
 </p>
@@ -122,19 +138,6 @@ for pairwise K = 2, 4, 8 and scalar K = 8, each trained for 400 updates.
 <p align="center"><img src="assets/readme/qualitative-comparison.png" width="900" alt="Square text-to-image and text-to-video comparison: four image prompts and three video prompts, pre-trained versus DiffusionART, with four frames per video"></p>
 
 <p align="center"><em>Pre-trained versus DiffusionART. Video strips show four frames.</em></p>
-
-## News
-
-- 🎉 **[2026.10.12]** Our [paper](https://arxiv.org/abs/2610.12572), code, [models](#released-models) and [project page](https://vanzll.github.io/diffusionart-project/) are now public! DiffusionART and six baselines share one framework for **T2I, T2V and I2V**. Explore the [training recipes](configs/paper/)!
-
-## Changelog
-
-- **2026.10.14:** Fixed Hunyuan paper recipes that defaulted to rollout/update
-  microbatches of 1 instead of 8 (ReFL remains 1/1). Microbatch size can strongly
-  affect GPU utilization and training throughput. Use
-  [commit `0fb23a7`](https://github.com/vanzll/DiffusionART/commit/0fb23a703358958b68c5f6c41798e04933f6001b)
-  or a later version containing this fix. Smaller microbatches remain supported
-  for memory-constrained devices; see [batch-size guidance](#discussion).
 
 ## Released Models
 
