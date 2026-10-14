@@ -20,18 +20,6 @@
   <a href="docs/README.md">Documentation</a>
 </p>
 
-**DiffusionART** is an on-policy diffusion RL algorithm via **Aggregation-First Reward
-Tilting with Adaptive Restoration**. It combines the advantages of forward-process and
-reverse-process reinforcement learning while avoiding their limitations.
-DiffusionART is **highly efficient, stable and simple**, requires minimal hyperparameter
-tuning and no differentiable reward model, naturally supports pairwise
-feedback, and is robust to small rollout groups for scalable diffusion reinforcement learning.
-
-This repository provides a comprehensive framework for fine-tuning visual
-generation models, supporting widely used open-source **base models, reward
-models and state-of-the-art algorithms** across text-to-image, text-to-video
-and image-to-video generation.
-
 ## News
 
 - 🎉 **[2026.10.12]** Our [paper](https://arxiv.org/abs/2610.12572), code, [models](#released-models) and [project page](https://vanzll.github.io/diffusionart-project/) are now public! DiffusionART and six baselines share one framework for **T2I, T2V and I2V**. Explore the [training recipes](configs/paper/)!
@@ -47,6 +35,20 @@ and image-to-video generation.
   for memory-constrained devices; see [batch-size guidance](#discussion).
 
 </details>
+
+---
+
+**DiffusionART** is an on-policy diffusion RL algorithm via **Aggregation-First Reward
+Tilting with Adaptive Restoration**. It combines the advantages of forward-process and
+reverse-process reinforcement learning while avoiding their limitations.
+DiffusionART is **highly efficient, stable and simple**, requires minimal hyperparameter
+tuning and no differentiable reward model, naturally supports pairwise
+feedback, and is robust to small rollout groups for scalable diffusion reinforcement learning.
+
+This repository provides a comprehensive framework for fine-tuning visual
+generation models, supporting widely used open-source **base models, reward
+models and state-of-the-art algorithms** across text-to-image, text-to-video
+and image-to-video generation.
 
 <p align="center">
   <img src="assets/readme/efficiency-comparison.png" width="900" alt="Side-by-side T2V and I2V comparisons: DiffusionART, Flow-GRPO-Fast and DiffusionNFT; matched-reward GPU-hours ratios on T2V only">
