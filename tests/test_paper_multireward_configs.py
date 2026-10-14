@@ -75,7 +75,8 @@ def test_backend_assets_full_data_and_no_inherited_art_options(method, evidence)
     assert c.data.sha256 == "a" * 64 and c.data.shuffle is True
     assert c.evaluation.manifest == "/public-assets/geneval_eval_manifest"
     assert c.evaluation.manifest_sha256 == "a" * 64
-    assert c.evaluation.enabled and c.evaluation.every_updates == 0
+    assert c.evaluation.enabled and c.evaluation.every_updates == 50
+    assert c.evaluation.at_updates == ()
     assert c.runtime.checkpoint_every == 200
     assert all(c.runtime.checkpoint_due(step, 1000) for step in (200, 400, 600, 800, 1000))
     assert c.evaluation.due(1000, 1000) and c.runtime.checkpoint_due(1000, 1000)
@@ -147,13 +148,10 @@ def test_scientific_settings_against_separate_api_projection(method, evidence):
     assert c.provenance["source_gradient_accumulation_steps"] == train["gradient_accumulation_steps"]
     assert c.provenance["source_resume_global_step"] == source["resume_global_step"]
     if method == "art":
-        assert c.evaluation.at_updates == tuple(source["paper_eval_wandb_steps"][1:])
         assert c.runtime.checkpoint_at_updates == tuple(source["paper_save_wandb_steps"])
         assert c.sampling.options["train_timesteps"] == list(range(10))
         assert train["covariance_guidance_reward_source"] == "combined_multi_reward_advantage"
     else:
-        interval = source["eval_freq"] * updates
-        assert c.evaluation.at_updates == tuple(range(interval, 1001, interval))
         assert c.runtime.checkpoint_at_updates == tuple(range(100, 1001, 100))
         count = int(sample["num_steps"] * train["timestep_fraction"])
         if method.startswith("nft"):

@@ -205,7 +205,7 @@ def test_paper_pickscore_defaults_full_budget_and_no_download(tmp_path, monkeypa
     assert len(plan[0]) == 3 and len(plan[1]) == 2
     assert c.training.max_updates == 1000 and c.runtime.log == "wandb"
     assert c.sampling.prompts_per_rollout == 64 and c.sampling.samples_per_prompt == 18
-    assert c.evaluation.at_updates == (500, 800, 1000)
+    assert c.evaluation.every_updates == 50 and c.evaluation.at_updates == ()
 
 
 @pytest.mark.parametrize("mode, expects_flux", [("fixed_images", False), ("online_flux", True)])

@@ -281,7 +281,7 @@ def _run(session, c, p, k, resume, *, backend=hunyuan, resume_rewind=False, eval
                         c, parts, cache, predict, scores, global_scores, session.device))
                     if c.algorithm.name == "diffusionart":
                         active = session.local("scalar ART activity", lambda: torch.tensor(
-                            int(loss_fn.has_guidance), dtype=torch.int32, device=session.device))
+                            int(loss_fn.has_training_signal), dtype=torch.int32, device=session.device))
                         dist.all_reduce(active, op=dist.ReduceOp.MAX)
                         if not active.item():
                             metrics = {**_reward_metrics(global_scores, "train"), **_cost(session, clock),

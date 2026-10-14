@@ -5,6 +5,7 @@ import json
 import os
 import time
 from dataclasses import replace
+from types import SimpleNamespace
 
 import pytest
 import torch
@@ -16,6 +17,7 @@ from visual_rl.backends import hunyuan, hunyuan_fsdp, image_ddp, sd3
 from visual_rl.config import ConfigError, load_config
 from visual_rl.rewards.scalar import weighted_score
 from visual_rl.train import main
+from visual_rl.training.rollout import collect_rollout
 
 
 def install_checks(backend, family, rank, world):
@@ -150,7 +152,34 @@ def test_single_rank_scalar_zero_skip_preserves_adam(tmp_path, monkeypatch, fami
     assert_accounting(tmp_path / "run")
 
 
-def worker(rank, path, root, family):
+def install_anchor_checks(backend, rank):
+    calls, updates = [0], [0]
+    original_step = backend.accumulated_step
+
+    def scores(_backend, _config, _parts, endpoints, *_args):
+        calls[0] += 1
+        values = torch.arange(len(endpoints), dtype=torch.float32)
+        if rank == 0 or calls[0] == 2:
+            values.fill_(.1)
+        return weighted_score({"VQ": values}, {"VQ": 1.}, space="raw")
+
+    def step(model, optimizer, items, objective, **kwargs):
+        assert kwargs["denominator"] == len(items)
+        assert objective.has_training_signal
+        if rank == 0 or calls[0] == 2:
+            assert not objective.has_guidance
+            assert objective.row_anchors.all()
+            assert not objective.row_magnitudes.any()
+        result = original_step(model, optimizer, items, objective, **kwargs)
+        updates[0] += 1
+        return result
+
+    hunyuan.score_training_videos = scores
+    backend.accumulated_step = step
+    return calls, updates
+
+
+def worker(rank, path, root, family, restore=False):
     from test_hunyuan_fsdp import wrap
     from test_hunyuan_runner import components
     from test_sd3_runner import tiny_parts
@@ -169,15 +198,22 @@ def worker(rank, path, root, family):
 
         install_components()
     hunyuan_fsdp.wrap_policy = wrap
-    calls, updates = install_checks(backend, family, rank, 2)
+    calls, updates = install_anchor_checks(backend, rank) if restore else install_checks(backend, family, rank, 2)
     assert main(["--config", path]) == 0
-    assert calls[0] == 3 and updates[0] == 4
+    assert calls[0] == (2 if restore else 3) and updates[0] == 4
 
 
-@pytest.mark.parametrize("family,distributed", [("image", "ddp"), ("video", "fsdp"), ("wan", "fsdp")])
-def test_scalar_collective_skip_and_local_zero_rank(tmp_path, family, distributed):
+@pytest.mark.parametrize("family,distributed,restore", [
+    ("image", "ddp", False), ("video", "fsdp", False), ("wan", "fsdp", False),
+    ("video", "fsdp", True), ("wan", "fsdp", True),
+])
+def test_scalar_collective_skip_and_local_zero_rank(tmp_path, family, distributed, restore):
     path = configured(tmp_path, family, distributed)
-    ctx = mp.spawn(worker, args=(str(path), str(tmp_path), family), nprocs=2, join=False)
+    if restore:
+        values = yaml.safe_load(path.read_text())
+        values["algorithm"]["options"]["restore_zero_signal"] = True
+        path.write_text(yaml.safe_dump(values))
+    ctx = mp.spawn(worker, args=(str(path), str(tmp_path), family, restore), nprocs=2, join=False)
     deadline = time.monotonic() + 90
     try:
         while not ctx.join(timeout=1):
@@ -188,7 +224,56 @@ def test_scalar_collective_skip_and_local_zero_rank(tmp_path, family, distribute
             if process.is_alive():
                 process.terminate()
             process.join(timeout=5)
-    assert_accounting(tmp_path / "run")
+    if restore:
+        status = json.loads((tmp_path / "run/status.json").read_text())
+        assert status["optimizer_steps"] == 4
+        assert status["attempts"] == status["completed_rollouts"] == 2
+    else:
+        assert_accounting(tmp_path / "run")
+
+
+@pytest.mark.parametrize("restore", [False, True])
+def test_video_zero_guidance_anchor_restores_drift_without_changing_windows(tmp_path, restore):
+    c = load_config(configured(tmp_path, "video", "none"))
+    c = replace(c, algorithm=replace(c.algorithm, options={
+        **c.algorithm.options, "restore_zero_signal": restore}))
+    parameter = torch.nn.Parameter(torch.tensor(.1))
+
+    def predict(x, t, rows):
+        return x * parameter
+
+    cache = collect_rollout(predict, torch.arange(1., 9.).reshape(4, 2),
+                            torch.tensor([1., .5, 0.]), selected=[0, 1])
+    scores = weighted_score({"VQ": torch.full((4,), .1)}, {"VQ": 1.}, space="raw")
+    parts = SimpleNamespace(adapter=SimpleNamespace(transformer=torch.nn.Linear(1, 1)))
+    objective, windows = hunyuan.prepare_objective(c, parts, cache, predict, scores, scores, "cpu")
+    assert not objective.has_guidance
+    assert objective.has_training_signal is restore
+    assert objective.row_anchors.tolist() == [restore] * 4
+    assert len(windows) == 2 and all(len(window) == 4 for window in windows)
+    assert not set(windows[0]) & set(windows[1])
+    torch.testing.assert_close(objective(windows[0]), torch.zeros(4), atol=1e-12, rtol=0)
+    with torch.no_grad():
+        parameter.add_(.1)
+    loss = objective(windows[1]).sum() / len(windows[1])
+    gradient, = torch.autograd.grad(loss, parameter)
+    assert (loss.item() > 0) is restore
+    assert (gradient.item() > 0) is restore
+
+
+def test_single_rank_video_anchor_only_rollouts_are_not_skipped(tmp_path, monkeypatch):
+    from test_hunyuan_runner import components
+
+    path = configured(tmp_path, "video", "none")
+    values = yaml.safe_load(path.read_text())
+    values["algorithm"]["options"]["restore_zero_signal"] = True
+    path.write_text(yaml.safe_dump(values))
+    monkeypatch.setattr(hunyuan, "load_components", components)
+    monkeypatch.setattr(hunyuan, "accumulated_step", hunyuan.accumulated_step)
+    monkeypatch.setattr(hunyuan, "score_training_videos", hunyuan.score_training_videos)
+    calls, updates = install_anchor_checks(hunyuan, 0)
+    assert main(["--config", str(path)]) == 0
+    assert calls[0] == 2 and updates[0] == 4
 
 
 @pytest.mark.parametrize("family", ["image", "flux", "video", "wan"])
@@ -208,5 +293,8 @@ def test_scalar_zero_signal_validator(tmp_path, family, options):
         backend = wan
     else:
         backend = sd3 if family in ("image", "flux") else hunyuan
+    if family in ("video", "wan") and options == {"restore_zero_signal": True}:
+        backend.validate_config(load_config(path))
+        return
     with pytest.raises(ConfigError, match="scalar ART"):
         backend.validate_config(load_config(path))

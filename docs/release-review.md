@@ -63,7 +63,7 @@ an unchanged recipe; this fix changes that snapshot's sampling behavior.
 
 ### 3. Important adaptations are not verbatim historical/upstream recipes
 
-- Scalar ART uses the author's later-approved exact zero-signal suppression,
+- Image scalar ART uses the author's later-approved exact zero-signal suppression,
   no restoration on those rows, and unchanged original loss denominators.
   Pairwise semantics are unchanged. Refill is absent. This is intentional,
   but it is not identity with all historical paper runs.
@@ -167,6 +167,39 @@ replay under the actual precision and physical batches; the
   isolation do not depend on private queue/storage/GPU-holder machinery.
 
 ## Validation
+
+### Paper Recipe Corrections (2026-10-14)
+
+Author-approved scope: restore Hunyuan paper rollout/update microbatches to 8/8
+(ReFL stays 1/1; Wan stays 8/4), restore scalar video zero-guidance old-policy
+anchors, and add matched TA/VQ/MQ=7:2:1 Fast/Dance configurations. Image scalar
+zero-guidance rows remain zero-loss with the original window denominator;
+exact constant-reward protection stays enabled without a weak-signal threshold.
+Pairwise handling, learning rates, masks, seeds, sampler and update boundaries
+are unchanged. All paper profiles now evaluate every 50 optimizer updates;
+video remains 8 FPS / RM 4 FPS. This cadence is not historical evaluation parity.
+
+Evidence: `8b2f8a8d` Hunyuan ART runtime uses microbatches8/8 and
+`restore_anchor_mask=~active`; Fast721 `a419ds0n` at `64cadf05` and Dance721
+`5ttd9ord` at `8aa9801d` profiles/W&B config agree on microbatches8/8 and
+weights .7/.2/.1. Their observed endpoints348/368 are not relabeled400.
+The new configs specify the 400-update bounded recipe. Historical image
+microbatches remain unchanged, including FLUX NFT's actual runtime6/6.
+
+Video scalar activity now includes restoration anchors, so both unsharded and
+distributed runners execute anchor-only windows instead of skipping them.
+Regression coverage includes exact-zero versus real weak covariance, original
+denominators, corrective restoration after drift, local/global inactive ranks,
+unchanged pairwise ties, and the new profiles. No pretrained GPU run is implied.
+Historical sampler/order gaps and unavailable runtime commits remain unresolved.
+
+Validation: algorithm/scalar-runner/paper-profile/pairwise tests passed 231 with
+one archived-evidence skip; accumulation/scaled-update/FSDP/no-signal/profile
+tests passed 210 with one archived-evidence skip (these sets overlap).
+Asset-preparation/config tests passed 53 after updating the obsolete sparse-eval
+expectation. Targeted Ruff and diff checks passed. The independent reviewer found
+no blocking issue in the final code/config diff; real pretrained CUDA throughput
+and reward reproduction remain untested in this batch.
 
 ### Execution Provenance and Early ART Audit (2026-10-14)
 

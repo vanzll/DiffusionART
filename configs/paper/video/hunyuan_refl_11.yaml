@@ -7,10 +7,13 @@ algorithm:
 reward:
   weights: {VQ: 0.5, MQ: 0.5, TA: 0.0}
 sampling:
+  microbatch: 1
   samples_per_prompt: 1
   options:
     train_timestep_count: 1
     train_timestep_pool: [15]
+training:
+  microbatch: 1
 runtime:
   output_dir: ${PAPER_VIDEO_OUTPUT_ROOT}/hunyuan-refl-11
   checkpoint_every: 100

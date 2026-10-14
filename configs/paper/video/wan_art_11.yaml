@@ -1,5 +1,8 @@
 extends: [../../examples/wan_art.yaml, ../wan-assets.yaml]
 name: paper-wan-art-11
+algorithm:
+  options:
+    restore_zero_signal: true
 model:
   options:
     base_revision: b184e23a8a16b20f108f727c902e769e873ffc73
@@ -17,7 +20,7 @@ training:
   grad_clip: 1.0
   precision: bf16
 evaluation:
-  every_updates: 10
+  every_updates: 50
 runtime:
   log: wandb
   output_dir: ${PAPER_VIDEO_OUTPUT_ROOT}/wan-art-11
@@ -31,7 +34,7 @@ provenance:
   reference_sha: 3ca2a36f6b20c53a06813013234666d9c033a660
   reference_location: runners/wan_i2v_distilled32_v1/flowart.json
   runtime_location: flow_grpo_alg/video/backends/wan_i2v_distilled_algorithms.py
-  evaluation_protocol: corrected_common_video8_rm4_shift5_every10_retain_all
+  evaluation_protocol: corrected_common_video8_rm4_shift5_every50_retain_all
   historical_evaluation: video8_shift5_sparse_steps_retained32
   budget_basis: 400_global_optimizer_updates_200_rollouts
   artifact_policy: native_full_resume_checkpoint_every200_updates_all_scored_media

@@ -286,6 +286,22 @@ optimized dimension, they tend to exhibit similar levels of degradation in
 other dimensions. This suggests a shared limitation of the reward model
 rather than a failure unique to DiffusionART.
 
+**Prompt diversity and batch size.** When compute allows, we recommend covering
+more distinct prompts per rollout. In our experience, broader prompt coverage
+often reduces gradient variance and improves training stability. Increase
+`sampling.prompts_per_rollout` to adjust this budget; keep the intended number
+of samples per prompt and optimizer updates per rollout explicit.
+
+With limited memory, reduce **microbatch size, not the logical update batch**.
+Lower `sampling.microbatch` to generate the same rollout samples in more
+sequential chunks. Lower `training.microbatch` to accumulate gradients over
+more chunks within the same update window; the runner handles this automatically
+without changing the loss denominator or adding optimizer steps. Use the largest
+microbatches that fit comfortably for better GPU utilization and throughput.
+Shrinking the **minibatch/update window** instead creates more optimizer updates
+per rollout and additional opportunities for off-policy restoration, changing
+the algorithm's training dynamics rather than merely saving memory.
+
 ## Learn More
 
 [Documentation](docs/README.md) &nbsp;/&nbsp;

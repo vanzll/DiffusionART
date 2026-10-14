@@ -26,6 +26,8 @@ CONFIGS = ROOT / "configs/paper/video"
 # Expected coverage is fixed rather than discovered by glob (deletions must fail).
 RUNS = {
     "hunyuan_art_721": "gyvtocue",
+    "hunyuan_fast_721": "a419ds0n",
+    "hunyuan_dance_721": "5ttd9ord",
     "hunyuan_fast_11": "ontwcush",
     "hunyuan_dance_11": "1a9gbm4p",
     "hunyuan_nft_ema_721": "bjb9ed8b",
@@ -103,7 +105,10 @@ def test_real_backend_validation_budget_and_inventory(configured_env, name):
     assert c.reward.revision == "4f26600130683e6f1de9f5d463887f28e8ef995c"
     assert c.sampling.guidance_scale == 1 and c.sampling.frames == 53
     assert c.sampling.fps == c.evaluation.fps == 8 and c.evaluation.reward_fps == 4
-    assert c.evaluation.every_updates == 10 and c.evaluation.retain_all is True
+    assert c.evaluation.every_updates == 50 and c.evaluation.retain_all is True
+    assert c.evaluation.at_updates == ()
+    expected_microbatches = (1, 1) if "refl" in name else (8, 4) if c.task == "i2v" else (8, 8)
+    assert (c.sampling.microbatch, c.training.microbatch) == expected_microbatches
     assert c.evaluation.seed == 312
     assert c.runtime.checkpoint_every == 100 * updates_per_rollout(c)
     assert c.runtime.output_dir.startswith(str(configured_env))
@@ -164,7 +169,7 @@ def test_frozen_schedule_loss_and_no_stale_inheritance(configured_env, name):
         assert c.algorithm.options == {"reward_loss_scale": 1.0}
     else:
         assert c.algorithm.options["loss"] == ART_LOSS
-        assert c.algorithm.options["restore_zero_signal"] is ("pairwise" in name)
+        assert c.algorithm.options["restore_zero_signal"] is True
         assert c.algorithm.options["covariance"] == {
             "reduction": "unbiased", "direction_mode": "historical",
             "scale_mode": "unit_normalized_covariance", "guidance_gain": 1.0,

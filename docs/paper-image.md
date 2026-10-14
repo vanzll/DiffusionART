@@ -115,14 +115,13 @@ horizon. Explicit archived `paper_max_wandb_step=1000` is preserved; legacy
 `num_epochs=100000` is not treated as the release budget. Historical W&B
 zero-based indices, overflow skips and 1002-step overshoot are not certified.
 
-ART and the three recovered FLUX runs use archived evaluation updates
-500/800/1000 and an explicit checkpoint at 1000. Evaluation at zero remains enabled by the
-nonempty update list, and enabled evaluation includes the final update.
-Legacy baselines convert `eval_freq=30` epochs into candidate update cadence:
-60 updates for two-update GRPO-family methods, 30 for one-update NFT.
+All public paper profiles evaluate every 50 successful optimizer updates,
+including initial and final evaluation. This is an author-approved common
+cadence, not the heterogeneous historical schedules. Extra `at_updates` are
+empty so old sparse schedules do not trigger additional evaluations.
 Image paper recipes also save a complete training checkpoint every 200 successful
 optimizer updates for recovery. Archived explicit save points are retained, so
-some recipes save more frequently. Evaluation cadence remains unchanged.
+some recipes save more frequently. Checkpoint cadence is independent of evaluation.
 
 Global prompt count is derived per run as
 `P = train_batch_size * num_batches_per_epoch * 8 / K`, not copied from a
@@ -143,8 +142,8 @@ batches), with old-policy decay separate from evaluation EMA. **OCR NFT EMA
 `uxe86tf6` differs:** beta 0.1, decay type 2, accumulation eight and two disjoint
 updates. Its config explicitly enables two windows; the old shadow remains
 frozen through both, then refreshes once at the completed rollout boundary.
-Evaluation EMA refreshes after each successful update. Its evaluation cadence
-is 60 updates, not the one-update methods' 30.
+Evaluation EMA refreshes after each successful update. Both one- and two-update
+methods use the common 50-update evaluation cadence.
 
 ## Semantic Gaps
 

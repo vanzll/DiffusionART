@@ -106,6 +106,11 @@ class ARTObjective:
         rms = self.row_directions.float().flatten(1).square().mean(1).sqrt()
         return bool(((self.row_magnitudes > 0) & (rms > 0)).any())
 
+    @property
+    def has_training_signal(self):
+        # Zero-guidance anchors still constrain drift in subsequent updates.
+        return self.has_guidance or bool(self.row_anchors.any())
+
     def __call__(self, items):
         rows, slots, steps = _indices(items, self.cache)
         state = self.cache.states[rows, slots].to(self.device)

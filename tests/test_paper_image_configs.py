@@ -127,7 +127,8 @@ def test_backend_and_public_candidate_contract(filename):
     assert c.provenance["kind"] == "training_candidate_not_fullhistorical_reproduction"
     assert c.provenance["semantic_gaps"]
     assert c.training.allow_tf32 is True
-    assert c.evaluation.every_updates == 0
+    assert c.evaluation.every_updates == 50
+    assert c.evaluation.at_updates == ()
     assert c.runtime.checkpoint_every == 200
     assert all(c.runtime.checkpoint_due(step, 1000) for step in (200, 400, 600, 800, 1000))
     assert c.evaluation.enabled
@@ -136,7 +137,6 @@ def test_backend_and_public_candidate_contract(filename):
     assert re.fullmatch(r"[0-9a-f]{40}", c.model.revision)
     assert len(c.data.sha256) == len(c.evaluation.manifest_sha256) == 64
     if c.algorithm.name == "diffusionart":
-        assert c.evaluation.at_updates == (500, 800, 1000)
         assert c.runtime.checkpoint_at_updates == (1000,)
     if c.algorithm.name == "dancegrpo":
         assert c.algorithm.options["advantage_mode"] == "prompt_global_std"
@@ -173,12 +173,8 @@ def test_scientific_parameters_against_independent_archive(filename, archive):
     assert c.provenance["source_gradient_accumulation_steps"] == train["gradient_accumulation_steps"]
     assert c.provenance["source_resume_global_step"] == source.get("resume_global_step", 0)
     if source.get("paper_eval_wandb_steps"):
-        assert c.evaluation.at_updates == tuple(i for i in source["paper_eval_wandb_steps"] if i)
         assert c.runtime.checkpoint_at_updates == tuple(source["paper_save_wandb_steps"])
-    else:
-        updates = c.provenance["candidate_updates_per_rollout"]
-        interval = source["eval_freq"] * updates
-        assert c.evaluation.at_updates == tuple(range(interval, 1001, interval))
+    assert c.evaluation.every_updates == 50 and c.evaluation.at_updates == ()
     a, s = c.algorithm.options, c.sampling.options
     count = int(sample["num_steps"] * train["timestep_fraction"])
     if c.model.name == "sd3":
@@ -285,7 +281,7 @@ def test_flux_nft_against_separately_archived_runtime():
     assert c.sampling.microbatch == native["rollout_microbatch"]
     assert c.training.microbatch == native["update_microbatch"]
     assert c.training.max_updates == native["max_successful_updates"]
-    assert c.evaluation.at_updates == tuple(x for x in native["eval_updates"] if x)
+    assert c.evaluation.every_updates == 50 and c.evaluation.at_updates == ()
     assert c.runtime.checkpoint_at_updates == tuple(native["save_updates"])
     assert c.sampling.steps == archived["sample"]["num_steps"] == 6
     assert c.sampling.options["train_timestep_count"] == int(6 * archived["train"]["timestep_fraction"])

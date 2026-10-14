@@ -1,16 +1,21 @@
 # Full-budget training profile; evaluation is corrected common evaluation.
 extends: [../../examples/hunyuan_art.yaml, ../hunyuan-assets.yaml]
 name: paper-hunyuan-art-721
+algorithm:
+  options:
+    restore_zero_signal: true
 model:
   revision: e8c2aaa66fe3742a32c11a6766aecbf07c56e773
   options:
     allow_tf32: true
 reward:
   revision: 4f26600130683e6f1de9f5d463887f28e8ef995c
+sampling:
+  microbatch: 8
 training:
   max_updates: 400
   learning_rate: 0.00001
-  microbatch: 1
+  microbatch: 8
   optimizer: adamw
   betas: [0.9, 0.999]
   epsilon: 0.00000001
@@ -18,7 +23,7 @@ training:
   grad_clip: 1.0
   precision: bf16
 evaluation:
-  every_updates: 10
+  every_updates: 50
   shift: 7.0
 runtime:
   log: wandb
@@ -33,7 +38,7 @@ provenance:
   reference_sha: 3ca2a36f6b20c53a06813013234666d9c033a660
   reference_location: runners/t2v_formal_batch_v1/flowart_main721_val150.json
   runtime_location: flow_grpo_alg/video/backends/hunyuan_public_flowart.py
-  evaluation_protocol: corrected_common_video8_rm4_shift7_every10_retain_all
+  evaluation_protocol: corrected_common_video8_rm4_shift7_every50_retain_all
   historical_evaluation: video18_shift7_sparse_steps_retained32_MQ_rescore_lineage
   budget_basis: 400_global_optimizer_updates_200_rollouts
   artifact_policy: native_full_resume_checkpoint_every200_updates_all_scored_media

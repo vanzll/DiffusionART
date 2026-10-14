@@ -51,8 +51,8 @@ training:
   betas: [0.9, 0.999]
   epsilon: 1.0e-08
 evaluation:
-  every_updates: 0
-  at_updates: [10, 50, 100, 250, 500, 800, 1000]
+  every_updates: 50
+  at_updates: []
   manifest: ${GENEVAL_EVAL_MANIFEST}
   manifest_sha256: ${GENEVAL_EVAL_SHA256}
   sampling_steps: 28
@@ -84,7 +84,7 @@ provenance:
   source_timestep_fraction: 0.99
   source_eval_microbatch: 8
   budget_basis: archived_nft_flux_max_successful_updates
-  cadence_basis: archived_nft_flux_explicit_updates
+  cadence_basis: public_common_every50_optimizer_updates
   semantic_gaps:
     - Prompt-major complete groups replace the historical mixed-rank sampler; row/noise order parity remains pending.
     - The archived main model revision has no recovered asset/data hashes; release pins do not establish historical identity.

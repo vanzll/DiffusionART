@@ -20,6 +20,8 @@ public files promised to exist in this release. Read-only research reference:
 | YAML Stem | Historical Run | Runtime SHA | Budget / Reference |
 | --- | --- | --- | --- |
 | `hunyuan_art_721` | `gyvtocue` | `163d0696` (recorded, object unavailable) | 400 / `flowart_main721_val150.json` at `3ca2a36f` |
+| `hunyuan_fast_721` | `a419ds0n` | `64cadf05` | 400-step recipe; historical run stopped at 348 / `fastsde_main721.json` |
+| `hunyuan_dance_721` | `5ttd9ord` | `8aa9801d` | 400-step bounded recipe; historical long run stopped at 368 / `dancegrpo_main721.json` |
 | `hunyuan_fast_11` | `ontwcush` | `a2a3dad8` | 400 / `fastsde_vqmq11.json` |
 | `hunyuan_dance_11` | `1a9gbm4p` | `a2a3dad8` | 400 / `dancegrpo_vqmq11.json` |
 | `hunyuan_nft_ema_721` | `bjb9ed8b` | `75778e76` | 400 / `nft_slowema_eval8fps.json` |
@@ -72,9 +74,11 @@ loss, RMS direction, corrective velocity mask
 with scheduler-reference metric and Q2 noise `.8`/threshold `1e-5`. Pairwise
 compares only fixed-normalized VQ in seeded disjoint pairs: winner1/loser0/tie.5.
 Only binary labels enter covariance; ties anchor only with a global preference.
-Scalar ART uses exact constant-reward protection and no zero-signal restoration;
-inactive rows retain the original loss denominator. Globally all-zero scalar
-rollouts skip updates but retain their actual cost. Pairwise keeps historical
+Scalar ART uses exact constant-reward protection and restores zero-guidance
+rows toward the frozen old policy, as in the historical video recipe. All rows
+retain the original loss denominator; anchor-only scalar rollouts still execute
+their update windows. Setting `restore_zero_signal: false` explicitly disables
+these anchors and skips globally inactive rollouts. Pairwise keeps historical
 covariance and tie-anchor semantics. Scalar VQ remains scalar; evaluation reports
 scalar scores in both cases.
 
@@ -163,14 +167,15 @@ Run the same command once per node with standard allocation rendezvous values;
 choose any table YAML. An eight-GPU single-node launch is also supported using
 `--standalone --nproc-per-node=8`, preserving global P32 but **not** historical
 rank-local ordering. All assets/output paths must be visible across ranks.
-Hunyuan microbatches1/1 are allowed memory adaptations; Wan uses8/4 except
-ReFL1/1. Neither changes K, timestep count, loss denominator or update count.
+Hunyuan defaults to rollout/update microbatches8/8; Wan uses8/4 and ReFL1/1.
+Explicitly smaller microbatches are memory adaptations, not smaller logical
+update windows. Neither changes K, timestep count, loss denominator or update count.
 No launch was performed for this change.
 
 ## Evaluation And Remaining Gaps
 
 - Common evaluation is current-policy deterministic ODE, seed312+index,
-  video8/RM4, every10 updates including0/final, retaining all scored samples.
+  video8/RM4, every50 updates including0/final, retaining all scored samples.
   Hunyuan uses30 steps/640x640/shift7, separately from training shift5.
   Wan uses four steps/400x640/shift5. Bind a held-out hashed100
   prompt manifest; supplying arbitrary data does not establish paper identity.

@@ -42,8 +42,8 @@ training:
   betas: [0.9, 0.999]
   epsilon: 1.0e-08
 evaluation:
-  every_updates: 0
-  at_updates: [30,60,90,120,150,180,210,240,270,300,330,360,390,420,450,480,510,540,570,600,630,660,690,720,750,780,810,840,870,900,930,960,990]
+  every_updates: 50
+  at_updates: []
   manifest: ${GENEVAL_EVAL_MANIFEST}
   manifest_sha256: ${GENEVAL_EVAL_SHA256}
   sampling_steps: 40
@@ -85,7 +85,7 @@ provenance:
   main_paper_plotted_steps: 500
   source_max_optimizer_steps: 1000
   budget_basis: 1000_successful_optimizer_updates_not_500_plot_truncation
-  cadence_basis: archived_eval_freq_epochs_times_candidate_updates_per_rollout
+  cadence_basis: public_common_every50_optimizer_updates
   dataset_contract: GenEval_full_prompt_train_with_structured_metadata
   reporting_scalar: GenEval+PickScore_logit/26+CLIPScore_logit/30+HPSv2.1_cosine
   semantic_gaps:

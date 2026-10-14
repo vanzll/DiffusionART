@@ -80,24 +80,8 @@ training:
   - 0.999
   epsilon: 1.0e-08
 evaluation:
-  every_updates: 0
-  at_updates:
-  - 60
-  - 120
-  - 180
-  - 240
-  - 300
-  - 360
-  - 420
-  - 480
-  - 540
-  - 600
-  - 660
-  - 720
-  - 780
-  - 840
-  - 900
-  - 960
+  every_updates: 50
+  at_updates: []
   manifest: ${GENEVAL_EVAL_MANIFEST}
   manifest_sha256: ${GENEVAL_EVAL_SHA256}
   sampling_steps: 40
@@ -143,7 +127,7 @@ provenance:
   source_same_latent: false
   source_resume_global_step: 700
   budget_basis: 1000_successful_updates_plotted_horizon_candidate
-  cadence_basis: archived_eval_freq_epochs_times_candidate_updates_per_rollout
+  cadence_basis: public_common_every50_optimizer_updates
   semantic_gaps:
   - Prompt-major local groups replace historical DistributedKRepeatSampler shuffled mixed rows; exact
     order and RNG parity pending.

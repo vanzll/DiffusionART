@@ -935,6 +935,41 @@
       ]
     },
     {
+      "id": "t2v-main-721",
+      "task": "T2V",
+      "model": "HunyuanVideo-13B",
+      "scope": "main_paper_matched_reward_baselines",
+      "evidence": ["ledger"],
+      "runs": [
+        {
+          "method": "Flow-GRPO-Fast TA/VQ/MQ=7:2:1",
+          "run_id": "a419ds0n",
+          "wandb_url": "https://wandb.ai/vanzl3386-chinese-university-of-hong-kong-shenzhen/flow-grpo-algo/runs/a419ds0n",
+          "runtime_commit": "64cadf0573b2172295973aedf838cc9d0df76575",
+          "commit_status": "runtime_profile_inspected_local_git_object",
+          "observed_optimizer_updates": 348,
+          "public_max_updates": 400,
+          "validation": {
+            "migration_equivalence": "targeted_configuration_checks_only",
+            "clean_environment_reproduction": "pending"
+          }
+        },
+        {
+          "method": "DanceGRPO TA/VQ/MQ=7:2:1",
+          "run_id": "5ttd9ord",
+          "wandb_url": "https://wandb.ai/vanzl3386-chinese-university-of-hong-kong-shenzhen/flow-grpo-algo/runs/5ttd9ord",
+          "runtime_commit": "8aa9801da623a9cf5586494fa3e1e4c24b91437d",
+          "commit_status": "runtime_profile_inspected_local_git_object",
+          "observed_optimizer_updates": 368,
+          "public_max_updates": 400,
+          "validation": {
+            "migration_equivalence": "targeted_configuration_checks_only",
+            "clean_environment_reproduction": "pending"
+          }
+        }
+      ]
+    },
+    {
       "id": "refl-i2v",
       "task": "I2V",
       "model": "Paper distilled Wan-14B profile",

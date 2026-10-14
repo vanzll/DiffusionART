@@ -148,12 +148,15 @@ unmasked reference MSE, matching the backend's regularizer.
 The mask removes active rows only when movement energy is >= threshold AND
 `mean((current-old) * desired_corrective_step) > 0`. Overshoot corrections are
 therefore retained. Explicit `restore_anchor_mask` retains requested inactive
-rows with positive sigma. Scalar runners require `restore_zero_signal=false`:
+rows with positive sigma. Image scalar runners require `restore_zero_signal=false`:
 zero-signal rows contribute neither guidance nor restoration, but retain their
 original loss denominator. There is no refill. Globally all-zero scalar rollouts
 skip optimizer updates without advancing training steps; their actual cost is
 counted. A locally inactive rank still executes both full update windows when
-another rank has signal. Pairwise callers retain `row_restore_anchor` and the
+another rank has signal. Video paper recipes instead set `restore_zero_signal=true`
+to preserve the historical old-policy anchors; anchor-only windows are not skipped.
+Both choices use the original denominator and exact constant-reward protection.
+Pairwise callers retain `row_restore_anchor` and the
 historical covariance mode. Disabling the mask does not
 implicitly activate zero-guidance rows or change the denominator.
 

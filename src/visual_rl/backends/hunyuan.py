@@ -69,8 +69,6 @@ def validate_config(c, *, model_name="hunyuan_public", task="t2v", extra_model_k
         if video_pairwise.enabled(c):
             video_pairwise.validate_options(c)
         else:
-            if c.algorithm.options["restore_zero_signal"]:
-                raise ConfigError("scalar ART requires restore_zero_signal=false")
             if (not isinstance(c.algorithm.options["covariance"], dict)
                     or c.algorithm.options["covariance"].get("zero_signal_mode", "exact") != "exact"):
                 raise ConfigError("scalar ART requires exact zero-signal protection")
@@ -418,7 +416,7 @@ def run(c, *, resume=None, backend=None, resume_rewind=False, evaluate_only=Fals
                             continue
                     else:
                         objective, windows = backend.prepare_objective(c, parts, cache, predict, scores, scores, device)
-                        if c.algorithm.name == "diffusionart" and not objective.has_guidance:
+                        if c.algorithm.name == "diffusionart" and not objective.has_training_signal:
                             metrics = {**_reward_metrics(scores, "train"), **clock.metrics(),
                                        "system/skipped_zero_guidance": 1}
                             log.write(json.dumps(metrics, allow_nan=False, sort_keys=True) + "\n")
