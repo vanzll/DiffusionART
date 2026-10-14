@@ -168,6 +168,37 @@ replay under the actual precision and physical batches; the
 
 ## Validation
 
+### Execution Provenance and Early ART Audit (2026-10-14)
+
+Live W&B exports now capture the loaded checkout's commit and dirty status in
+`config.execution_source`, separate from historical `config.provenance`.
+Each exporter has its own local source record, including after resume. Git
+inspection is bounded and unavailable identity is explicit. Standalone replay
+only attributes source when supplied its original `--source-record`; it never
+infers old training code from the replay checkout. Source files, diffs and Git
+remote credentials are not uploaded. A dirty or unpublished commit still
+requires a separate source/patch handoff for reproduction.
+Validation: 22 W&B exporter tests passed, including real offline SDK exports,
+timeout handling and replay attribution; targeted Ruff checks passed. No GPU
+work or mutation of the active acceptance run was performed.
+
+The remote acceptance discussion and local bundle identify its running source
+as `1a02e397efe90299574b954aed758c9de524a0a9`. Its extra changes over `78364cb`
+are the Wan hook fix already integrated here, checkpoint-space preflight and
+optional resume verification. The latter two have CPU evidence but not full
+GPU save/resume acceptance; this change does not import them.
+
+At this audit, run `869917a2b848438194c761f89ab19e2e` had six updates (three
+rollouts), not six independent reward batches. Fixed-normalized weighted
+rewards were -0.35827, -0.05455, -0.16806; historical `gyvtocue` had -0.22724,
+-0.09061, -0.26065 at the corresponding first three rollouts. Neither sequence
+increased monotonically. Public prompt shuffling uses seed 42 versus historical
+sampler seed 1237; rollout/update microbatch is 1 versus 8. LR, optimizer, reward
+weights, training FPS/RM FPS and mask settings agree. Eval video FPS differs
+(corrected public 8 versus historical 18), so historical evaluation is not an
+identical protocol. This establishes no reward-regression cause or performance
+parity; continue the fixed-setting run and compare later training/eval points.
+
 ### Wan Empty Hook Registry Fix (2026-10-14)
 
 Integrated the focused fix from remote acceptance commit `db58aa3`: native

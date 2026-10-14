@@ -20,6 +20,25 @@ from urllib.parse import urlsplit
 from .config import ConfigError
 
 
+def execution_source():
+    """Identify the loaded checkout, not the caller's working directory."""
+    root = Path(__file__).resolve().parents[2]
+    unknown = {"commit": None, "dirty": None, "status": "unavailable"}
+    # Installed wheels must not inherit an unrelated enclosing repository.
+    if not (root / ".git").exists():
+        return unknown
+    try:
+        def git(*args):
+            return subprocess.run(["git", "--no-optional-locks", "-C", str(root), *args],
+                                  capture_output=True, check=True, timeout=2).stdout
+
+        commit = git("rev-parse", "HEAD").decode().strip()
+        dirty = bool(git("status", "--porcelain", "--untracked-files=normal").strip())
+        return {"commit": commit, "dirty": dirty, "status": "captured_at_metrics_open"}
+    except (OSError, subprocess.SubprocessError, UnicodeError):
+        return unknown
+
+
 def validate_credentials(*, mode=None):
     """Check local login before GPU work; never prompt or persist a token."""
     if os.environ.get("WANDB_MODE", mode or "online") in {"offline", "disabled", "dryrun"}:
@@ -107,7 +126,7 @@ class Records:
         return values
 
 
-def export(root, destination, *, follow_fd=None):
+def export(root, destination, *, follow_fd=None, source_record=None):
     """One SDK owner, one fresh run per export, no retry of unknown SDK writes."""
     root, destination = Path(root), Path(destination)
     destination.mkdir(parents=True, exist_ok=False)
@@ -127,6 +146,9 @@ def export(root, destination, *, follow_fd=None):
     if not config_path.exists():
         config_path = root / "resolved-config.json"
     config = json.loads(config_path.read_text())
+    # Replaying old metrics must never attribute them to the replay checkout.
+    config["execution_source"] = (json.loads(Path(source_record).read_text()) if source_record else
+                                  {"commit": None, "dirty": None, "status": "unrecorded"})
     logging = config.get("runtime", {}).get("wandb", {})
     mode = os.environ.get("WANDB_MODE", logging.get("mode", "online"))
     record = {"state": "initializing", "source": str(root.resolve()), "records": 0}
@@ -186,11 +208,14 @@ def open_metrics(config, root):
         identity = uuid.uuid4().hex
         destination = root / "wandb-exports" / identity
         owner = destination.parent / f"{identity}.owner.json"
+        source_record = destination.parent / f"{identity}.source.json"
         command = [sys.executable, "-m", "visual_rl.wandb_export", "--root", str(root.resolve()),
-                   "--destination", str(destination.resolve()), "--follow-stdin"]
+                   "--destination", str(destination.resolve()), "--follow-stdin",
+                   "--source-record", str(source_record.resolve())]
         process = None
         try:
             destination.parent.mkdir(exist_ok=True)
+            _publish(source_record, execution_source())
             process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
                                        stderr=subprocess.DEVNULL, start_new_session=True,
                                        env={**os.environ, "CUDA_VISIBLE_DEVICES": ""})
@@ -234,6 +259,7 @@ def main():
     parser.add_argument("--root", required=True)
     parser.add_argument("--destination", required=True)
     parser.add_argument("--follow-stdin", action="store_true")
+    parser.add_argument("--source-record", help="source identity captured by the original trainer")
     parser.add_argument("--timeout-seconds", type=float, default=120,
                         help="standalone export wall-clock deadline; live mode drains for 10s after EOF")
     args = parser.parse_args()
@@ -245,7 +271,7 @@ def main():
         "follow_fd": follow_fd, "timeout": 10 if args.follow_stdin else args.timeout_seconds}, daemon=True)
     watcher.start()
     # Leave the daemon armed through interpreter/SDK atexit cleanup as well.
-    export(args.root, args.destination, follow_fd=follow_fd)
+    export(args.root, args.destination, follow_fd=follow_fd, source_record=args.source_record)
 
 
 if __name__ == "__main__":

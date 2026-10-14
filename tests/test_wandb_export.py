@@ -16,6 +16,28 @@ def write_json(path, value):
     path.write_text(json.dumps(value))
 
 
+def test_execution_source_uses_loaded_checkout_and_bounds_git(monkeypatch):
+    calls = []
+
+    def git(command, **kwargs):
+        calls.append((command, kwargs))
+        return SimpleNamespace(stdout=b"a" * 40 + b"\n" if "rev-parse" in command else b" M file.py\n")
+
+    monkeypatch.setattr(module.subprocess, "run", git)
+    result = module.execution_source()
+    assert result["commit"] == "a" * 40 and result["dirty"] is True
+    assert all(call[1]["timeout"] == 2 for call in calls)
+    assert calls[0][0][3] == str(Path(module.__file__).resolve().parents[2])
+
+
+def test_execution_source_git_failure_is_nonfatal(monkeypatch):
+    def unavailable(*args, **kwargs):
+        raise subprocess.TimeoutExpired("git", 2)
+
+    monkeypatch.setattr(module.subprocess, "run", unavailable)
+    assert module.execution_source() == {"commit": None, "dirty": None, "status": "unavailable"}
+
+
 def test_tail_partial_line_and_evaluation_once(tmp_path):
     source = tmp_path / "metrics.jsonl"
     source.write_text('{"train/optimizer_step":1,"train/reward":0.3}\n{"train/optimizer_step":')
@@ -52,6 +74,7 @@ def test_jsonl_no_sdk_import_or_subprocess(tmp_path, monkeypatch):
 def test_hung_export_is_killed_without_masking_trainer_error(tmp_path, monkeypatch):
     import io
 
+    monkeypatch.setattr(module, "execution_source", lambda: {"commit": "test"})
     calls = []
 
     class Hung:
@@ -84,6 +107,7 @@ def test_hung_export_is_killed_without_masking_trainer_error(tmp_path, monkeypat
 def test_export_only_filesystem_failure_keeps_training(tmp_path, monkeypatch, failure):
     import io
 
+    monkeypatch.setattr(module, "execution_source", lambda: {"commit": "test"})
     class Finished:
         pid = 1234
         stdin = io.BytesIO()
@@ -193,6 +217,7 @@ def test_sdk_metric_contract(tmp_path, monkeypatch):
     assert init_args[0]["name"] == init_args[0]["group"] == "metric-contract"
     assert init_args[0]["resume"] == "never"
     assert init_args[0]["mode"] == "online"
+    assert init_args[0]["config"]["execution_source"]["status"] == "unrecorded"
     assert (("train/*",), {"step_metric": "train/optimizer_step", "step_sync": False}) in definitions
     assert (("eval/*",), {"step_metric": "eval/optimizer_step", "step_sync": False}) in definitions
 
@@ -238,10 +263,13 @@ def test_configured_logging_and_resume_config_are_used(tmp_path, monkeypatch):
         return run
 
     monkeypatch.setitem(sys.modules, "wandb", SimpleNamespace(init=init, Settings=lambda **k: k))
-    module.export(tmp_path, tmp_path / "export")
+    source = {"commit": "b" * 40, "dirty": False, "status": "captured_at_metrics_open"}
+    write_json(tmp_path / "source.json", source)
+    module.export(tmp_path, tmp_path / "export", source_record=tmp_path / "source.json")
     assert calls[0]["project"] == "configured" and calls[0]["entity"] == "team"
     assert calls[0]["name"] == "display" and calls[0]["group"] == "original"
     assert calls[0]["mode"] == "offline" and calls[0]["config"]["training"]["max_updates"] == 1500
+    assert calls[0]["config"]["execution_source"] == source
     module.validate_credentials(mode="offline")
 
 
