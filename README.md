@@ -127,6 +127,15 @@ for pairwise K = 2, 4, 8 and scalar K = 8, each trained for 400 updates.
 
 - 🎉 **[2026.10.12]** Our [paper](https://arxiv.org/abs/2610.12572), code, [models](#released-models) and [project page](https://vanzll.github.io/diffusionart-project/) are now public! DiffusionART and six baselines share one framework for **T2I, T2V and I2V**. Explore the [training recipes](configs/paper/)!
 
+## Changelog
+
+- **2026.10.14:** Fixed Hunyuan paper recipes that defaulted to rollout/update
+  microbatches of 1 instead of 8 (ReFL remains 1/1). Microbatch size can strongly
+  affect GPU utilization and training throughput. Use
+  [commit `0fb23a7`](https://github.com/vanzll/DiffusionART/commit/0fb23a703358958b68c5f6c41798e04933f6001b)
+  or a later version containing this fix. Smaller microbatches remain supported
+  for memory-constrained devices; see [batch-size guidance](#discussion).
+
 ## Released Models
 
 | Task | Model | Release |
