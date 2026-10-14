@@ -116,6 +116,18 @@ def _conditioning_version():
         raise RuntimeError(f"unsupported Wan conditioning ABI: diffusers {diffusers.__version__}")
 
 
+def _has_active_diffusers_hooks(module):
+    if not hasattr(module, "_diffusers_hook"):
+        return False
+    from diffusers.hooks import HookRegistry
+
+    registry = module._diffusers_hook
+    # Pipeline cleanup initializes a registry even when caching/offload was
+    # never enabled. Its empty bookkeeping does not affect module placement.
+    # Keep rejecting real registered hooks and unrecognized hook objects.
+    return not isinstance(registry, HookRegistry) or bool(registry.hooks)
+
+
 def _modules(component):
     if isinstance(component, torch.nn.Module):
         modules = [component]
@@ -127,7 +139,7 @@ def _modules(component):
         raise ValueError("staging requires torch modules or a native pipeline")
     if getattr(component, "hf_device_map", None) or any(
         getattr(m, "hf_device_map", None) or hasattr(child, "_hf_hook")
-        or hasattr(child, "_diffusers_hook")
+        or _has_active_diffusers_hooks(child)
         for m in modules for child in m.modules()
     ):
         raise ValueError("remove device maps/automatic offload hooks before manual staging")

@@ -168,6 +168,19 @@ replay under the actual precision and physical batches; the
 
 ## Validation
 
+### Wan Empty Hook Registry Fix (2026-10-14)
+
+Integrated the focused fix from remote acceptance commit `db58aa3`: native
+Diffusers cleanup can leave an empty `HookRegistry`, which manual staging
+previously rejected on the next rollout. Only a known empty registry is now
+allowed; active hooks, unknown hook objects and device maps remain rejected.
+The regression reproduces the original failure, then checks repeated staging
+and active-hook rejection. Training math and checkpoint behavior are unchanged.
+Focused Wan asset, runner, online/deferred evaluation, video and ReFL tests:
+134 passed, 1 skipped on CPU; targeted Ruff checks passed. No new GPU run.
+
+### Earlier Validation
+
 Initial snapshot validation on macOS, Python 3.10, without pretrained-model
 downloads or GPU tasks:
 

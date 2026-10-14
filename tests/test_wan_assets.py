@@ -296,6 +296,41 @@ def test_reference_online_flux_abi_jpeg_roundtrip_and_rng_isolation(fail):
                         guidance_scale=3.5, max_sequence_length=512)
 
 
+def test_staging_reuses_empty_native_diffusers_cleanup_registry():
+    from diffusers import DiffusionPipeline
+    from diffusers.hooks import HookRegistry, ModelHook
+    from diffusers.models.cache_utils import CacheMixin
+
+    class Frozen(torch.nn.Module, CacheMixin):
+        def __init__(self):
+            super().__init__()
+            self.weight = torch.nn.Parameter(torch.tensor([2.0]))
+
+        def forward(self, value):
+            return value * self.weight
+
+    class Pipe(DiffusionPipeline):
+        def __init__(self, transformer):
+            super().__init__()
+            self.register_modules(transformer=transformer)
+
+    pipe = Pipe(Frozen())
+    outputs = []
+    for _ in range(2):
+        with assets.staged(pipe, "cpu"):
+            outputs.append(pipe.transformer(torch.tensor([3.0])))
+            pipe.maybe_free_model_hooks()
+        assert pipe.transformer.weight.device.type == "cpu"
+        assert not pipe.transformer.weight.requires_grad
+    assert torch.equal(outputs[0], outputs[1])
+    registry = pipe.transformer._diffusers_hook
+    assert isinstance(registry, HookRegistry) and not registry.hooks
+    registry.register_hook(ModelHook(), "active")
+    with pytest.raises(ValueError, match="offload hooks"):
+        with assets.staged(pipe, "cpu"):
+            pass
+
+
 def test_genuine_native_wan_vae_full_zero_pixel_video_oracle(monkeypatch):
     if diffusers.__version__ != "0.40.0":
         pytest.skip("this tiny VAE constructor oracle targets locked diffusers 0.40.0")
