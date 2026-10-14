@@ -1,4 +1,11 @@
 extends: video-common-assets.yaml
+# Aligning the random seed with main paper.
+seed: 42
+data:
+  sampler_seed: 1237
+  # Historical conditioning manifest concatenates eight preprocessing shards.
+  order_shards: 8
+  drop_last: true
 assets:
   defaults:
     HUNYUAN_REVISION: e8c2aaa66fe3742a32c11a6766aecbf07c56e773

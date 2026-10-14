@@ -642,7 +642,9 @@ def run(c, *, resume=None, resume_rewind=False, evaluate_only=False):
                 resources.callback(close)
         model = parts.adapter.trainable_module
         device = next(model.parameters()).device
-        stream = PromptStream(data, seed=c.seed, shuffle=c.data.shuffle)
+        stream = PromptStream(data, seed=c.seed if c.data.sampler_seed is None else c.data.sampler_seed,
+                          shuffle=c.data.shuffle, order_shards=c.data.order_shards,
+                          drop_last=c.data.drop_last)
         generator = torch.Generator(device=device).manual_seed(c.seed)
         nft = NFTState(model, c.algorithm.options) if c.algorithm.name == "diffusionnft" else None
         grpo = (

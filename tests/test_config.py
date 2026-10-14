@@ -51,6 +51,28 @@ def test_inheritance_and_override(tmp_path, monkeypatch):
     assert load_config(child, {"algorithm": "diffusionnft"}).algorithm.name == "diffusionnft"
 
 
+def test_sampler_options_preserve_default_identity_and_separate_noise_seed(tmp_path):
+    path = write_config(tmp_path, "data: {manifest: prompts.jsonl}\n")
+    original = load_config(path)
+    for key in ("sampler_seed", "order_shards", "drop_last"):
+        assert key not in original.to_dict()["data"]
+    aligned = load_config(path, {"data": {"sampler_seed": 1237, "order_shards": 8,
+                                        "drop_last": True}})
+    assert aligned.seed == original.seed == 42
+    assert aligned.data.sampler_seed == 1237
+    assert aligned.to_dict()["data"]["order_shards"] == 8
+    assert aligned.fingerprint() != original.fingerprint()
+    assert load_config(path, {"data": {"sampler_seed": 0}}).data.sampler_seed == 0
+
+
+@pytest.mark.parametrize("options", [{"sampler_seed": -1}, {"sampler_seed": True},
+                                    {"order_shards": 0}, {"order_shards": True},
+                                    {"drop_last": "true"}])
+def test_invalid_sampler_options(tmp_path, options):
+    with pytest.raises(ConfigError):
+        load_config(write_config(tmp_path, "data: {manifest: prompts.jsonl}\n"), {"data": options})
+
+
 @pytest.mark.parametrize(
     "extra",
     [

@@ -176,7 +176,9 @@ def _run(session, c, p, k, resume, *, backend=hunyuan, resume_rewind=False, eval
         torch.manual_seed(c.seed + rank)
         random.seed(c.seed + rank)
         np.random.seed((c.seed + rank) % 2**32)
-        stream = PromptStream(data, seed=c.seed, shuffle=c.data.shuffle)
+        stream = PromptStream(data, seed=c.seed if c.data.sampler_seed is None else c.data.sampler_seed,
+                          shuffle=c.data.shuffle, order_shards=c.data.order_shards,
+                          drop_last=c.data.drop_last)
         nft = (session.local("NFT shadow creation", lambda: video_nft.VideoNFTState(model, c.algorithm.options))
                if c.algorithm.name == "diffusionnft" else None)
         stateful = {"prompts": stream, **(nft.stateful() if nft else {})}

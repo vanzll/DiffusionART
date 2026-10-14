@@ -1,4 +1,9 @@
 extends: video-common-assets.yaml
+# Aligning the random seed with main paper.
+seed: 42
+data:
+  sampler_seed: 1237
+  drop_last: true
 assets:
   defaults:
     WAN_DISTILLED_REVISION: fef288b326f4fed6d2983b9800c35363da31fcfe

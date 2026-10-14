@@ -2,8 +2,9 @@ import hashlib
 import json
 
 import pytest
+import torch
 
-from visual_rl.data import PromptDataset, PromptStream
+from visual_rl.data import Prompt, PromptDataset, PromptStream
 
 
 def dataset(tmp_path):
@@ -27,6 +28,55 @@ def test_rank_sharding_and_resume(tmp_path):
     restored = PromptStream(data, seed=42, shuffle=True)
     restored.load_state_dict(stream.state_dict())
     assert restored.take(12) == stream.take(12)
+
+
+@pytest.mark.parametrize("shards", [1, 8])
+def test_paper_video_order_matches_historical_distributed_sampler(shards):
+    # Include an incomplete final batch and verify the next epoch as well.
+    data = PromptDataset(tuple(Prompt(str(i), f"Prompt {i}") for i in range(103)), "test")
+    ordered = [data.rows[i] for shard in range(shards) for i in range(shard, 103, shards)]
+    stream = PromptStream(data, seed=1237, shuffle=True, order_shards=shards, drop_last=True)
+    samplers = [torch.utils.data.DistributedSampler(
+        ordered, num_replicas=32, rank=rank, shuffle=True, seed=1237, drop_last=True
+    ) for rank in range(32)]
+    for epoch in range(2):
+        for sampler in samplers:
+            sampler.set_epoch(epoch)
+        for indices in zip(*(iter(sampler) for sampler in samplers)):
+            assert stream.take(32) == tuple(ordered[i] for i in indices)
+
+
+def test_shard_order_preserves_rows_and_resume(tmp_path):
+    data = dataset(tmp_path)
+    stream = PromptStream(data, seed=1237, shuffle=False, order_shards=3, drop_last=True)
+    assert [row.sample_id for row in stream.take(4)] == ["0", "3", "6", "1"]
+    restored = PromptStream(data, seed=1237, shuffle=False, order_shards=3, drop_last=True)
+    restored.load_state_dict(stream.state_dict())
+    assert restored.take(4) == stream.take(4)
+    with pytest.raises(ValueError, match="schema"):
+        PromptStream(data, seed=1237, shuffle=False).load_state_dict(stream.state_dict())
+    with pytest.raises(ValueError, match="order_shards"):
+        PromptStream(data, seed=1237, shuffle=False, order_shards=2,
+                     drop_last=True).load_state_dict(stream.state_dict())
+    with pytest.raises(ValueError, match="full prompt batch"):
+        stream.take(8)
+
+
+def test_default_prompt_order_and_cursor_remain_compatible(tmp_path):
+    data = dataset(tmp_path)
+    stream = PromptStream(data, seed=42, shuffle=True)
+    assert set(stream.state_dict()) == {
+        "schema_version", "dataset_sha256", "seed", "shuffle", "epoch", "cursor"
+    }
+    expected = torch.randperm(7, generator=torch.Generator().manual_seed(42)).tolist()
+    assert stream.take(7) == tuple(data.rows[i] for i in expected)
+
+
+@pytest.mark.parametrize("options", [{"order_shards": 0}, {"order_shards": True},
+                                    {"drop_last": 1}])
+def test_invalid_prompt_order_options(tmp_path, options):
+    with pytest.raises(ValueError):
+        PromptStream(dataset(tmp_path), seed=42, shuffle=True, **options)
 
 
 def test_invalid_dataset_hash_and_duplicate_identity(tmp_path):

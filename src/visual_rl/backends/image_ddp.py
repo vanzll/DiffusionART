@@ -223,7 +223,9 @@ def _run(session, c, p, k, resume, *, resume_rewind=False, evaluate_only=False):
         random.seed(c.seed + rank)
         np.random.seed((c.seed + rank) % 2**32)
         generator = torch.Generator(device=session.device).manual_seed(c.seed + rank)
-        stream = PromptStream(data, seed=c.seed, shuffle=c.data.shuffle)
+        stream = PromptStream(data, seed=c.seed if c.data.sampler_seed is None else c.data.sampler_seed,
+                          shuffle=c.data.shuffle, order_shards=c.data.order_shards,
+                          drop_last=c.data.drop_last)
         nft = session.local("algorithm state", lambda: NFTState(raw, c.algorithm.options)
                             if c.algorithm.name == "diffusionnft" else None)
         grpo = session.local("GRPO state", lambda: GRPOState(raw, c.algorithm.options)

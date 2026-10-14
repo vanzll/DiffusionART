@@ -351,7 +351,9 @@ def run(c, *, resume=None, backend=None, resume_rewind=False, evaluate_only=Fals
         model = parts.adapter.trainable_module
         optimizer = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=c.training.learning_rate,
                                        betas=c.training.betas, eps=c.training.epsilon, weight_decay=c.training.weight_decay)
-        stream = PromptStream(data, seed=c.seed, shuffle=c.data.shuffle)
+        stream = PromptStream(data, seed=c.seed if c.data.sampler_seed is None else c.data.sampler_seed,
+                          shuffle=c.data.shuffle, order_shards=c.data.order_shards,
+                          drop_last=c.data.drop_last)
         nft = video_nft.VideoNFTState(model, c.algorithm.options) if c.algorithm.name == "diffusionnft" else None
         stateful = {"prompts": stream, **(nft.stateful() if nft else {})}
         checkpoint = dict(model=model, optimizer=optimizer, config_sha256=c.fingerprint(), stateful=stateful)

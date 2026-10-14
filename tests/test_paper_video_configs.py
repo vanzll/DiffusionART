@@ -96,6 +96,9 @@ def test_real_backend_validation_budget_and_inventory(configured_env, name):
     assert c.runtime.distributed == "fsdp" and c.runtime.device == "cuda"
     assert c.runtime.log == "wandb"
     assert c.seed == 42 and c.training.precision == "bf16"
+    assert c.data.sampler_seed == 1237
+    assert c.data.order_shards == (1 if c.task == "i2v" else 8)
+    assert c.data.drop_last is True
     assert c.training.optimizer == "adamw"
     assert c.training.learning_rate == 1e-5
     assert c.training.betas == (0.9, 0.999)

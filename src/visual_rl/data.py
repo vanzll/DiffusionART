@@ -116,19 +116,29 @@ class PromptStream:
     Each rank receives its slice of one shared prompt order.
     """
 
-    def __init__(self, dataset: PromptDataset, *, seed: int, shuffle: bool):
+    def __init__(self, dataset: PromptDataset, *, seed: int, shuffle: bool,
+                 order_shards: int = 1, drop_last: bool = False):
         if type(seed) is not int or not 0 <= seed < 2**63 or type(shuffle) is not bool:
             raise ValueError("invalid prompt stream seed/shuffle")
         if not dataset.rows:
             raise ValueError("empty prompt stream")
+        if type(order_shards) is not int or order_shards < 1:
+            raise ValueError("order_shards must be a positive integer")
+        if type(drop_last) is not bool:
+            raise ValueError("drop_last must be a boolean")
         self.dataset, self.seed, self.shuffle = dataset, seed, shuffle
+        self.order_shards = order_shards
+        self.drop_last = drop_last
+        # Restore concatenated preprocessing shards before the sampler permutation.
+        self.order = [i for shard in range(min(order_shards, len(dataset.rows)))
+                      for i in range(shard, len(dataset.rows), order_shards)]
         self.epoch = self.cursor = 0
 
     def _order(self):
         if not self.shuffle:
-            return list(range(len(self.dataset.rows)))
+            return self.order
         generator = torch.Generator().manual_seed((self.seed + self.epoch) % (2**63))
-        return torch.randperm(len(self.dataset.rows), generator=generator).tolist()
+        return [self.order[i] for i in torch.randperm(len(self.dataset.rows), generator=generator).tolist()]
 
     def take(self, prompt_count: int, *, rank: int = 0, world_size: int = 1):
         if (
@@ -139,6 +149,12 @@ class PromptStream:
             or prompt_count % world_size
         ):
             raise ValueError("global prompt slots must divide evenly over ranks")
+        if self.drop_last:
+            if prompt_count > len(self.dataset.rows):
+                raise ValueError("drop_last requires at least one full prompt batch")
+            if self.cursor + prompt_count > len(self.dataset.rows):
+                self.epoch += 1
+                self.cursor = 0
         selected = []
         while len(selected) < prompt_count:
             order = self._order()
@@ -159,13 +175,15 @@ class PromptStream:
             "shuffle": self.shuffle,
             "epoch": self.epoch,
             "cursor": self.cursor,
+            **({"order_shards": self.order_shards} if self.order_shards != 1 else {}),
+            **({"drop_last": True} if self.drop_last else {}),
         }
 
     def load_state_dict(self, state):
         expected = self.state_dict()
         if set(state) != set(expected):
             raise ValueError("prompt cursor schema differs")
-        for key in ("schema_version", "dataset_sha256", "seed", "shuffle"):
+        for key in expected.keys() - {"epoch", "cursor"}:
             if state[key] != expected[key]:
                 raise ValueError(f"prompt cursor {key} differs")
         if (

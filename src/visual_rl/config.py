@@ -255,6 +255,9 @@ class Data:
     manifest: str
     sha256: str | None = None
     shuffle: bool = True
+    sampler_seed: int | None = None
+    order_shards: int = 1
+    drop_last: bool = False
 
     def __post_init__(self):
         if not isinstance(self.manifest, str) or not self.manifest.strip():
@@ -265,6 +268,13 @@ class Data:
             raise ConfigError("data.sha256 must be a SHA256 or null")
         if type(self.shuffle) is not bool:
             raise ConfigError("data.shuffle must be boolean")
+        if self.sampler_seed is not None and (
+            type(self.sampler_seed) is not int or not 0 <= self.sampler_seed < 2**63
+        ):
+            raise ConfigError("data.sampler_seed must be an integer in [0, 2**63) or null")
+        _positive_int(self.order_shards, "data.order_shards")
+        if type(self.drop_last) is not bool:
+            raise ConfigError("data.drop_last must be a boolean")
 
 
 @dataclass(frozen=True)
@@ -402,6 +412,13 @@ class Experiment:
         document.pop("_checkpoint_identity")
         if not self.assets:
             document.pop("assets")
+        if self.data is not None:
+            if self.data.sampler_seed is None:
+                document["data"].pop("sampler_seed")
+            if self.data.order_shards == 1:
+                document["data"].pop("order_shards")
+            if not self.data.drop_last:
+                document["data"].pop("drop_last")
         if not self.runtime.wandb:
             document["runtime"].pop("wandb")
         if self.runtime.max_consecutive_no_signal_rollouts is None:
