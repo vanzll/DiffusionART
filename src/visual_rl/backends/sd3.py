@@ -45,7 +45,7 @@ from ..training.nft import (
     validate_nft,
 )
 from ..training.no_signal import NoSignalGuard
-from ..training.objectives import ARTObjective, disjoint_windows
+from ..training.objectives import ARTObjective, prompt_disjoint_windows
 from ..training.resume import prepare_resume_history, validate_resume_request
 from ..training.rollout import collect_rollout
 from ..training.state import CostClock, Progress
@@ -152,8 +152,8 @@ def validate_config(c):
     art_updates = a.get("updates_per_rollout", 2) if is_art else 1
     if is_art and (type(art_updates) is not int or art_updates not in (1, 2)):
         raise ConfigError("ART updates_per_rollout must be 1 or 2")
-    if is_art and c.sampling.prompts_per_rollout * c.sampling.samples_per_prompt % art_updates:
-        raise ConfigError("disjoint updates require a divisible rollout row count")
+    if is_art and c.sampling.samples_per_prompt % art_updates:
+        raise ConfigError("ART samples_per_prompt must divide evenly into update windows")
     if is_art and (
         c.training.max_updates % art_updates
         or c.runtime.checkpoint_every % art_updates
@@ -933,9 +933,7 @@ def _art_update(
     )
     # The one-window setting is the explicit restoration ablation.
     order = torch.randperm(p * k, generator=generator, device=device).cpu().tolist()
-    windows = tuple(
-        tuple((order[row], slot) for row, slot in window)
-        for window in disjoint_windows(p * k, len(selected),
-                                       updates=c.algorithm.options.get("updates_per_rollout", 2))
+    windows = prompt_disjoint_windows(
+        groups, len(selected), updates=c.algorithm.options.get("updates_per_rollout", 2), order=order
     )
     return objective, windows

@@ -27,6 +27,12 @@
 <details>
 <summary><strong>Changelog</strong></summary>
 
+- **2026.10.17:** ART now splits each prompt's trajectories evenly between its
+  two update windows, retaining all prompts in each update even when a rank
+  handles multiple prompts. Guidance still uses the full K-sample group.
+  Image training uses a stratified random split; video training preserves
+  trajectory order. Baseline update schedules are unchanged.
+
 - **2026.10.14:** Fixed Hunyuan paper recipes that defaulted to rollout/update
   microbatches of 1 instead of 8 (ReFL remains 1/1). Microbatch size can strongly
   affect GPU utilization and training throughput. Use
@@ -300,12 +306,15 @@ often reduces gradient variance and improves training stability. Increase
 `sampling.prompts_per_rollout` to adjust this budget; keep the intended number
 of samples per prompt and optimizer updates per rollout explicit.
 
-Compute guidance from each complete group of K trajectories before splitting
-the training data. We recommend splitting trajectories within each prompt so
-both disjoint update batches retain prompt coverage: for example, two batches
-of 32 prompts with K/2 trajectories each, rather than 16 prompts with K
-trajectories each. This is a batching recommendation, not a guarantee of every
-configuration's current split implementation.
+ART computes guidance from each complete group of K trajectories before splitting
+the training data. Both disjoint update batches contain K/2 trajectories from
+every prompt: for example, two batches of 32 prompts with K/2 trajectories each,
+rather than 16 prompts with K trajectories each. Two-update ART requires even K.
+Each trajectory keeps all its selected training timesteps; zero-guidance and
+masked rows remain in the original loss denominator. Images use a random split
+within each prompt; videos retain trajectory order. This changes older image
+splits and multi-prompt-per-rank video splits, not the historical video split
+with one prompt per rank. It is not a claim that this split is empirically optimal.
 
 With limited memory, reduce **microbatch size, not the logical update batch**.
 Lower `sampling.microbatch` to generate the same rollout samples in more

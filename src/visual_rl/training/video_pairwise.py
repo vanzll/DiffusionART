@@ -4,7 +4,7 @@ import torch
 
 from ..algorithms import art_pairwise_covariance
 from ..config import ConfigError
-from .objectives import ARTObjective, disjoint_windows
+from .objectives import ARTObjective, prompt_disjoint_windows
 
 
 def enabled(c):
@@ -66,4 +66,4 @@ def finalize(c, cache, predict, feedback, global_activity, device):
         options=c.algorithm.options["loss"], reconstruct_old_from_mean=True,
     )
     # No filtering or reweighting: inactive rows still occupy the original mean.
-    return objective, disjoint_windows(rows, len(cache.selected)), metrics
+    return objective, prompt_disjoint_windows(groups, len(cache.selected)), metrics

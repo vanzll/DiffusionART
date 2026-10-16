@@ -17,6 +17,7 @@ from ..training.objectives import (
     NFTObjective,
     disjoint_windows,
     group_advantages,
+    prompt_disjoint_windows,
 )
 from ..training.rollout import collect_rollout, endpoint_renoising
 from ..training.state import CostClock, PolicyShadow, Progress
@@ -191,7 +192,7 @@ def _run_owned(config, root, resume, algorithm, p, k, *, resume_rewind=False):
                         torch.zeros(p * k, dtype=torch.bool),
                         torch.device("cpu"),
                     )
-                    windows = disjoint_windows(p * k, len(chosen))
+                    windows = prompt_disjoint_windows(groups, len(chosen))
                 elif policy_gradient:
                     advantages = group_advantages(
                         rewards,

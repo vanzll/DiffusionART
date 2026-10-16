@@ -9,7 +9,7 @@ from visual_rl.models.finetune import FineTuneConfig, prepare_policy
 from visual_rl.rewards.pickscore import PickScore
 from visual_rl.sampling import shifted_schedule
 from visual_rl.training.image import ConditionedImagePolicy, decode_and_score_images
-from visual_rl.training.objectives import ARTObjective, disjoint_windows
+from visual_rl.training.objectives import ARTObjective, prompt_disjoint_windows
 from visual_rl.training.rollout import collect_rollout
 from visual_rl.training.update import accumulated_step
 
@@ -109,7 +109,7 @@ def test_sd3_pickscore_lora_two_disjoint_updates():
             optimizer = torch.optim.AdamW([p for p in transformer.parameters() if p.requires_grad],
                                           lr=1e-3, weight_decay=0)
             trainable = {n: p.detach().clone() for n, p in transformer.named_parameters() if p.requires_grad}
-            for window in disjoint_windows(4, 2):
+            for window in prompt_disjoint_windows(groups, 2):
                 metrics = accumulated_step(transformer, optimizer, window, objective,
                                             microbatch=3, denominator=len(window), max_grad_norm=1)
                 assert metrics["train/grad_norm/before_clip"] > 0

@@ -29,7 +29,7 @@ from ..sampling import shifted_schedule
 from ..training import video_grpo, video_nft, video_pairwise, video_refl
 from ..training.checkpoint import _atomic_json, load_checkpoint, save_checkpoint
 from ..training.no_signal import NoSignalGuard
-from ..training.objectives import ARTObjective, disjoint_windows
+from ..training.objectives import ARTObjective, prompt_disjoint_windows
 from ..training.resume import prepare_resume_history, validate_resume_request
 from ..training.rollout import collect_rollout
 from ..training.state import CostClock, Progress
@@ -101,6 +101,8 @@ def validate_config(c, *, model_name="hunyuan_public", task="t2v", extra_model_k
     if ((c.algorithm.name != "refl" and c.sampling.samples_per_prompt < 2)
             or c.sampling.prompts_per_rollout * c.sampling.samples_per_prompt % updates):
         raise ConfigError("video updates require complete K>=2 groups and rows divisible by update windows")
+    if c.algorithm.name == "diffusionart" and c.sampling.samples_per_prompt % updates:
+        raise ConfigError("ART samples_per_prompt must divide evenly into update windows")
     if c.sampling.frames < 5 or (c.sampling.frames - 1) % 4:
         raise ConfigError("Hunyuan frames must have form 4n+1")
     for value in (c.sampling.height, c.sampling.width, c.evaluation.height or c.sampling.height,
@@ -244,7 +246,7 @@ def prepare_objective(c, parts, cache, predict, scores, global_scores, device):
     objective = ARTObjective(cache, predict, covariance["group_directions"][groups],
         covariance["group_guidance_magnitudes"][groups], anchors, device,
         options=c.algorithm.options["loss"], reconstruct_old_from_mean=True)
-    return objective, disjoint_windows(count, len(cache.selected))
+    return objective, prompt_disjoint_windows(groups, len(cache.selected))
 
 
 @torch.no_grad()

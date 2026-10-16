@@ -45,7 +45,7 @@ def test_full_group_binary_covariance_and_no_scalar_magnitudes(tmp_path, k):
         assert torch.equal(shard["group_directions"][0], a["group_directions"][group])
 
 
-def test_ties_have_restoration_only_and_global_activity_keeps_original_windows(tmp_path):
+def test_ties_have_restoration_only_and_global_activity_keeps_full_denominators(tmp_path):
     c = load_config(config_file(tmp_path, "pairwise"))
     parameter = torch.tensor(.1, requires_grad=True)
 
@@ -59,12 +59,13 @@ def test_ties_have_restoration_only_and_global_activity_keeps_original_windows(t
         video_pairwise.activity(feedback, "cpu"), torch.device("cpu"))
     assert objective.row_anchors.tolist() == [True, True, False, False]
     assert objective.row_magnitudes[:2].tolist() == [0., 0.]
-    assert windows == (((0, 0), (0, 1), (1, 0), (1, 1)), ((2, 0), (2, 1), (3, 0), (3, 1)))
+    assert windows == (((0, 0), (0, 1), (2, 0), (2, 1)), ((1, 0), (1, 1), (3, 0), (3, 1)))
     assert metrics == {"train/pairwise/inactive_rollout": 0}
-    assert torch.allclose(objective(windows[0]), torch.zeros(4), atol=1e-12)
+    tie_items = tuple(item for window in windows for item in window if item[0] < 2)
+    assert torch.allclose(objective(tie_items), torch.zeros(4), atol=1e-12)
     with torch.no_grad():
         parameter.add_(.1)
-    assert (objective(windows[0]) > 0).all()
+    assert (objective(tie_items) > 0).all()
 
     local = video_pairwise.prepare(c, cache, scores([1., 1., 1., 1.]), attempt=1)
     assert video_pairwise.finalize(c, cache, predict, local, video_pairwise.activity(local, "cpu"), "cpu")[0] is None
