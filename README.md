@@ -32,7 +32,7 @@
   affect GPU utilization and training throughput. Use
   [commit `0fb23a7`](https://github.com/vanzll/DiffusionART/commit/0fb23a703358958b68c5f6c41798e04933f6001b)
   or a later version containing this fix. Smaller microbatches remain supported
-  for memory-constrained devices; see [batch-size guidance](#discussion).
+  for memory-constrained devices; see [batch-size guidance](#implementation-notes-and-discussion).
 
 </details>
 
@@ -286,7 +286,43 @@ and checkpoint cadence live in the same file. Required asset paths use `${ENV_VA
 Metrics are saved to `metrics.jsonl`; evaluation images, videos and scores stay
 on disk. Set `runtime.log: wandb` for [scalar logging](docs/logging.md).
 
-## Discussion
+## Implementation Notes and Discussion
+
+**Covariance normalization.** Normalize the aggregated covariance before
+constructing the regression target. This controls the guidance scale independently
+of the raw covariance magnitude. For multiple rewards, combine their weighted
+contributions before normalization; normalizing each contribution separately
+changes their relative influence.
+
+**Prompt diversity and batch size.** When compute allows, we recommend covering
+more distinct prompts per rollout. In our experience, broader prompt coverage
+often reduces gradient variance and improves training stability. Increase
+`sampling.prompts_per_rollout` to adjust this budget; keep the intended number
+of samples per prompt and optimizer updates per rollout explicit.
+
+Compute guidance from each complete group of K trajectories before splitting
+the training data. We recommend splitting trajectories within each prompt so
+both disjoint update batches retain prompt coverage: for example, two batches
+of 32 prompts with K/2 trajectories each, rather than 16 prompts with K
+trajectories each. This is a batching recommendation, not a guarantee of every
+configuration's current split implementation.
+
+With limited memory, reduce **microbatch size, not the logical update batch**.
+Lower `sampling.microbatch` to generate the same rollout samples in more
+sequential chunks. Lower `training.microbatch` to accumulate gradients over
+more chunks within the same update window; the runner handles this automatically
+without changing the loss denominator or adding optimizer steps. Use the largest
+microbatches that fit comfortably for better GPU utilization and throughput.
+Shrinking the **minibatch/update window** instead creates more optimizer updates
+per rollout and additional opportunities for off-policy restoration, changing
+the algorithm's training dynamics rather than merely saving memory.
+
+**Reuse rollout predictions.** ART trains on cached ODE trajectory states and
+reuses their old-policy predictions, avoiding the additional old-policy forward
+pass on re-noised states required by our NFT implementation. Current-policy
+forward and backward passes are still required. This reduces per-rollout compute;
+the overall speedup also depends on the number of updates needed to reach a
+target reward.
 
 **Reward quality matters.** As with ReFL and other reward-based fine-tuning
 methods, DiffusionART depends on how well the reward model captures the desired
@@ -299,22 +335,6 @@ In our experiments, when different algorithms reach a comparable score on an
 optimized dimension, they tend to exhibit similar levels of degradation in
 other dimensions. This suggests a shared limitation of the reward model
 rather than a failure unique to DiffusionART.
-
-**Prompt diversity and batch size.** When compute allows, we recommend covering
-more distinct prompts per rollout. In our experience, broader prompt coverage
-often reduces gradient variance and improves training stability. Increase
-`sampling.prompts_per_rollout` to adjust this budget; keep the intended number
-of samples per prompt and optimizer updates per rollout explicit.
-
-With limited memory, reduce **microbatch size, not the logical update batch**.
-Lower `sampling.microbatch` to generate the same rollout samples in more
-sequential chunks. Lower `training.microbatch` to accumulate gradients over
-more chunks within the same update window; the runner handles this automatically
-without changing the loss denominator or adding optimizer steps. Use the largest
-microbatches that fit comfortably for better GPU utilization and throughput.
-Shrinking the **minibatch/update window** instead creates more optimizer updates
-per rollout and additional opportunities for off-policy restoration, changing
-the algorithm's training dynamics rather than merely saving memory.
 
 ## Learn More
 
