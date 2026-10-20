@@ -1,5 +1,10 @@
 # Documentation
 
+New to the method? Start with the [DiffusionART FAQ](faq.md) for model
+coverage, black-box rewards, pairwise feedback, and online/on-policy training.
+The guides below cover installation and execution; reproduction and
+development-status documents are listed separately.
+
 ## Start Here
 
 | Goal | Guide |

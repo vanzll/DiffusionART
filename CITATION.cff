@@ -1,0 +1,50 @@
+cff-version: 1.2.0
+message: "Please cite the DiffusionART paper when using this software."
+title: "DiffusionART"
+type: software
+url: "https://github.com/vanzll/DiffusionART"
+repository-code: "https://github.com/vanzll/DiffusionART"
+authors:
+  - family-names: Wan
+    given-names: Zhenglin
+  - family-names: Chen
+    given-names: Jiayu
+  - family-names: Zhang
+    given-names: Zhengfeiyang
+  - family-names: Zhou
+    given-names: Pengfei
+  - family-names: Zhao
+    given-names: Wangbo
+  - family-names: Kong
+    given-names: Fangyuan
+  - family-names: Wan
+    given-names: Pengfei
+  - family-names: Gai
+    given-names: Kun
+  - family-names: You
+    given-names: Yang
+preferred-citation:
+  type: generic
+  title: "DiffusionART: Efficient, Stable and Scalable Reinforcement of Diffusion Models"
+  authors:
+    - family-names: Wan
+      given-names: Zhenglin
+    - family-names: Chen
+      given-names: Jiayu
+    - family-names: Zhang
+      given-names: Zhengfeiyang
+    - family-names: Zhou
+      given-names: Pengfei
+    - family-names: Zhao
+      given-names: Wangbo
+    - family-names: Kong
+      given-names: Fangyuan
+    - family-names: Wan
+      given-names: Pengfei
+    - family-names: Gai
+      given-names: Kun
+    - family-names: You
+      given-names: Yang
+  year: 2026
+  date-published: "2026-10-08"
+  url: "https://arxiv.org/abs/2610.12572"

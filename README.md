@@ -17,6 +17,7 @@
 <p align="center">
   <a href="#method">Method</a> &nbsp;/&nbsp;
   <a href="#quick-start">Quick Start</a> &nbsp;/&nbsp;
+  <a href="docs/faq.md">FAQ</a> &nbsp;/&nbsp;
   <a href="docs/README.md">Documentation</a>
 </p>
 
@@ -346,6 +347,8 @@ other dimensions. This suggests a shared limitation of the reward model
 rather than a failure unique to DiffusionART.
 
 ## Learn More
+
+[FAQ: models, black-box rewards, pairwise feedback and on-policy training](docs/faq.md)
 
 [Documentation](docs/README.md) &nbsp;/&nbsp;
 [Development](docs/development.md) &nbsp;/&nbsp;
