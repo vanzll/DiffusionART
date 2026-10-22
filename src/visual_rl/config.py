@@ -387,8 +387,8 @@ class Experiment:
             r"[A-Za-z0-9][A-Za-z0-9_.-]*", self.name
         ):
             raise ConfigError("name must be a filesystem-safe experiment identifier")
-        if self.task not in ("t2i", "t2v", "i2v"):
-            raise ConfigError("task must be t2i, t2v or i2v")
+        if self.task not in ("t2i", "t2v", "i2v", "t2av"):
+            raise ConfigError("task must be t2i, t2v, i2v or t2av")
         if type(self.schema_version) is not int or self.schema_version != 1:
             raise ConfigError("unsupported schema_version")
         _positive_int(self.seed, "seed", zero=True)

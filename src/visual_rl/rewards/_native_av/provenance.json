@@ -1,0 +1,33 @@
+{
+  "upstream": "verl-project/verl-omni",
+  "revision": "ca61e80c42c883e1efa161f6b609cf897fba1787",
+  "license": "Apache-2.0",
+  "files": {
+    "audiobox": {
+      "url": "https://raw.githubusercontent.com/verl-project/verl-omni/ca61e80c42c883e1efa161f6b609cf897fba1787/verl_omni/utils/reward_score/audiobox.py",
+      "source_sha256": "9d8e95ff8a617816de84cd1024ad42f469c00d8d0e63be773fe47ae959c96494"
+    },
+    "clap": {
+      "url": "https://raw.githubusercontent.com/verl-project/verl-omni/ca61e80c42c883e1efa161f6b609cf897fba1787/verl_omni/utils/reward_score/clap.py",
+      "source_sha256": "0e393e186b2afca86ee981715be21317c96e2334e96514c44e2420d8dfc150fe"
+    },
+    "desync": {
+      "url": "https://raw.githubusercontent.com/verl-project/verl-omni/ca61e80c42c883e1efa161f6b609cf897fba1787/verl_omni/utils/reward_score/desync.py",
+      "source_sha256": "6053cba2aeb53db26d0a3ce820e7892038725ca9c15a9251feacd2a1bcdb8940"
+    },
+    "videoalign": {
+      "url": "https://raw.githubusercontent.com/verl-project/verl-omni/ca61e80c42c883e1efa161f6b609cf897fba1787/verl_omni/utils/reward_score/videoalign.py",
+      "source_sha256": "378313cfe67c7927a283bbe3d727747d29a7cfa22c0cbdcb74e6fb193a34c244"
+    },
+    "hpsv3_reward": {
+      "url": "https://raw.githubusercontent.com/verl-project/verl-omni/ca61e80c42c883e1efa161f6b609cf897fba1787/verl_omni/utils/reward_score/hpsv3_reward.py",
+      "source_sha256": "fc056aa3a36d9d467a23863ef00046e0e9cc40da4c1691b82b57002c53f418f5"
+    }
+  },
+  "local_changes": [
+    "Remove verl device lookup and service media-contract imports; use explicit standalone AV payload.",
+    "CLAP supports package import only. Scoring math and native model classes retained.",
+    "Return additional raw scorer diagnostics without changing training score calculations; import ordering normalized.",
+    "Represent the HPS prompt trailing space with a Python escape; runtime prompt text is unchanged."
+  ]
+}

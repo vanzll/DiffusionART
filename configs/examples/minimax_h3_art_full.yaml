@@ -1,0 +1,91 @@
+# Bounded software integration recipe; six-path pretrained GPU acceptance pending.
+name: minimax-h3-art-full-integration
+task: t2av
+seed: 42
+algorithm:
+  name: diffusionart
+  options:
+    exclude_final_step: true
+    covariance:
+      reduction: unbiased
+      direction_mode: historical
+      scale_mode: unit_normalized_covariance
+      guidance_gain: 1.0
+      zero_signal_mode: exact
+    loss:
+      loss_space: velocity_linear_sigma
+      direction_normalization: rms
+      mask_space: velocity
+      velocity_mask_metric: scheduler_reference_metric
+      corrective_mask_enabled: true
+      q2_reference_sde_noise_level: 0.8
+      q2_reference_kl_threshold: 1.0e-05
+model:
+  name: minimax_h3
+  checkpoint: ${H3_MODEL}
+  revision: 42ed227ee7df40d41602854ae760620d6eb651fe
+  options:
+    finetune:
+      mode: full
+    gradient_checkpointing: true
+    local_files_only: true
+    conditioning_device: cpu
+    ffmpeg: ffmpeg
+    ffprobe: ffprobe
+reward:
+  name: audio_video
+  normalization: raw
+  weights:
+    video_align: 1.0
+    hpsv3: 1.5
+    audiobox: 0.5
+    clap: 1.0
+    desync: 1.0
+  options:
+    manifest: ${H3_REWARD_MANIFEST}
+data:
+  manifest: ${H3_TRAIN_MANIFEST}
+  sha256: ${H3_TRAIN_SHA256}
+  shuffle: true
+sampling:
+  steps: 10
+  prompts_per_rollout: 32
+  samples_per_prompt: 8
+  microbatch: 1
+  guidance_scale: 1.0
+  height: 256
+  width: 384
+  frames: 124
+  fps: 24.0
+  options:
+    video_shift: 12.0
+    audio_shift: 3.0
+    noise_level: 0.8
+    window_size: 3
+    window_range:
+    - 0
+    - 8
+    window_seed: 42
+training:
+  max_updates: 8
+  learning_rate: 1.0e-05
+  microbatch: 1
+  precision: bf16
+  grad_clip: 1.0
+  weight_decay: 0.0001
+evaluation:
+  every_updates: 0
+  fps: 24.0
+  reward_fps: 24.0
+runtime:
+  output_dir: outputs/minimax-h3-art-full
+  device: cuda
+  distributed: fsdp
+  checkpoint_every: 2
+  log: jsonl
+provenance:
+  kind: software_integration_acceptance_not_paper_result
+  learning_rate: 1e-5 shared software acceptance choice; not upstream Fast LoRA 3e-4
+  sampling_grid: source default 10 boundaries = 9 transitions
+  nft_semantics: repository routed mirror/slow-EMA; not upstream original OmniNFT
+    config

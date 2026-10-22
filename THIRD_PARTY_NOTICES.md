@@ -115,3 +115,17 @@ vendored.
 
 The Star History chart uses Patrick Hand SC, licensed under the SIL Open Font
 License 1.1. Its license is preserved in `assets/readme/fonts/OFL.txt`.
+
+## MiniMax-H3 reward adapters
+
+The five files audiobox.py, clap.py, desync.py, hpsv3_reward.py and
+videoalign.py under src/visual_rl/rewards/_native_av are adapted from
+ByteDance verl-omni at ca61e80c42c883e1efa161f6b609cf897fba1787,
+under the Apache License 2.0 (licenses/Apache-2.0.txt). Original copyright
+headers are retained. Exact URLs, source SHA256 and local import changes are
+in that package's provenance.json. Native scoring transforms are preserved;
+service/device/media utilities are replaced by explicit standalone boundaries.
+
+Model weights and external scorer source/assets are not redistributed.
+Their independent repository revisions and licenses must be supplied and
+recorded in the asset manifest; the software does not accept licenses for users.

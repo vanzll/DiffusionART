@@ -1,0 +1,14 @@
+# Native H3 optional environment, Python >=3.11; isolated from existing backends.
+# Diffusers is locked by source commit; other versions match local CPU oracle.
+# CUDA wheels/drivers must be selected for the target GPU system separately.
+torch==2.14.1
+diffusers @ git+https://github.com/huggingface/diffusers.git@73faca368c0da77645ea58836aa8780d2d8c5353
+transformers==5.20.2
+huggingface-hub==2.2.0
+peft==0.21.2
+accelerate==1.15.0
+safetensors==0.8.0
+numpy==2.5.4
+sentencepiece==0.2.2
+Pillow==13.0.0
+pytest==9.1.1

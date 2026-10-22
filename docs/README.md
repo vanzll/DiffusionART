@@ -15,6 +15,7 @@ development-status documents are listed separately.
 | Install a video environment | [Pinned video installation](video-installation.md) |
 | Train HunyuanVideo | [HunyuanVideo runner](hunyuan-runner.md) |
 | Train Wan I2V | [Wan runner](wan-runner.md) |
+| Integrate MiniMax-H3 audio/video | [H3 setup, six recipes and acceptance status](minimax-h3.md) |
 | Run across GPUs or nodes | [Distributed execution](distributed-execution.md) |
 | Resume or evaluate a checkpoint | [Checkpoint guide](checkpoint-resume.md) |
 

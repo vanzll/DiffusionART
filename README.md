@@ -3,7 +3,7 @@
 </p>
 
 <p align="center"><strong>Efficient, stable and scalable reinforcement of diffusion models</strong></p>
-<p align="center">Text-to-image &nbsp;&middot;&nbsp; Text-to-video &nbsp;&middot;&nbsp; Image-to-video</p>
+<p align="center">Text-to-image &nbsp;&middot;&nbsp; Text-to-video &nbsp;&middot;&nbsp; Image-to-video &nbsp;&middot;&nbsp; Text-to-audio/video</p>
 
 <p align="center">
   <a href="https://arxiv.org/abs/2610.12572"><img src="https://img.shields.io/badge/arXiv-2610.12572-b31b1b?style=flat-square" alt="arXiv paper"></a>
@@ -23,6 +23,8 @@
 </p>
 
 ## News
+
+- 🎉 **[2026.10.22]** Added [MiniMax-H3](docs/minimax-h3.md) for **text-to-audio/video** training with **DiffusionART, DiffusionNFT and Flow-GRPO-Fast**, including LoRA and full-parameter recipes.
 
 - 🎉 **[2026.10.12]** Our [paper](https://arxiv.org/abs/2610.12572), code, [models](#released-models) and [project page](https://vanzll.github.io/diffusionart-project/) are now public! DiffusionART and six baselines share one framework for **T2I, T2V and I2V**. Explore the [training recipes](configs/paper/)!
 
@@ -55,8 +57,8 @@ feedback, and is robust to small rollout groups for scalable diffusion reinforce
 
 This repository provides a comprehensive framework for fine-tuning visual
 generation models, supporting widely used open-source **base models, reward
-models and state-of-the-art algorithms** across text-to-image, text-to-video
-and image-to-video generation.
+models and state-of-the-art algorithms** across text-to-image, text-to-video,
+image-to-video, and text-to-audio/video generation.
 
 <p align="center">
   <img src="assets/readme/efficiency-comparison.png" width="900" alt="Side-by-side T2V and I2V comparisons: DiffusionART, Flow-GRPO-Fast and DiffusionNFT; matched-reward GPU-hours ratios on T2V only">
@@ -162,10 +164,10 @@ Each model card includes its inference setup, base-model requirements and exampl
 
 | Feature Category | Supported Capabilities |
 | --- | --- |
-| **Tasks** | ✅ Text-to-image<br>✅ Text-to-video<br>✅ Image-to-video |
+| **Tasks** | ✅ Text-to-image<br>✅ Text-to-video<br>✅ Image-to-video<br>✅ Text-to-audio/video |
 | **Algorithms** | ✅ DiffusionART<br>✅ DiffusionNFT (EMA / on-policy)<br>✅ Flow-GRPO / Flow-GRPO-Fast<br>✅ Flow-DPPO<br>✅ DanceGRPO<br>✅ ReFL (video) |
-| **Base Models** | ✅ [SD3.5-M](docs/sd3-runner.md)<br>✅ [FLUX.1-dev](docs/flux-runner.md)<br>✅ [HunyuanVideo-13B](docs/hunyuan-runner.md)<br>✅ [Wan2.1-I2V-14B (CFG/step-distilled)](docs/wan-runner.md) |
-| **Reward Models** | ✅ GenEval / PickScore / OCR<br>✅ CLIPScore / Aesthetic<br>✅ [VideoReward (TA / VQ / MQ)](docs/video-installation.md)<br>✅ [Configurable reward weights](docs/composite-rewards.md) |
+| **Base Models** | ✅ [SD3.5-M](docs/sd3-runner.md)<br>✅ [FLUX.1-dev](docs/flux-runner.md)<br>✅ [HunyuanVideo-13B](docs/hunyuan-runner.md)<br>✅ [Wan2.1-I2V-14B (CFG/step-distilled)](docs/wan-runner.md)<br>✅ [MiniMax-H3 (audio/video)](docs/minimax-h3.md) |
+| **Reward Models** | ✅ GenEval / PickScore / OCR<br>✅ CLIPScore / Aesthetic<br>✅ [VideoReward (TA / VQ / MQ)](docs/video-installation.md)<br>✅ [VideoAlign / HPSv3 / AudioBox / CLAP / DeSync](docs/minimax-h3.md#prompt-data-and-native-scorer-assets)<br>✅ [Configurable reward weights](docs/composite-rewards.md) |
 | **Feedback** | ✅ Scalar rewards<br>✅ Pairwise preferences (Hunyuan ART)<br>✅ Configurable rollout groups: K = 2, 4, 8 |
 | **Training** | ✅ LoRA / full-parameter tuning<br>✅ DDP / FSDP<br>✅ Checkpoint resume / local evaluation artifacts |
 

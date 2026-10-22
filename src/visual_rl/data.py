@@ -38,7 +38,7 @@ class PromptDataset:
     @classmethod
     def load(cls, path, *, expected_sha256: str | None = None, task: str):
         path = Path(path)
-        if task not in ("t2i", "t2v", "i2v"):
+        if task not in ("t2i", "t2v", "i2v", "t2av"):
             raise ValueError("unknown prompt task")
         if expected_sha256 is not None and (
             not isinstance(expected_sha256, str)

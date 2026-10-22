@@ -66,6 +66,17 @@ def list_backends():
 
 
 register_backend(Backend(
+    name="minimax_h3", tasks=frozenset({"t2av"}),
+    algorithms=frozenset({"diffusionart", "diffusionnft", "flow_grpo_fast"}),
+    rewards=frozenset({"audio_video"}), precisions=frozenset({"bf16"}),
+    distributed=frozenset({"none", "fsdp"}),
+    entrypoint="visual_rl.backends.minimax_h3:run",
+    config_validator="visual_rl.backends.minimax_h3:validate_config",
+    status="opt-in H3 audio-video integration; six-path GPU acceptance pending",
+))
+
+
+register_backend(Backend(
     name="wan_i2v_distilled", tasks=frozenset({"i2v"}),
     distributed=frozenset({"none", "fsdp"}),
     algorithms=frozenset({"diffusionart", "diffusionnft", "flow_grpo_fast", "dancegrpo", "refl"}),

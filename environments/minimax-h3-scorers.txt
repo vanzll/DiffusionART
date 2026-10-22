@@ -1,0 +1,34 @@
+# Scorer setup inventory, NOT an installable complete lock.
+# Do not claim the five-scorer stack is ready from minimax-h3.txt alone.
+# Do not replace unresolved entries with floating installs or guessed versions.
+#
+# Audited in-repository wrappers:
+# verl-omni main ca61e80c42c883e1efa161f6b609cf897fba1787
+#   verl_omni/utils/reward_score/{videoalign,hpsv3_reward,audiobox,clap,desync}.py
+# Their ported copies are visual_rl.rewards._native_av; do not install verl/Ray.
+# Base transformers/peft/safetensors are locked in minimax-h3.txt.
+#
+# Required target-platform wheels, not yet GPU-accepted:
+# - torchaudio: match selected torch release and CUDA wheel provider exactly.
+#   Used by audio resampling and DeSync MelSpectrogram.
+# - torchvision: match selected torch release and CUDA wheel provider exactly.
+#   Needed by Qwen image processing when its torchvision backend is selected.
+# - librosa/scipy: CLAP processor audio feature dependencies; confirm from the
+#   pinned processor/config and actual native loading in the target environment.
+#
+# Required separately sourced implementations:
+# - AudioBox: facebookresearch/audiobox-aesthetics,
+#   import audiobox_aesthetics.model.aes.AesMultiOutput.
+#   Exact implementation revision/distribution and transitive pins remain
+#   unresolved until matched to the supplied AudioBox assets/provenance.
+# - HPSv3/VideoAlign: in-repository Qwen2VLRewardModelBT + pinned transformers;
+#   no unrelated same-named PyPI package should be substituted.
+#   Supply the pinned Qwen2VL base/processor and reward head/adapter assets.
+# - DeSync: supplied desync_source must contain
+#   flow_grpo/audio_video_align/synchformer/synchformer.py and
+#   divided_224_16x4.yaml. Resolve dependencies from that exact source revision
+#   (not an assumed timm/einops/omegaconf version).
+#
+# The seven reward assets need repo/revision/license + complete byte inventory.
+# Native model loading and one actual score from each scorer, with offline Hub
+# mode, remain necessary before declaring this dependency set complete.
