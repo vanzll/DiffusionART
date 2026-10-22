@@ -3,7 +3,7 @@
 </p>
 
 <p align="center"><strong>Efficient, stable and scalable reinforcement of diffusion models</strong></p>
-<p align="center">Text-to-image &nbsp;&middot;&nbsp; Text-to-video &nbsp;&middot;&nbsp; Image-to-video &nbsp;&middot;&nbsp; Text-to-audio/video</p>
+<p align="center">Text-to-image &nbsp;&middot;&nbsp; Text-to-video &nbsp;&middot;&nbsp; Image-to-video &nbsp;&middot;&nbsp; Omni</p>
 
 <p align="center">
   <a href="https://arxiv.org/abs/2610.12572"><img src="https://img.shields.io/badge/arXiv-2610.12572-b31b1b?style=flat-square" alt="arXiv paper"></a>
@@ -24,7 +24,7 @@
 
 ## News
 
-- 🎉 **[2026.10.22]** Added [MiniMax-H3](docs/minimax-h3.md) for **text-to-audio/video** training with **DiffusionART, DiffusionNFT and Flow-GRPO-Fast**, including LoRA and full-parameter recipes.
+- 🎉 **[2026.10.22]** [MiniMax-H3](docs/minimax-h3.md) is now supported for **text-to-audio/video (omni)** training with **DiffusionART, DiffusionNFT and Flow-GRPO-Fast**, including LoRA and full-parameter recipes!
 
 - 🎉 **[2026.10.12]** Our [paper](https://arxiv.org/abs/2610.12572), code, [models](#released-models) and [project page](https://vanzll.github.io/diffusionart-project/) are now public! DiffusionART and six baselines share one framework for **T2I, T2V and I2V**. Explore the [training recipes](configs/paper/)!
 
