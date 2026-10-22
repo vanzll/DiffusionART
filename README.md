@@ -26,7 +26,7 @@
 
 - 🎉 **[2026.10.22]** [MiniMax-H3](docs/minimax-h3.md) is now supported for **text-to-audio/video (omni)** training with **DiffusionART, DiffusionNFT and Flow-GRPO-Fast**, including LoRA and full-parameter recipes!
 
-- 🎉 **[2026.10.12]** Our [paper](https://arxiv.org/abs/2610.12572), code, [models](#released-models) and [project page](https://vanzll.github.io/diffusionart-project/) are now public! DiffusionART and six baselines share one framework for **T2I, T2V and I2V**. Explore the [training recipes](configs/paper/)!
+- 🥇 **[2026.10.12]** DiffusionART ranked **#1 on [Hugging Face Daily Papers](https://huggingface.co/papers/2610.12572)**!
 
 <details>
 <summary><strong>Changelog</strong></summary>
