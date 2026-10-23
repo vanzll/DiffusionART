@@ -77,9 +77,29 @@ from146.27s to140.68s. That small single-cycle difference is not a controlled
 speedup claim or a universal optimum. Sampling stayed8 in both cases, its real
 local trajectory limit. Their five initial reward means/stds matched exactly;
 per-window losses/gradient norms differed, so bit-exact training-batch
-equivalence is not claimed. Full four-rollout/checkpoint stability still has to
-be demonstrated for the chosen profile. Deployment evidence is tracked in
+equivalence is not claimed. Complete four-rollout/checkpoint/continuation
+acceptance has a separate evidence ledger in
 [the acceptance PR](https://github.com/vanzll/DiffusionART/pull/4).
+
+Independent eight-GPU trials on the same140.40GiB devices selected
+rollout4/update2. One complete real rollout and two updates used77.49GiB peak
+allocated/118.58GiB reserved and120.10GiB sampled NVML, leaving14.46% observed
+physical headroom. A bounded rollout8/update4 trial also completed; its update
+phase fell from895.60s to746.41s, but reserved memory reached131.09GiB and
+sampled NVML132.61GiB, leaving5.55% before the formal initial evaluation,
+checkpoint and four-rollout lifecycle. The conservative profile retains margin
+for those phases. This measured tradeoff does not establish a universal optimum
+or prove that the larger candidate will OOM.
+
+The two trials' model-collection intervals were174.68s and173.63s. Their total
+rollout times282.11s and338.16s include conditioning/preparation intervals of
+107.43s and164.53s, respectively. These host phase boundaries do not isolate
+GPU kernels or communication. Decode/reward/preparation took619.47s and573.77s.
+Both trials had finite five-scorer populations and nonzero gradients, but their
+reward values differed; numerical identity across sampling batch sizes is not
+claimed. These are capacity trials with evaluation disabled. Their matching
+science, actual batch shapes, full online metrics and later formal lifecycle
+receipts are recorded in the acceptance PR.
 
 The explicit scorer dependency inventory is
 `environments/minimax-h3-scorers.txt`. It is **not a completed installation lock**:
