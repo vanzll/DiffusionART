@@ -483,6 +483,10 @@ def _run(session, c, prompts, resume, api, *, resume_rewind, evaluate_only):
         load = load_fsdp_checkpoint if session.distributed else load_checkpoint
         save = save_fsdp_checkpoint if session.distributed else save_checkpoint
         progress = load(resume, **checkpoint) if resume else Progress()
+        if resume and session.distributed and os.environ.get("H3_RESTORE_AUDIT") == "1":
+            from .minimax_h3_checkpoint_audit import audit_restored_checkpoint
+            audit_restored_checkpoint(session, resume, model, optimizer, stateful,
+                                      {"av_sampling": generator}, progress, root)
         event("optimizer_ready", optimizer_steps=progress.optimizer_steps, resumed=resume is not None)
         if resume:
             def validate_boundary():
