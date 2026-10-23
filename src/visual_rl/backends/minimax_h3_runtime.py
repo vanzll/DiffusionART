@@ -45,6 +45,7 @@ from ..training.resume import prepare_resume_history, validate_resume_request
 from ..training.state import CostClock, Progress
 from ..wandb_export import open_metrics
 from . import minimax_h3 as backend
+from .minimax_h3_execution import execution_policy
 from .minimax_h3_observability import BatchTrace, event
 from .sd3 import _check_run_identity, _publish_evaluation, _restore_cost
 
@@ -398,7 +399,10 @@ def evaluate(session, c, parts, dataset, step, root):
     return result
 
 
+@execution_policy()
 def run(c, *, resume=None, resume_rewind=False, evaluate_only=False, backend_api=None):
+    event("execution_policy", deterministic_algorithms=torch.are_deterministic_algorithms_enabled(),
+          cublas_workspace_config=os.environ["CUBLAS_WORKSPACE_CONFIG"])
     api = backend if backend_api is None else backend_api
     validate_resume_request(resume, resume_rewind, evaluate_only)
     api.validate_config(c)

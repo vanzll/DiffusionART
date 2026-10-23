@@ -337,6 +337,23 @@ changes the config fingerprint and must use a separate tuning attempt.
 
 ### Physical H3 batching
 
+The H3 runtime enables strict PyTorch deterministic algorithms and requires
+`CUBLAS_WORKSPACE_CONFIG=:4096:8` before CUDA initialization. The supplied H3
+runtime shell sets this environment variable; callers embedding the runtime
+must set it before using CUDA. The runtime restores the caller's PyTorch flags
+and environment on exit, including failure. Conflicting workspace settings or
+late configuration are rejected. BF16 compute, FP32 masters, reward formulas
+and optimizer boundaries remain as configured. Unsupported nondeterministic
+operations raise an error rather than continuing with a warning.
+
+In a controlled full-model, 32-rank checkpoint replay, fixed cached inputs and
+unchanged model/Adam/RNG produced different gradients on three backward passes
+without this policy (worst shard relative L2 difference 0.02632). All 32 shards
+were bit identical across three passes with the combined policy. This establishes
+the tested policy's sufficiency for that replay, not the identity of a faulty
+operator or a guarantee of bit equality across hardware, versions or world sizes.
+Full training/checkpoint continuation must still be checked independently.
+
 The adapter executes a true batch through the transformer rather than looping
 over requests. Mixed text lengths use masked padding in both the text refiner
 and the main attention stack. Each sample retains its original rotary positions
