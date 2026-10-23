@@ -71,3 +71,28 @@ def test_geometry_uses_pinned_h3_vae_not_wan_rule(bindings):
     assert recipe().sampling.frames == 124
     with pytest.raises(ConfigError, match='17n'):
         get_backend(recipe(overrides={'sampling':{'frames':121}}))
+
+
+@pytest.mark.parametrize('world,rollout,update', [(8, 4, 2), (32, 8, 8)])
+def test_art_full_deployment_profiles_preserve_science_and_allow_microbatch_tuning(
+        bindings, world, rollout, update):
+    root = Path(__file__).resolve().parents[1]
+    path = root / f'configs/examples/minimax_h3_art_full_{world}gpu.yaml'
+    c = load_config(path)
+    assert get_backend(c).name == 'minimax_h3'
+    assert (c.sampling.microbatch, c.training.microbatch) == (rollout, update)
+    assert c.runtime.distributed == 'fsdp'
+    assert c.sampling.prompts_per_rollout % world == 0
+    assert c.sampling.prompts_per_rollout * c.sampling.samples_per_prompt == 256
+    assert updates_per_rollout(c) == 2
+    actual, expected = c.to_dict(), recipe('art', 'full').to_dict()
+    for value in (actual, expected):
+        for key in ('name', 'provenance'):
+            value.pop(key)
+        value['sampling'].pop('microbatch')
+        value['training'].pop('microbatch')
+        value['runtime'].pop('output_dir')
+    assert actual == expected
+    tuned = load_config(path, {'sampling': {'microbatch': 2}, 'training': {'microbatch': 4}})
+    assert get_backend(tuned).name == 'minimax_h3'
+    assert tuned.sampling.samples_per_prompt == 8

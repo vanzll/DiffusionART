@@ -87,7 +87,8 @@ def unpack_video_rows(rows, shape, patch_size):
 class MiniMaxH3Adapter:
     def __init__(self, transformer, vae=None, audio_vae=None, config=MiniMaxH3Config()):
         validate_native_abi(transformer)
-        self.transformer = transformer
+        from .minimax_h3_batch import enable_batched_h3
+        self.transformer = enable_batched_h3(transformer)
         self.vae, self.audio_vae, self.config = vae, audio_vae, config
         # Save immutable architecture metadata before distributed wrappers replace the module.
         self.transformer_config = transformer.config
@@ -161,31 +162,31 @@ class MiniMaxH3Adapter:
         v, a = state.video, state.audio
         sv, sa = _sigma_batch(video_sigma, v), _sigma_batch(audio_sigma, a)
         patch = tuple(self.transformer_config.patch_size)
-        outputs_v, outputs_a = [], []
-        # Native layout/timestep_indices are shared over a physical batch. Per-request
-        # forward handles distinct text lengths and sigma pairs without padding leakage.
-        for row in range(len(v)):
-            length = int(conditioning.attention_mask[row].sum())
-            layout = build_layout(torch.ones(length, dtype=torch.long), v.shape[2], v.shape[3],
-                                  v.shape[4], a.shape[-1], patch, 2, 2, 0)
-            positions, tags, vi, ai, ti, _, _ = layout
-            row_times = torch.full((len(tags),), 1 - float(sv[row]), dtype=torch.float32)
-            row_times[ai] = 1 - float(sa[row])
-            times, indices = torch.unique(row_times, sorted=True, return_inverse=True)
-            native = self.transformer(
-                hidden_states=patchify(v[row:row + 1], patch)[None],
-                audio_hidden_states=a[row:row + 1].permute(0, 1, 3, 2).flatten(1, 2),
-                encoder_hidden_states=conditioning.prompt_embeds[row:row + 1, :length],
-                timestep=times.to(v.device), timestep_indices=indices.to(v.device),
-                token_tags=tags.to(v.device), position_ids=positions.to(v.device,
-                    dtype=torch.float32 if v.device.type == "mps" else torch.float64),
-                video_indices=vi.to(v.device), audio_indices=ai.to(v.device),
-                text_indices=ti.to(v.device), return_dict=False,
-            )
-            video, audio = native
-            outputs_v.append(-unpack_video_rows(video, (1, *v.shape[1:]), patch))
-            outputs_a.append(-audio.reshape(1, 2, a.shape[-1], a.shape[2]).permute(0, 1, 3, 2))
-        return AVState(torch.cat(outputs_v), torch.cat(outputs_a))
+        batch = len(v)
+        # One common padded layout; each request keeps its original media clock.
+        lengths = conditioning.attention_mask.sum(1)
+        text_length = int(lengths.max())
+        positions, tags, vi, ai, ti, _, _ = build_layout(
+            torch.ones(text_length, dtype=torch.long), v.shape[2], v.shape[3],
+            v.shape[4], a.shape[-1], patch, 2, 2, 0)
+        positions = positions.to(v.device, dtype=torch.float32 if v.device.type == "mps" else torch.float64)
+        positions = positions[None].expand(batch, -1, -1).clone()
+        positions[:, text_length:, 0] += (lengths - text_length)[:, None]
+        tags, vi, ai, ti = (x.to(v.device) for x in (tags, vi, ai, ti))
+        row_times = (1 - sv)[:, None].expand(batch, len(tags)).clone()
+        row_times[:, ai] = (1 - sa)[:, None]
+        times, indices = torch.unique(row_times, sorted=True, return_inverse=True)
+        video, audio = self.transformer(
+            hidden_states=patchify(v, patch).reshape(batch, len(vi), -1),
+            audio_hidden_states=a.permute(0, 1, 3, 2).flatten(1, 2),
+            encoder_hidden_states=conditioning.prompt_embeds[:, :text_length],
+            timestep=times, timestep_indices=indices, token_tags=tags,
+            position_ids=positions, video_indices=vi, audio_indices=ai, text_indices=ti,
+            attention_kwargs={"h3_text_mask": conditioning.attention_mask[:, :text_length]},
+            return_dict=False,
+        )
+        return AVState(-unpack_video_rows(video, v.shape, patch),
+                       -audio.reshape(batch, 2, a.shape[-1], a.shape[2]).permute(0, 1, 3, 2))
 
     @torch.no_grad()
     def decode(self, state):

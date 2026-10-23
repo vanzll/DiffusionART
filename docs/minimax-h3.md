@@ -209,6 +209,77 @@ export H3_NPROC=8
 .venv-h3/bin/python -m visual_rl.train --config configs/examples/minimax_h3_fast_full.yaml --nproc-per-node "$H3_NPROC"
 ```
 
+### ART full deployment profiles
+
+Two additional profiles inherit the same ART full scientific recipe. They keep
+P32/K8 (256 trajectories per rollout), complete-prompt covariance, two disjoint
+updates of 128 trajectories, and eight training positions per trajectory.
+Only the name, output directory, physical microbatches and deployment notes
+differ. A microbatch is an execution chunk, not an additional optimizer update.
+
+| Profile | Launch topology | Rollout microbatch | Update microbatch |
+| --- | --- | --- | --- |
+| `minimax_h3_art_full_8gpu.yaml` | 1 node x 8 FSDP ranks | 4 | 2 |
+| `minimax_h3_art_full_32gpu.yaml` | 4 nodes x 8 FSDP ranks | 8 | 8 |
+
+These are starting values to tune on the actual hardware. The 32-GPU values
+match the physical microbatches of the prior Hunyuan FIRST1/FIRST2 experiments;
+they do not assert matching model, resolution or total training cost. The
+8-GPU profile deliberately permits smaller microbatches. YAML does not reserve
+or count GPUs: the launcher determines the world size. Both profiles use
+full-world FSDP (`shard_degree=world_size`, `replicate_degree=1`), with no TP/SP;
+32 ranks therefore communicate parameter shards across nodes. Extra FSDP ranks
+reduce model-state memory, not the activation memory of one physical batch.
+
+For one authorized eight-GPU node:
+
+```bash
+.venv-h3/bin/python -m visual_rl.train \
+  --config configs/examples/minimax_h3_art_full_8gpu.yaml --nproc-per-node 8
+```
+
+For four authorized eight-GPU nodes, use the allocation's persistent node
+executor. Run the following once on **each** node, with its own
+`H3_NODE_RANK=0,1,2,3`. All nodes must share the exact checkout, asset bindings,
+config/output paths, `H3_MASTER_ADDR`, unused `H3_MASTER_PORT`, and a fresh
+`H3_PREPARATION_RUN_ID`. The node executor must propagate a failed node to the
+whole attempt; do not start four independent standalone jobs. `--nnodes` and
+the rendezvous flags are already supported by the public entrypoint:
+
+```bash
+.venv-h3/bin/python -m visual_rl.train \
+  --config configs/examples/minimax_h3_art_full_32gpu.yaml \
+  --nproc-per-node 8 --nnodes 4 --node-rank "$H3_NODE_RANK" \
+  --master-addr "$H3_MASTER_ADDR" --master-port "$H3_MASTER_PORT" \
+  --preparation-run-id "$H3_PREPARATION_RUN_ID"
+```
+
+On sites requiring shell initialization or GPU leases, the executor's final
+child shell must initialize that environment and use the existing fenced lease
+protocol. The public command does not release GPU holders or allocate nodes.
+
+Tune `sampling.microbatch` and `training.microbatch` independently in an
+inherited config, retaining P/K, the time pool, loss denominator and optimizer
+boundaries. At world size 32 each rank owns eight rollout trajectories and 32
+sample/time items per ART update, so a larger rollout microbatch than eight
+does not increase physical concurrency. Measure the worst-rank peak allocated
+and reserved memory, device usage, CPU/cgroup peaks and full-phase throughput,
+including backward, optimizer step, decode, rewards and checkpointing. Keep
+working headroom rather than merely filling the allocator cache. Freeze the
+chosen config before checkpoint/resume acceptance; changing microbatches
+changes the config fingerprint and must use a separate tuning attempt.
+
+### Physical H3 batching
+
+The adapter executes a true batch through the transformer rather than looping
+over requests. Mixed text lengths use masked padding in both the text refiner
+and the main attention stack. Each sample retains its original rotary positions
+and separate video/audio noise conditions, including training batches that mix
+time positions. No attention is shared between different samples. The H3-only
+extension retains checkpoint parameter names and the pinned upstream source;
+it does not change the other model backends. All ranks follow the same module
+call order even when their text lengths and sigmas differ.
+
 Conditioner and transformer cannot both occupy an 80 GB GPU before sharding.
 Load on CPU and select trainable parameters before FSDP/shadows. The first
 integration explicitly keeps conditioning on CPU (`conditioning_device: cpu`)

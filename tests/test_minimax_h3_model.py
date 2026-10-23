@@ -80,14 +80,14 @@ def test_actual_tiny_output_and_parameter_gradient_match_direct_native(native_mo
         videos.append(-unpack_video_rows(vr, (1, 2, 2, 4, 4), (1, 2, 2)))
         audios.append(-ar.reshape(1, 2, 3, 3).permute(0, 1, 3, 2))
     ev, ea = torch.cat(videos), torch.cat(audios)
-    torch.testing.assert_close(actual.video, ev, rtol=0, atol=0)
-    torch.testing.assert_close(actual.audio, ea, rtol=0, atol=0)
+    torch.testing.assert_close(actual.video, ev, rtol=3e-5, atol=5e-7)
+    torch.testing.assert_close(actual.audio, ea, rtol=3e-5, atol=5e-7)
     loss = 0.5 * actual.video.square().mean() + 0.5 * actual.audio.square().mean()
     loss.backward()
     (0.5 * ev.square().mean() + 0.5 * ea.square().mean()).backward()
     for (name, p), (other_name, q) in zip(native_model.named_parameters(), reference.named_parameters()):
         assert name == other_name and p.grad is not None
-        torch.testing.assert_close(p.grad, q.grad, rtol=0, atol=0)
+        torch.testing.assert_close(p.grad, q.grad, rtol=8e-5, atol=2e-6)
     assert native_model.audio_proj_out.weight.grad.norm() > 0
     assert native_model.proj_out.weight.grad.norm() > 0
 
@@ -243,3 +243,148 @@ def test_actual_tiny_native_vaes_decode_and_checkpoint_roundtrip(native_model, t
     ).decode(state)
     torch.testing.assert_close(media.video, loaded.video, rtol=0, atol=0)
     torch.testing.assert_close(media.audio, loaded.audio, rtol=0, atol=0)
+
+
+def _independent_native_batch(model, state, sv, sa, conditioning):
+    """Unmodified upstream singleton requests; deliberately no batched helper."""
+    build, patchify = native_h3_helpers()
+    patch = tuple(model.config.patch_size)
+    videos, audios = [], []
+    for row in range(len(state.video)):
+        length = int(conditioning.attention_mask[row].sum())
+        pos, tags, vi, ai, ti, _, _ = build(torch.ones(length).long(),
+            *state.video.shape[2:], state.audio.shape[-1], patch, 2, 2, 0)
+        row_times = torch.full((len(tags),), 1 - float(sv[row]))
+        row_times[ai] = 1 - float(sa[row])
+        times, indices = row_times.unique(sorted=True, return_inverse=True)
+        video, audio = model(
+            hidden_states=patchify(state.video[row:row+1], patch)[None],
+            audio_hidden_states=state.audio[row:row+1].permute(0, 1, 3, 2).flatten(1, 2),
+            encoder_hidden_states=conditioning.prompt_embeds[row:row+1, :length],
+            timestep=times, timestep_indices=indices, token_tags=tags, position_ids=pos,
+            video_indices=vi, audio_indices=ai, text_indices=ti, return_dict=False)
+        videos.append(-unpack_video_rows(video, (1, *state.video.shape[1:]), patch))
+        audios.append(-audio.reshape(1, 2, state.audio.shape[-1], state.audio.shape[2]).permute(0, 1, 3, 2))
+    return AVState(torch.cat(videos), torch.cat(audios))
+
+
+@pytest.mark.parametrize("mode", ["full", "lora"])
+@pytest.mark.parametrize("checkpointing", [False, True])
+def test_true_batch8_matches_native_outputs_all_gradients_and_padding(native_model, mode, checkpointing):
+    from visual_rl.models.finetune import FineTuneConfig, prepare_policy
+    reference = copy.deepcopy(native_model)
+    names_and_ids = [(name, id(p)) for name, p in native_model.named_parameters()]
+    original_keys = tuple(native_model.state_dict())
+    adapter = MiniMaxH3Adapter(native_model)
+    assert names_and_ids == [(name, id(p)) for name, p in native_model.named_parameters()]
+    assert original_keys == tuple(native_model.state_dict())
+    if mode == "lora":
+        pytest.importorskip("peft")
+        config = FineTuneConfig("lora", rank=2, alpha=2,
+                                target_modules=("to_q", "to_k", "to_v", "proj_out", "audio_proj_out"))
+        native_model = prepare_policy(native_model, config)
+        reference = prepare_policy(reference, config)
+        # Nonzero B makes both LoRA factors' gradients observable on the first step.
+        with torch.no_grad():
+            for name, p in native_model.named_parameters():
+                if "lora_B" in name:
+                    p.normal_(std=0.02)
+        reference.load_state_dict(native_model.state_dict())
+        adapter.set_trainable_module(native_model)
+    if checkpointing:
+        native_model.enable_gradient_checkpointing()
+        reference.enable_gradient_checkpointing()
+    lengths = torch.tensor([5, 1, 3, 2, 5, 4, 1, 3])
+    mask = torch.arange(7)[None] < lengths[:, None]
+    sv = torch.tensor([0., 1., .2, .2, .5, .9, .5, 1.])
+    sa = torch.tensor([1., 1., .8, .2, .9, .1, .5, 0.])
+    state = AVState(torch.randn(8, 2, 2, 4, 4, requires_grad=True),
+                    torch.randn(8, 2, 3, 3, requires_grad=True))
+    # NaN padding must neither affect valid outputs nor leak into projection grads.
+    embeds = torch.randn(8, 7, 8).masked_fill(~mask[..., None], float("nan")).requires_grad_()
+    conditioning = MiniMaxH3Conditioning(embeds, mask)
+    other_state = AVState(state.video.detach().clone().requires_grad_(),
+                          state.audio.detach().clone().requires_grad_())
+    other_c = MiniMaxH3Conditioning(embeds.detach().clone().requires_grad_(), mask.clone())
+    observed = []
+    handles = [module.register_forward_pre_hook(lambda _, args: observed.append(args[0].shape[0]))
+               for module in (adapter.trainable_module.proj_in,
+                              adapter.trainable_module.token_refiner.refiner_blocks[0].attn.to_q,
+                              adapter.trainable_module.transformer_blocks[0].attn.to_q)]
+    actual = adapter.predict_velocity(state, sv, sa, conditioning)
+    for handle in handles:
+        handle.remove()
+    assert observed == [8, 8, 8]  # Each stack performs exactly one real B=8 projection.
+    expected = _independent_native_batch(reference, other_state, sv, sa, other_c)
+    torch.testing.assert_close(actual.video, expected.video, rtol=3e-5, atol=5e-7)
+    torch.testing.assert_close(actual.audio, expected.audio, rtol=3e-5, atol=5e-7)
+    # Per-row weights catch accidental sample reordering and cross-sample attention.
+    weights = torch.arange(1., 9.)
+    def objective(output):
+        return (output.video.flatten(1).square().mean(1) * weights).mean() + (
+            output.audio.flatten(1).square().mean(1) * weights.flip(0)).mean()
+    objective(actual).backward()
+    objective(expected).backward()
+    for (_, actual_p), (_, expected_p) in zip(native_model.named_parameters(), reference.named_parameters()):
+        if actual_p.requires_grad:
+            assert actual_p.grad is not None and expected_p.grad is not None
+            torch.testing.assert_close(actual_p.grad, expected_p.grad, rtol=8e-5, atol=2e-6)
+    for actual_input, expected_input in [(state.video, other_state.video),
+                                         (state.audio, other_state.audio),
+                                         (embeds, other_c.prompt_embeds)]:
+        torch.testing.assert_close(actual_input.grad, expected_input.grad, rtol=8e-5, atol=2e-6)
+        assert torch.isfinite(actual_input.grad).all()
+    assert torch.count_nonzero(embeds.grad[~mask]) == 0
+    # Upgrading this instance never alters a separate upstream model's classes.
+    reference_native = reference.get_base_model() if mode == "lora" else reference
+    assert type(reference_native).__module__.startswith("diffusers.")
+
+
+@pytest.mark.parametrize("checkpointing", [False, True])
+def test_batched_cpu_bfloat16_autocast_matches_native(native_model, checkpointing):
+    reference = copy.deepcopy(native_model)
+    adapter = MiniMaxH3Adapter(native_model)
+    if checkpointing:
+        native_model.enable_gradient_checkpointing()
+        reference.enable_gradient_checkpointing()
+    state, c = inputs()
+    sv, sa = torch.tensor([.8, .4]), torch.tensor([.3, .9])
+    with torch.autocast("cpu", dtype=torch.bfloat16):
+        actual = adapter.predict_velocity(state, sv, sa, c)
+        expected = _independent_native_batch(reference, state, sv, sa, c)
+        actual_loss = actual.video.square().mean() + actual.audio.square().mean()
+        expected_loss = expected.video.square().mean() + expected.audio.square().mean()
+    # BF16 matmul accumulation differs slightly between singleton and B>1 kernels.
+    torch.testing.assert_close(actual.video, expected.video, rtol=.025, atol=.015)
+    torch.testing.assert_close(actual.audio, expected.audio, rtol=.025, atol=.015)
+    actual_loss.backward()
+    expected_loss.backward()
+    for (_, p), (_, q) in zip(native_model.named_parameters(), reference.named_parameters()):
+        torch.testing.assert_close(p.grad, q.grad, rtol=.06, atol=.006)
+
+
+def test_native_mixed_checkpoint_dtypes_and_transformer_reload(native_model, tmp_path):
+    from diffusers import MiniMaxH3Transformer3DModel
+    # Reproduce native checkpoint precision: FP32 projections/time, BF16 stack.
+    native_model.to(torch.bfloat16)
+    for name in native_model._keep_in_fp32_modules:
+        for module_name, module in native_model.named_modules():
+            if name in module_name:
+                module.float()
+    reference = copy.deepcopy(native_model)
+    adapter = MiniMaxH3Adapter(native_model)
+    state, c = inputs()
+    state = state.to("cpu", dtype=torch.bfloat16)
+    c = MiniMaxH3Conditioning(c.prompt_embeds.bfloat16(), c.attention_mask)
+    sv, sa = torch.tensor([.8, .4]), torch.tensor([.3, .9])
+    actual = adapter.predict_velocity(state, sv, sa, c)
+    expected = _independent_native_batch(reference, state, sv, sa, c)
+    torch.testing.assert_close(actual.video, expected.video, rtol=.025, atol=.015)
+    torch.testing.assert_close(actual.audio, expected.audio, rtol=.025, atol=.015)
+    native_model.save_pretrained(tmp_path / "transformer")
+    reloaded = MiniMaxH3Transformer3DModel.from_pretrained(
+        tmp_path / "transformer", torch_dtype=torch.bfloat16, local_files_only=True)
+    assert tuple(reloaded.state_dict()) == tuple(native_model.state_dict())
+    restored = MiniMaxH3Adapter(reloaded).predict_velocity(state, sv, sa, c)
+    torch.testing.assert_close(actual.video, restored.video, rtol=0, atol=0)
+    torch.testing.assert_close(actual.audio, restored.audio, rtol=0, atol=0)
