@@ -43,13 +43,43 @@ uv pip install --python .venv-h3-cu128/bin/python -c environments/minimax-h3-cu1
 .venv-h3-cu128/bin/python -m visual_rl.models.check_minimax_h3_environment --mode model-only --tiny-forward
 ```
 
-This target is still pending full real-weight GPU acceptance. It does not change
-the model, ART objective or precision settings. Keep only the site's verified
+A deployment still needs full real-weight training/checkpoint/resume/media
+acceptance artifacts; an installation lock or collective gate alone is not
+acceptance. This target does not change the model, ART objective or precision
+settings. Keep only the site's verified
 driver compatibility directories when cleaning `LD_LIBRARY_PATH`; do not inherit
 Torch libraries or `site-packages` from another training environment. Record the
 actual driver/core/plugin versions and run the target's own collective and real
 FSDP gates. A fresh environment must also provide `ffmpeg`/`ffprobe`; the dependency
 file does not install system executables or prepare licensed scorer assets.
+
+The optional `scripts/minimax_h3_*` KML execution helpers use one MPI node owner
+per host and the site's existing generation-fenced lease library, supplied via
+`H3_LEASE_LIBRARY`. They are operational helpers, not another training backend.
+Each attempt needs its own immutable `launch.env`, nonce, source commit, config,
+output and preparation ID. Owners reject foreign GPU work or a dirty/wrong
+checkout, propagate any node failure, and verify nonce descendants plus GPU
+contexts drained before the current fenced owner restores holding. Do not add
+another `gpu_free`, unconditional holding trap or per-node tmux supervisor.
+Torchrun's `PET_LOG_DIR`/redirect/tee options retain separate worker logs. All
+CUDA/Triton/Torch/Numba and W&B staging caches stay under the selected task root;
+setting only `XDG_CACHE_HOME` is not sufficient for every CUDA cache.
+For the second clean-environment reproduction, set `H3_KERNEL_CACHE_ROOT` to a
+new subdirectory of that task root so compiled kernel caches are independent
+as well; verified immutable model/download assets may still be reused.
+
+Initial real32GPU capacity trials on140.40GiB H800s selected the conservative
+rollout8/update8 profile: one complete rollout and two finite updates passed on
+all32ranks, with51.05GiB worst allocated/96.37GiB reserved and97.79GiB sampled
+NVML peak. Update16 also completed, but used132.84GiB reserved/134.26GiB sampled
+NVML, leaving only4.37% physical headroom for an observed update-phase change
+from146.27s to140.68s. That small single-cycle difference is not a controlled
+speedup claim or a universal optimum. Sampling stayed8 in both cases, its real
+local trajectory limit. Their five initial reward means/stds matched exactly;
+per-window losses/gradient norms differed, so bit-exact training-batch
+equivalence is not claimed. Full four-rollout/checkpoint stability still has to
+be demonstrated for the chosen profile. Deployment evidence is tracked in
+[the acceptance PR](https://github.com/vanzll/DiffusionART/pull/4).
 
 The explicit scorer dependency inventory is
 `environments/minimax-h3-scorers.txt`. It is **not a completed installation lock**:

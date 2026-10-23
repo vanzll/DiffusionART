@@ -79,3 +79,39 @@ def test_mpi_transport_zero_requires_every_node_receipt(tmp_path, node_exits, fa
                             text=True, timeout=10)
     assert result.returncode == expected, result.stderr
     assert (attempt / 'mpi.exitcode').read_text().strip() == str(expected)
+
+
+@pytest.mark.parametrize('relative', ['cache', 'fresh-reproduction/kernel-cache'])
+def test_kernel_caches_stay_inside_task_root(tmp_path, relative):
+    source = Path(__file__).resolve().parents[1] / 'scripts/minimax_h3_runtime_env.sh'
+    fragment = source.read_text().split('export NCCL_IB_HCA', 1)[0].replace(
+        'source /m2v_intern2/zhenglin/my_bashrc.sh', ':')
+    root = tmp_path / 'task'
+    root.mkdir()
+    cache = root / relative
+    environment = dict(os.environ, H3_ACCEPTANCE_ROOT=str(root), H3_CHECKOUT=str(root),
+                       H3_ATTEMPT_DIR=str(root / 'attempt'), H3_PYTHON=sys.executable,
+                       H3_NODE_RANK='0', H3_KERNEL_CACHE_ROOT=str(cache), BASH_ENV='/dev/null')
+    result = subprocess.run(['bash', '-c', fragment + '\nprintf "%s\\n" "$CUDA_CACHE_PATH" "$TRITON_CACHE_DIR"'],
+                            env=environment, capture_output=True, text=True, timeout=10)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.splitlines() == [str(cache / 'cuda'), str(cache / 'triton')]
+    for directory in ['cuda', 'triton', 'torchinductor', 'torch-extensions', 'numba']:
+        assert (cache / directory).is_dir()
+
+
+def test_kernel_cache_rejects_path_outside_task_before_creation(tmp_path):
+    source = Path(__file__).resolve().parents[1] / 'scripts/minimax_h3_runtime_env.sh'
+    fragment = source.read_text().split('export NCCL_IB_HCA', 1)[0].replace(
+        'source /m2v_intern2/zhenglin/my_bashrc.sh', ':')
+    root = tmp_path / 'task'
+    root.mkdir()
+    outside = tmp_path / 'outside'
+    environment = dict(os.environ, H3_ACCEPTANCE_ROOT=str(root), H3_CHECKOUT=str(root),
+                       H3_ATTEMPT_DIR=str(root / 'attempt'), H3_PYTHON=sys.executable,
+                       H3_NODE_RANK='0', H3_KERNEL_CACHE_ROOT=str(root / '..' / 'outside'),
+                       BASH_ENV='/dev/null')
+    result = subprocess.run(['bash', '-c', fragment], env=environment, capture_output=True,
+                            text=True, timeout=10)
+    assert result.returncode != 0
+    assert not outside.exists()

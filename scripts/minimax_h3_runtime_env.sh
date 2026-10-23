@@ -9,6 +9,15 @@ export VIRTUAL_ENV="${H3_PYTHON%/bin/python}"
 export PATH="${VIRTUAL_ENV}/bin:${H3_ACCEPTANCE_ROOT}/tools/ffmpeg-6.0-amd64-static:/usr/local/mpi/bin:/usr/local/cuda/bin:/usr/local/nvidia/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 export LD_LIBRARY_PATH=/usr/local/cuda/compat/lib:/opt/hpcx/nccl_rdma_sharp_plugin/lib:/opt/hpcx/ucc/lib:/opt/hpcx/ucx/lib:/usr/local/nvidia/lib:/usr/local/nvidia/lib64
 export XDG_CACHE_HOME="${H3_ACCEPTANCE_ROOT}/cache" TMPDIR="${H3_ACCEPTANCE_ROOT}/tmp"
+kernel_cache_root="$(realpath -m "${H3_KERNEL_CACHE_ROOT:-${H3_ACCEPTANCE_ROOT}/cache}")"
+[[ "${kernel_cache_root}" == "${H3_ACCEPTANCE_ROOT}/"* ]] || return 2
+export CUDA_CACHE_PATH="${kernel_cache_root}/cuda"
+export TRITON_CACHE_DIR="${kernel_cache_root}/triton"
+export TORCHINDUCTOR_CACHE_DIR="${kernel_cache_root}/torchinductor"
+export TORCH_EXTENSIONS_DIR="${kernel_cache_root}/torch-extensions"
+export NUMBA_CACHE_DIR="${kernel_cache_root}/numba"
+mkdir -p "${CUDA_CACHE_PATH}" "${TRITON_CACHE_DIR}" "${TORCHINDUCTOR_CACHE_DIR}" \
+  "${TORCH_EXTENSIONS_DIR}" "${NUMBA_CACHE_DIR}"
 export HF_HOME="${H3_ACCEPTANCE_ROOT}/cache/huggingface"
 export WANDB_DIR="${H3_ATTEMPT_DIR}/wandb" WANDB_CACHE_DIR="${H3_ACCEPTANCE_ROOT}/cache/wandb"
 export WANDB_CONFIG_DIR="${H3_ACCEPTANCE_ROOT}/cache/wandb-config"
