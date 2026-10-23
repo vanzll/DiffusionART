@@ -205,6 +205,7 @@ def score_endpoints(parts, endpoints, rows, repeats, session, *, save_directory=
     _idle_policy(parts, session)
     video_text, audio_text = backend.reward_text(rows, repeats)
     scores, diagnostics, paths = {}, {}, []
+    event("decode_reward_begin", samples=len(endpoints))
     for index in range(len(endpoints)):
         # Both native VAEs are needed for adapter.decode; the policy and text
         # encoder have already released their unsharded GPU residency.
@@ -219,6 +220,8 @@ def score_endpoints(parts, endpoints, rows, repeats, session, *, save_directory=
         if save_directory is not None:
             paths.append(save_media(media, save_directory / f"sample-{index:06d}.mp4",
                 ffmpeg=c.model.options["ffmpeg"], ffprobe=c.model.options["ffprobe"]))
+        event("decode_reward_sample_complete", completed=index + 1, total=len(endpoints),
+              sample_id=rows[index // repeats].sample_id, trajectory_index=index % repeats)
     return paths, AVScores({k: torch.cat(v) for k, v in scores.items()},
                            {k: torch.cat(v) for k, v in diagnostics.items()})
 
@@ -548,6 +551,10 @@ def _run(session, c, prompts, resume, api, *, resume_rewind, evaluate_only):
                 population = global_scores(session, scores)
                 groups = torch.arange(prompts).repeat_interleave(k)
                 objective = _prepare_objective(c, parts, cache, predict, scores, population, groups, session, generator, nft)
+                if os.environ.get("H3_INPUT_AUDIT") == "1":
+                    from .minimax_h3_input_audit import audit_inputs
+                    session.local("H3 pre-update input audit", lambda: audit_inputs(
+                        session, objective, rows, generator, progress, root))
                 reward_seconds = time.monotonic() - phase
                 event("five_rewards_complete", optimizer_steps=progress.optimizer_steps, seconds=reward_seconds)
                 if nft is not None:

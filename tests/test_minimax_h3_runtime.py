@@ -180,6 +180,8 @@ def _checkpoint_payload(root):
 
 @pytest.mark.parametrize("algorithm", ["art", "nft", "fast"])
 def test_real_runtime_save_load_continuation_matches_uninterrupted(config_factory, monkeypatch, algorithm):
+    monkeypatch.setenv("H3_INPUT_AUDIT", "1")
+    monkeypatch.setenv("H3_ATTEMPT_NONCE", "audit-original")
     original = config_factory(algorithm, name="original")
     runtime.run(original, backend_api=fixture_api([]))
     expected = _checkpoint_payload(original.runtime.output_dir)
@@ -193,14 +195,24 @@ def test_real_runtime_save_load_continuation_matches_uninterrupted(config_factor
         receipts.append(receipt)
         raise StopAfterPublication
     monkeypatch.setattr(runtime, "save_checkpoint", stop)
+    monkeypatch.setenv("H3_ATTEMPT_NONCE", "audit-interrupted")
     with pytest.raises(StopAfterPublication):
         runtime.run(interrupted, backend_api=fixture_api([]))
     monkeypatch.setattr(runtime, "save_checkpoint", save)
+    monkeypatch.setenv("H3_ATTEMPT_NONCE", "audit-resumed")
     runtime.run(interrupted, resume=receipts[0], backend_api=fixture_api([]))
     actual = _checkpoint_payload(interrupted.runtime.output_dir)
     for name, tensor in expected["model"].items():
         torch.testing.assert_close(actual["model"][name], tensor, atol=0, rtol=0)
     assert actual["stateful"]["prompts"] == expected["stateful"]["prompts"]
+    def audited_inputs(config, nonce):
+        records = [json.loads(path.read_text()) for path in
+                   (Path(config.runtime.output_dir) / "input-audits" / nonce).glob("rollout-*/rank-*.json")]
+        assert records and all(record["visible_rng_preserved"] for record in records)
+        return {record["optimizer_steps"]: record["hashes"] for record in records}
+    continuous = audited_inputs(original, "audit-original")
+    resumed = audited_inputs(interrupted, "audit-resumed")
+    assert all(hashes == continuous[step] for step, hashes in resumed.items())
     torch.testing.assert_close(actual["generators"]["av_sampling"], expected["generators"]["av_sampling"], atol=0, rtol=0)
     if algorithm == "nft":
         assert actual["stateful"]["av_nft_counters"] == expected["stateful"]["av_nft_counters"]

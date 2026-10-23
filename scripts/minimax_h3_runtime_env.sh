@@ -6,6 +6,7 @@ unset NCCL_CUMEM_ENABLE NCCL_CUMEM_HOST_ENABLE NCCL_P2P_LEVEL NCCL_P2P_DIRECT_DI
 export PYTHONNOUSERSITE=1 PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 export CUBLAS_WORKSPACE_CONFIG=:4096:8
 export H3_RESTORE_AUDIT="${H3_RESTORE_AUDIT:-0}"
+export H3_INPUT_AUDIT="${H3_INPUT_AUDIT:-0}"
 export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
 export VIRTUAL_ENV="${H3_PYTHON%/bin/python}"
 export PATH="${VIRTUAL_ENV}/bin:${H3_ACCEPTANCE_ROOT}/tools/ffmpeg-6.0-amd64-static:/usr/local/mpi/bin:/usr/local/cuda/bin:/usr/local/nvidia/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"

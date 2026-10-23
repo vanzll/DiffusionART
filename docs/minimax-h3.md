@@ -354,6 +354,29 @@ the tested policy's sufficiency for that replay, not the identity of a faulty
 operator or a guarantee of bit equality across hardware, versions or world sizes.
 Full training/checkpoint continuation must still be checked independently.
 
+Each replay attempt above regenerated its own cached inputs. The input hashes
+differ across the two policies, while model and Adam hashes match on all ranks;
+the change in gradient norm is therefore not a matched-input causal comparison.
+Use complete continuous/resumed training to validate the chosen policy.
+
+H3 logs decoded/scored sample counts with prompt IDs and trajectory indices,
+so a long reward phase has visible local progress before the global phase ends.
+For checkpoint continuation diagnosis, optional `H3_INPUT_AUDIT=1` writes
+pre-update hashes of cached objective tensors/options, conditioning, prompt
+identity, RNG and the sampling generator. Set a fresh safe
+`H3_ATTEMPT_NONCE` for every execution. Receipts live under
+`input-audits/<nonce>/rollout-*/rank-*.json`; separate nonces preserve both
+continuous and resumed observations without replacing earlier receipts.
+Derived statistics and mutable diagnostic accumulators are excluded; model and
+Adam integrity use the separate restore audit. The input audit checks that RNG
+is unchanged and rejects unknown value types or receipt replacement.
+
+Keep these optional audit flags identical across a comparison. Input hashing
+adds CPU work and a coordinated phase check before updates; its measured time
+is included in reward/preparation timing. Preserve that observation overhead
+when comparing stage costs. The supplied H3 runtime shell leaves input auditing
+disabled unless explicitly requested.
+
 The adapter executes a true batch through the transformer rather than looping
 over requests. Mixed text lengths use masked padding in both the text refiner
 and the main attention stack. Each sample retains its original rotary positions
