@@ -1,3 +1,4 @@
+set +u
 source /m2v_intern2/zhenglin/my_bashrc.sh
 set -euo pipefail
 unset PYTHONPATH PYTHONHOME LD_PRELOAD CUDA_VISIBLE_DEVICES
