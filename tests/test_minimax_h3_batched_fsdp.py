@@ -97,7 +97,7 @@ def _worker(rank, directory):
             torch.optim.SGD(model.parameters(), lr=.01).step()
             torch.optim.SGD(reference.parameters(), lr=.01).step()
             with FSDP.state_dict_type(model, StateDictType.FULL_STATE_DICT,
-                                      FullStateDictConfig(offload_to_cpu=True, rank0_only=False)):
+                                      FullStateDictConfig(offload_to_cpu=False, rank0_only=False)):
                 actual_state = model.state_dict()
             expected_state = reference.state_dict()
             assert actual_state.keys() == expected_state.keys()

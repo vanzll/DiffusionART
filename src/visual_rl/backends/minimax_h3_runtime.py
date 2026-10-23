@@ -45,6 +45,7 @@ from ..training.resume import prepare_resume_history, validate_resume_request
 from ..training.state import CostClock, Progress
 from ..wandb_export import open_metrics
 from . import minimax_h3 as backend
+from .minimax_h3_observability import BatchTrace, event
 from .sd3 import _check_run_identity, _publish_evaluation, _restore_cost
 
 
@@ -339,6 +340,7 @@ def _prepare_objective(c, parts, cache, predict, local_scores, population, group
 def evaluate(session, c, parts, dataset, step, root):
     """Equal FSDP forward counts, including dummy rows on final empty shards."""
     model = parts.adapter.trainable_module
+    event("evaluation_begin", optimizer_steps=step, prompts=len(dataset.rows))
     model.eval()
     token = torch.tensor(list(uuid.uuid4().bytes) if session.identity.rank == 0 else [0] * 16,
                          dtype=torch.uint8, device=session.device)
@@ -392,6 +394,7 @@ def evaluate(session, c, parts, dataset, step, root):
         return _publish_evaluation(c, dataset, step, root, directory, [ordered[i] for i in range(len(dataset.rows))])
     result = session.primary("AV evaluation manifest", publish)
     model.train()
+    event("evaluation_complete", optimizer_steps=step)
     return result
 
 
@@ -432,7 +435,9 @@ def _run(session, c, prompts, resume, api, *, resume_rewind, evaluate_only):
         torch.manual_seed(c.seed)
         random.seed(c.seed)
         np.random.seed(c.seed)
+        event("cpu_component_loading_begin", config_sha256=c.fingerprint())
         parts = session.local("AV CPU component loading", lambda: api.load_components(c, session.device))
+        event("cpu_component_loading_complete")
         if hasattr(parts.reward, "close"):
             resources.callback(parts.reward.close)
         asset_identity = session.local("AV canonical asset identity", lambda: H3AssetIdentity(parts.manifest))
@@ -449,8 +454,13 @@ def _run(session, c, prompts, resume, api, *, resume_rewind, evaluate_only):
             raise ConfigError("H3 components must load policy on CPU before runtime placement")
         inventory = session.local("AV parameter inventory", lambda: parameter_inventory(model))
         session.agree(inventory)
+        trace = BatchTrace(os.environ.get("H3_TRACE_BATCH_SHAPES") == "1")
+        trace.install(model)
+        resources.callback(trace.close)
         if session.distributed:
+            event("full_shard_wrap_begin", world_size=world)
             model = wrap_policy(model, c, session.device)
+            event("full_shard_wrap_complete", world_size=world)
         else:
             if c.model.options["gradient_checkpointing"] and hasattr(model, "enable_gradient_checkpointing"):
                 model.enable_gradient_checkpointing()
@@ -473,6 +483,7 @@ def _run(session, c, prompts, resume, api, *, resume_rewind, evaluate_only):
         load = load_fsdp_checkpoint if session.distributed else load_checkpoint
         save = save_fsdp_checkpoint if session.distributed else save_checkpoint
         progress = load(resume, **checkpoint) if resume else Progress()
+        event("optimizer_ready", optimizer_steps=progress.optimizer_steps, resumed=resume is not None)
         if resume:
             def validate_boundary():
                 expected = api.updates_per_rollout(c)
@@ -516,18 +527,21 @@ def _run(session, c, prompts, resume, api, *, resume_rewind, evaluate_only):
                     noise = _noise(parts, c, prompts * k, generator)
                     return rows, predict, noise
                 rows, predict, noise = session.local("AV rollout conditioning", prepare)
+                event("conditioning_complete", rollout_attempt=progress.attempts, optimizer_steps=progress.optimizer_steps)
                 if nft is not None:
                     with nft.use_old(session):
                         cache = collect(parts, c, predict, noise, sigmas, session, generator, rollout_index=progress.attempts - 1)
                 else:
                     cache = collect(parts, c, predict, noise, sigmas, session, generator, rollout_index=progress.attempts - 1)
                 rollout_seconds = time.monotonic() - phase
+                event("rollout_complete", optimizer_steps=progress.optimizer_steps, seconds=rollout_seconds)
                 phase = time.monotonic()
                 _, scores = session.local("AV decode and five rewards", lambda: score_endpoints(parts, cache.endpoints, rows, k, session))
                 population = global_scores(session, scores)
                 groups = torch.arange(prompts).repeat_interleave(k)
                 objective = _prepare_objective(c, parts, cache, predict, scores, population, groups, session, generator, nft)
                 reward_seconds = time.monotonic() - phase
+                event("five_rewards_complete", optimizer_steps=progress.optimizer_steps, seconds=reward_seconds)
                 if nft is not None:
                     train_video, train_audio = objective.video_sigmas, objective.audio_sigmas
                     # Full fresh pool is permuted, never subsampled in H3 U1.
@@ -555,6 +569,10 @@ def _run(session, c, prompts, resume, api, *, resume_rewind, evaluate_only):
                 progress.optimizer_steps += actual
                 if actual:
                     progress.completed_rollouts += 1
+                event("updates_complete", optimizer_steps=progress.optimizer_steps,
+                      completed_rollouts=progress.completed_rollouts, successful_window_updates=actual,
+                      seconds=update_seconds)
+                trace.close()
                 metrics.update(_metrics(population))
                 metrics.update(sigma_metrics)
                 metrics.update({"time/rollout_seconds": rollout_seconds, "time/decode_reward_prepare_seconds": reward_seconds,
@@ -569,8 +587,10 @@ def _run(session, c, prompts, resume, api, *, resume_rewind, evaluate_only):
             if actual and validation is not None and c.evaluation.due(step, c.training.max_updates):
                 evaluate(session, c, parts, validation, step, root)
             if actual and c.runtime.checkpoint_due(step, c.training.max_updates):
+                event("checkpoint_begin", optimizer_steps=step)
                 clock.tick()
                 save(root / "checkpoints", progress=progress, keep_last=c.runtime.checkpoint_keep, **checkpoint)
+                event("checkpoint_complete", optimizer_steps=step)
             _publish_cost(session, c, root, clock)
         final = _publish_cost(session, c, root, clock)
         session.primary("AV completion", lambda: _atomic_json(root / "status.json", {"status": "completed",

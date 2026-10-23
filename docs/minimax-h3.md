@@ -26,6 +26,29 @@ Install `ffmpeg` and `ffprobe` on PATH. Native scorer dependencies and weights
 are separate from the model environment and are supplied through a reward manifest.
 No vLLM, Ray or verl dependency is introduced.
 
+For Linux x86-64 with Python3.12 and a CUDA12.8-compatible driver, the separate
+`environments/minimax-h3-cu128.txt` deployment file pins matched CUDA wheels for
+Torch2.11.0, torchaudio2.11.0 and torchvision0.26.0, including their official wheel
+SHA256 values. It retains the same Diffusers commit and H3 source checks, and pins
+AudioBox source to its0.0.4 release commit plus the native scorer dependencies.
+The original `minimax-h3.txt` remains the CPU oracle inventory, not a promise that
+its default CUDA13 wheels work with an older driver. Use a fresh environment:
+
+```bash
+uv venv --python 3.12 .venv-h3-cu128
+uv pip install --python .venv-h3-cu128/bin/python -r environments/minimax-h3-cu128.txt
+uv pip install --python .venv-h3-cu128/bin/python -e .
+.venv-h3-cu128/bin/python -m visual_rl.models.check_minimax_h3_environment --mode model-only --tiny-forward
+```
+
+This target is still pending full real-weight GPU acceptance. It does not change
+the model, ART objective or precision settings. Keep only the site's verified
+driver compatibility directories when cleaning `LD_LIBRARY_PATH`; do not inherit
+Torch libraries or `site-packages` from another training environment. Record the
+actual driver/core/plugin versions and run the target's own collective and real
+FSDP gates. A fresh environment must also provide `ffmpeg`/`ffprobe`; the dependency
+file does not install system executables or prepare licensed scorer assets.
+
 The explicit scorer dependency inventory is
 `environments/minimax-h3-scorers.txt`. It is **not a completed installation lock**:
 target-compatible torchaudio/torchvision wheels, the exact AudioBox implementation
@@ -153,6 +176,17 @@ not only weights. Paths may be relative to the reward manifest location.
 
 The exact seven asset names in all three mappings are `video_align`, `hpsv3`,
 `audiobox`, `clap`, `desync`, `video_align_base`, and `desync_source`.
+VideoAlign's base configuration is Qwen2-VL-2B, whereas the released HPSv3
+checkpoint has a3584-wide7B backbone. Do not initialize HPS from VideoAlign's
+1536-wide2B configuration. Bind `hpsv3` to an explicitly inventoried directory
+containing `HPSv3.safetensors` and `base_model/` with the matching Qwen2-VL-7B
+configuration, tokenizer and processor files. Base weights are unnecessary because
+HPS loads its strict full checkpoint. The bundle overrides the shared fallback
+base path; the legacy single-checkpoint interface still accepts an explicit
+matching base path. Preserve the original bytes and record both HPS and base-model
+immutable repository revisions/licenses in this composite asset's provenance.
+The seven top-level asset names and all reward preprocessing/calibration stay
+unchanged. A directory existing is not evidence that its real weights load.
 Create a paths-only JSON mapping with those names and the actual local file or
 directory paths, plus a provenance-only JSON mapping with those same names and
 each asset's actual `repo`/`revision`/`license`. Relative input paths resolve

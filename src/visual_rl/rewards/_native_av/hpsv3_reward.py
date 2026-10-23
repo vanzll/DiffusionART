@@ -18,6 +18,7 @@ import math
 import os
 import threading
 from dataclasses import dataclass
+from pathlib import Path
 
 import torch
 import torch.nn as nn
@@ -715,6 +716,14 @@ class HPSv3Model:
     def __init__(
         self, model_path: str, device, base_model_path: str = _BASE_MODEL, use_sequential_position_ids: bool = False
     ) -> None:
+        asset_root = Path(model_path)
+        if asset_root.is_dir():
+            checkpoint = asset_root / "HPSv3.safetensors"
+            base = asset_root / "base_model"
+            if not checkpoint.is_file() or not (base / "config.json").is_file():
+                raise ValueError("HPSv3 asset directory requires HPSv3.safetensors and base_model/config.json")
+            model_path = str(checkpoint)
+            base_model_path = str(base)
         self._inferencer = _HPSv3Inferencer(
             checkpoint_path=model_path,
             base_config=base_model_path,

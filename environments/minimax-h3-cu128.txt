@@ -1,0 +1,24 @@
+torch @ https://download-r2.pytorch.org/whl/cu128/torch-2.11.0%2Bcu128-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=d252cf975fb18c94a85336323ad425f473df56dab35a44b00399bd70c7a3b997
+torchaudio @ https://download-r2.pytorch.org/whl/cu128/torchaudio-2.11.0%2Bcu128-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=78b86a17f164bdaabdcee93fdfde2587fc43b9ebf15cd61dcf730b4f8615176b
+torchvision @ https://download-r2.pytorch.org/whl/cu128/torchvision-0.26.0%2Bcu128-cp312-cp312-manylinux_2_28_x86_64.whl#sha256=ccf26b4b659cfce6f2208cb8326071d51c70219a34856dfdf468d1e19af52c0d
+diffusers @ git+https://github.com/huggingface/diffusers.git@73faca368c0da77645ea58836aa8780d2d8c5353
+transformers==5.20.2
+huggingface-hub==2.2.0
+peft==0.21.2
+accelerate==1.15.0
+safetensors==0.8.0
+numpy==2.5.4
+sentencepiece==0.2.2
+Pillow==13.0.0
+pytest==9.1.1
+audiobox-aesthetics @ git+https://github.com/facebookresearch/audiobox-aesthetics.git@c8f3b9000be014367fdaf20de69176fe5a55a0fd
+einops==0.8.2
+omegaconf==2.3.1
+timm==1.0.27
+librosa==1.0.0
+scipy==1.18.1
+av==19.0.1
+imageio==2.38.1
+soundfile==0.14.0
+submitit==1.5.4
+rich==15.0.0
