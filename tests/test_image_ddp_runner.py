@@ -387,3 +387,18 @@ def test_global_reward_contract_and_coordinated_scorer_failure(tmp_path, case):
         assert not (tmp_path / "run/status.json").exists()
         assert (tmp_path / "run/metrics.jsonl").read_text() == ""
         assert not list((tmp_path / "run").glob("evaluation/*/*/manifest.json"))
+
+
+@pytest.mark.parametrize("model", ["sd3", "flux"])
+def test_flash_two_rank_native_ddp_and_exact_resume(tmp_path, monkeypatch, model):
+    import sys
+
+    original = configured
+    def flashed(*args, **kwargs):
+        path = original(*args, **kwargs)
+        contents = yaml.safe_load(path.read_text())
+        contents["training"]["timestep_selection"] = "first"
+        path.write_text(yaml.safe_dump(contents))
+        return path
+    monkeypatch.setattr(sys.modules[__name__], "configured", flashed)
+    test_two_rank_native_training_eval_and_exact_resume(tmp_path, "diffusionart", model, "fp32")

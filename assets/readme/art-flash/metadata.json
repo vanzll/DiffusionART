@@ -1,0 +1,152 @@
+{
+  "generated_utc": "2026-10-23T07:29:30.217840+00:00",
+  "runs": [
+    {
+      "id": "4dnkgeto",
+      "label": "Original",
+      "url": "https://wandb.ai/vanzl3386-chinese-university-of-hong-kong-shenzhen/flow-grpo-algo/runs/4dnkgeto",
+      "state": "crashed",
+      "source_commit": "8b2f8a8d3a07f937221e3963b1e1dd1d21ec5da3",
+      "scientific_config": {
+        "seed": 42,
+        "sampler_seed": 1237,
+        "model_id": "hunyuanvideo-community/HunyuanVideo",
+        "hunyuan_revision": "e8c2aaa66fe3742a32c11a6766aecbf07c56e773",
+        "videoreward_revision": "4f26600130683e6f1de9f5d463887f28e8ef995c",
+        "world_size": 32,
+        "sampling_steps": 16,
+        "shift": 5,
+        "learning_rate": 1e-05,
+        "adam_betas": [
+          0.9,
+          0.999
+        ],
+        "adam_epsilon": 1e-08,
+        "weight_decay": 0.0001,
+        "num_generations": 8,
+        "global_prompt_groups": 32,
+        "reward_fps": 4,
+        "reward_training_objective_weights_transport": {
+          "MQ": 0.5,
+          "TA": 0,
+          "VQ": 0.5
+        },
+        "corrective_mask_enabled": true,
+        "velocity_mask_metric": "scheduler_reference_metric",
+        "loss_space": "velocity_linear_sigma",
+        "update_microbatch_size": 8,
+        "rollout_microbatch_size": 8,
+        "optimizer_steps_per_rollout": 2
+      },
+      "training_positions_per_trajectory": 9,
+      "loss_denominator_per_update_per_rank": 36,
+      "rollout_points": 150,
+      "last_update": 300,
+      "last_elapsed_gpu_hours": 655.5653816335911,
+      "final_10_rollout_mean": {
+        "VQ": 15.0708740234375,
+        "MQ": 11.133423805236816
+      },
+      "configured_training_position_pool": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14
+      ],
+      "training_position_selection": "Sample 9 of the 15 configured candidate positions per trajectory; the pool is not the number replayed per update."
+    },
+    {
+      "id": "gswb6l1m",
+      "label": "DiffusionART-Flash",
+      "url": "https://wandb.ai/vanzl3386-chinese-university-of-hong-kong-shenzhen/flow-grpo-algo/runs/gswb6l1m",
+      "state": "finished",
+      "source_commit": "e76d2dd85ab888f57a05dbc3130c1d85c3bd650f",
+      "scientific_config": {
+        "seed": 42,
+        "sampler_seed": 1237,
+        "model_id": "hunyuanvideo-community/HunyuanVideo",
+        "hunyuan_revision": "e8c2aaa66fe3742a32c11a6766aecbf07c56e773",
+        "videoreward_revision": "4f26600130683e6f1de9f5d463887f28e8ef995c",
+        "world_size": 32,
+        "sampling_steps": 16,
+        "shift": 5,
+        "learning_rate": 1e-05,
+        "adam_betas": [
+          0.9,
+          0.999
+        ],
+        "adam_epsilon": 1e-08,
+        "weight_decay": 0.0001,
+        "num_generations": 8,
+        "global_prompt_groups": 32,
+        "reward_fps": 4,
+        "reward_training_objective_weights_transport": {
+          "MQ": 0.5,
+          "TA": 0,
+          "VQ": 0.5
+        },
+        "corrective_mask_enabled": true,
+        "velocity_mask_metric": "scheduler_reference_metric",
+        "loss_space": "velocity_linear_sigma",
+        "update_microbatch_size": 8,
+        "rollout_microbatch_size": 8,
+        "optimizer_steps_per_rollout": 2
+      },
+      "selected_positions": [
+        0
+      ],
+      "training_positions_per_trajectory": 1,
+      "loss_denominator_per_update_per_rank": 4,
+      "rollout_points": 200,
+      "last_update": 400,
+      "last_elapsed_gpu_hours": 389.65184212168,
+      "final_10_rollout_mean": {
+        "VQ": 14.644775390625,
+        "MQ": 11.153516578674317
+      }
+    }
+  ],
+  "purpose": "README: compare single-initial-timestep training with original nine-position ART",
+  "metric_keys": {
+    "VQ": "train/reward/raw_VQ",
+    "MQ": "train/reward/raw_MQ"
+  },
+  "x_keys": {
+    "updates": "train/optimizer_step",
+    "elapsed_gpu_hours": "_runtime * world_size / 3600"
+  },
+  "row_selection": "Keep finite positive-update training records; one observation per rollout using its last logged optimizer update. Rewards are frozen rollout rewards, repeated for two updates in W&B.",
+  "curve_treatment": "raw; no smoothing, interpolation/extrapolation or uncertainty bands; one seed per method",
+  "endpoints": "Original stops at update300; Flash stops at400. Retain both full measured trajectories.",
+  "cost_scope": "Both axes use elapsed GPU-hours from W&B runtime, including startup and all logged phases. Never mix newer training_gpu_hours with legacy elapsed time.",
+  "comparison_limits": "Single-run descriptive comparison, not a multi-seed equivalence or isolated hardware/runtime benchmark. Execution commits and data asset locations differ; shared recorded scientific settings are checked above.",
+  "training_items": {
+    "global_trajectories_per_update": 128,
+    "Original": 1152,
+    "DiffusionART-Flash": 128,
+    "reduction_factor": 9
+  },
+  "style": {
+    "Original": {
+      "color": "#526779",
+      "linestyle": "--",
+      "marker": "o"
+    },
+    "DiffusionART-Flash": {
+      "color": "#D55E00",
+      "linestyle": "-",
+      "marker": "D"
+    }
+  }
+}

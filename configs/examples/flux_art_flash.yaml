@@ -1,0 +1,6 @@
+extends: flux_pickscore.yaml
+name: flux-art-flash
+training:
+  timestep_selection: first
+runtime:
+  output_dir: outputs/flux-art-flash

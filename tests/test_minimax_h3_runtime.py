@@ -376,3 +376,39 @@ def test_checkpoint_asset_component_is_immutable():
     assert identity.state_dict()["assets"]["reward"]["manifest_sha256"] == "a"
     with pytest.raises(ConfigError, match="asset identity"):
         identity.load_state_dict(payload)
+
+
+@pytest.mark.parametrize("mode", ["full", "lora"])
+def test_flash_keeps_full_av_rollout_and_uses_one_position_per_update(config_factory, monkeypatch, mode):
+    from dataclasses import replace
+
+    c = config_factory("art", mode)
+    c = replace(c, training=replace(c.training, timestep_selection="first"))
+    collect = runtime.collect_av_rollout
+    observations = []
+    def capture(predict, noise, video_sigmas, audio_sigmas, **kwargs):
+        actual = collect(predict, noise, video_sigmas, audio_sigmas, **kwargs)
+        reference = collect(predict, noise, video_sigmas, audio_sigmas,
+                            **{**kwargs, "selected": tuple(range(len(video_sigmas) - 2))})
+        torch.testing.assert_close(actual.endpoints.video, reference.endpoints.video, rtol=0, atol=0)
+        torch.testing.assert_close(actual.endpoints.audio, reference.endpoints.audio, rtol=0, atol=0)
+        observations.append((actual.selected, len(video_sigmas) - 1))
+        return actual
+    monkeypatch.setattr(runtime, "collect_av_rollout", capture)
+    result = runtime.run(c, backend_api=fixture_api([]))
+    assert result["optimizer_steps"] == 4 and result["completed_rollouts"] == 2
+    assert observations == [((0,), 4), ((0,), 4)]
+    rows = [json.loads(line) for line in (Path(c.runtime.output_dir) / "metrics.jsonl").read_text().splitlines()]
+    assert all(row["av/training_positions"] == 1 and row["av/training_source_position_max"] == 0 for row in rows)
+
+
+@pytest.mark.parametrize("mode", ["full", "lora"])
+def test_flash_two_rank_fsdp_save_and_exact_resume(config_factory, tmp_path, mode):
+    from dataclasses import replace
+
+    def flashed(algorithm, finetune):
+        c = config_factory(algorithm, finetune)
+        return replace(c, training=replace(c.training, timestep_selection="first"))
+    test_real_two_rank_fsdp_six_fixture_paths_save_resume(flashed, tmp_path, "art", mode)
+    rows = [json.loads(line) for line in (tmp_path / "original/metrics.jsonl").read_text().splitlines()]
+    assert all(row["av/training_positions"] == 1 for row in rows)

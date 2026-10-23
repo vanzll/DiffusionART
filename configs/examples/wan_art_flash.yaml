@@ -1,0 +1,6 @@
+extends: wan_art.yaml
+name: wan-art-flash
+training:
+  timestep_selection: first
+runtime:
+  output_dir: outputs/wan-art-flash

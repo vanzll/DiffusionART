@@ -185,6 +185,8 @@ def _innovations(noise, positions, generator):
 def collect(parts, c, predict, noise, sigmas, session, generator, *, rollout_index, evaluation=False):
     _active_policy(parts, session)
     options = {}
+    if not evaluation and c.algorithm.name == "diffusionart" and c.training.timestep_selection == "first":
+        options["selected"] = (0,)
     if not evaluation and c.algorithm.name == "flow_grpo_fast":
         positions = select_fast_window(len(sigmas[0]) - 1, rollout_index=rollout_index,
             seed=c.sampling.options["window_seed"], size=c.sampling.options["window_size"],

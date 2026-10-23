@@ -1,0 +1,6 @@
+extends: minimax_h3_art_full_32gpu.yaml
+name: minimax-h3-art-flash-full-32gpu
+training:
+  timestep_selection: first
+runtime:
+  output_dir: outputs/minimax-h3-art-flash-full-32gpu

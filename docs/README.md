@@ -21,6 +21,8 @@ development-status documents are listed separately.
 
 ## Algorithms
 
+Train only at the initial denoising position with [DiffusionART-Flash](art-flash.md).
+
 Shared equations, source revisions, and adaptations:
 [algorithm contracts](algorithm-provenance.md).
 

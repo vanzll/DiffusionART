@@ -1,0 +1,6 @@
+extends: sd3_pickscore.yaml
+name: sd3-art-flash
+training:
+  timestep_selection: first
+runtime:
+  output_dir: outputs/sd3-art-flash

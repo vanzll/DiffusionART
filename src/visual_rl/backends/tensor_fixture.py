@@ -141,7 +141,8 @@ def _run_owned(config, root, resume, algorithm, p, k, *, resume_rewind=False):
     groups = torch.arange(p).repeat_interleave(k)
     condition = groups.float() / p
     sigmas = shifted_schedule(config.sampling.steps, 1.0)
-    selected = tuple(range(config.sampling.steps - 1))
+    selected = ((0,) if config.training.timestep_selection == "first"
+                else tuple(range(config.sampling.steps - 1)))
 
     def predict(state, sigma, rows):
         return model(state, sigma, condition[rows])
