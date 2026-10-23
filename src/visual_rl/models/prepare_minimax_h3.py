@@ -191,6 +191,17 @@ def write_manifest(path, manifest):
             os.unlink(stage)
 
 
+def validate_reward_provenance(source, *, name):
+    required = {"repo", "revision", "license"}
+    if (not isinstance(source, dict) or not required <= set(source)
+            or any(not isinstance(source[key], str) or not source[key].strip() for key in required)
+            or not re.fullmatch(r"[0-9a-f]{40}", source["revision"])):
+        raise ValueError(f"reward asset needs repository, immutable revision and license: {name}")
+    for key, value in source.items():
+        if isinstance(value, dict) and "repo" in value:
+            validate_reward_provenance(value, name=f"{name}/{key}")
+
+
 def build_reward_manifest(paths, provenance, *, base_dir="."):
     """Hash explicitly supplied local native scorer assets, without loading them.
 
@@ -202,11 +213,7 @@ def build_reward_manifest(paths, provenance, *, base_dir="."):
     resolved, hashes = {}, {}
     for name in sorted(REWARD_ASSETS):
         source = provenance[name]
-        if (not isinstance(source, dict) or not {"repo", "revision", "license"} <= set(source)
-                or any(not isinstance(source[key], str) or not source[key].strip()
-                       for key in ("repo", "revision", "license"))
-                or not re.fullmatch(r"[0-9a-f]{40}", source["revision"])):
-            raise ValueError(f"reward asset needs repository, immutable revision and license: {name}")
+        validate_reward_provenance(source, name=name)
         if not isinstance(paths[name], str) or not paths[name]:
             raise ValueError(f"reward asset path must be a nonempty string: {name}")
         path = Path(paths[name]).expanduser()

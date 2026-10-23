@@ -11,6 +11,8 @@ export LD_LIBRARY_PATH=/usr/local/cuda/compat/lib:/opt/hpcx/nccl_rdma_sharp_plug
 export XDG_CACHE_HOME="${H3_ACCEPTANCE_ROOT}/cache" TMPDIR="${H3_ACCEPTANCE_ROOT}/tmp"
 export HF_HOME="${H3_ACCEPTANCE_ROOT}/cache/huggingface"
 export WANDB_DIR="${H3_ATTEMPT_DIR}/wandb" WANDB_CACHE_DIR="${H3_ACCEPTANCE_ROOT}/cache/wandb"
+export PET_LOG_DIR="${H3_ATTEMPT_DIR}/logs/torchrun/node-${H3_NODE_RANK}"
+export PET_REDIRECTS=3 PET_TEE=3
 export OMP_NUM_THREADS=4 MKL_NUM_THREADS=4
 export NCCL_NET='NCCL RDMA Plugin v9'
 export NCCL_NET_PLUGIN=/opt/hpcx/nccl_rdma_sharp_plugin/lib/libnccl-net.so

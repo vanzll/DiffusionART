@@ -171,6 +171,40 @@ def test_reward_manifest_rejects_empty_and_floating_assets(reward_assets):
         build_reward_manifest(paths, provenance, base_dir=root)
 
 
+def test_prepared_extended_provenance_roundtrips_runtime(reward_assets, monkeypatch):
+    from types import SimpleNamespace
+
+    from visual_rl.backends.minimax_h3 import load_reward
+    from visual_rl.rewards.audio_video import AudioVideoReward
+
+    root, paths, provenance = reward_assets
+    provenance['hpsv3']['base_model'] = dict(repo='fixture/base7b', revision='b' * 40, license='fixture')
+    provenance['audiobox']['implementation'] = dict(repo='fixture/implementation', revision='c' * 40,
+                                                   license='fixture', version='0.0.4')
+    provenance['desync_source']['subtree'] = 'fixture/source'
+    manifest = build_reward_manifest(paths, provenance, base_dir=root)
+    path = root / 'rewards.json'
+    write_manifest(path, manifest)
+    observed = {}
+    def make_reward(cls, actual_paths, *, device, expected_sha256):
+        observed.update(paths=actual_paths, device=device, sha256=expected_sha256)
+        return SimpleNamespace()
+    monkeypatch.setattr(AudioVideoReward, 'from_paths', classmethod(make_reward))
+    config = SimpleNamespace(reward=SimpleNamespace(options={'manifest': str(path)}))
+    reward = load_reward(config, 'cpu')
+    assert reward.asset_identity['provenance'] == provenance
+    assert observed['sha256'] == manifest['sha256']
+    assert observed['paths'] == manifest['paths']
+    assert reward.asset_identity['manifest_sha256'] == hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def test_nested_provenance_rejects_floating_revision(reward_assets):
+    root, paths, provenance = reward_assets
+    provenance['hpsv3']['base_model'] = dict(repo='fixture/base', revision='main', license='fixture')
+    with pytest.raises(ValueError, match='immutable.*hpsv3/base_model'):
+        build_reward_manifest(paths, provenance, base_dir=root)
+
+
 def test_actual_loader_requires_ready_inventory_before_loading_components(assets, monkeypatch):
     from visual_rl.models.minimax_h3_assets import load_minimax_h3
     root, metadata = assets
