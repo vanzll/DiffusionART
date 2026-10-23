@@ -1,9 +1,9 @@
 import copy
-from datetime import timedelta
 import json
 import os
-from pathlib import Path
 import time
+from datetime import timedelta
+from pathlib import Path
 
 import pytest
 import torch

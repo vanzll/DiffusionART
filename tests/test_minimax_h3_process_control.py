@@ -1,13 +1,12 @@
 import importlib.util
 import os
-from pathlib import Path
 import shlex
 import subprocess
 import sys
 import uuid
+from pathlib import Path
 
 import pytest
-
 
 specification = importlib.util.spec_from_file_location(
     'h3_control', Path(__file__).resolve().parents[1] / 'scripts/minimax_h3_process_control.py')

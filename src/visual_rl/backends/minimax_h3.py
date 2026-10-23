@@ -146,8 +146,8 @@ def load_reward(c, device):
     import json
     import os
 
-    from ..rewards.audio_video import AudioVideoReward
     from ..models.prepare_minimax_h3 import validate_reward_provenance
+    from ..rewards.audio_video import AudioVideoReward
     path = Path(c.reward.options["manifest"])
     if path.stat().st_size > 1024 * 1024:
         raise ConfigError("scorer asset manifest exceeds 1 MiB")
