@@ -2,7 +2,7 @@ import json
 
 import torch
 
-from visual_rl.backends.minimax_h3_observability import BatchTrace
+from visual_rl.backends.minimax_h3_observability import BatchTrace, event
 
 
 def test_batch_trace_preserves_values_and_gradients_and_removes_hooks(capsys):
@@ -54,3 +54,27 @@ def test_batch_trace_records_nested_padding_mask_without_copy(capsys):
     record = json.loads(capsys.readouterr().out.splitlines()[0].removeprefix("H3_PROGRESS "))
     assert record["shapes"]["attention_kwargs/h3_text_mask"] == [4, 7]
     assert record["dtypes"]["attention_kwargs/h3_text_mask"] == "torch.bool"
+
+
+def test_event_does_not_initialize_cuda(monkeypatch, capsys):
+    monkeypatch.setattr(torch.cuda, 'is_initialized', lambda: False)
+    def forbidden():
+        raise AssertionError('CUDA must not be initialized by observation')
+    monkeypatch.setattr(torch.cuda, 'memory_allocated', forbidden)
+    event('before_binding')
+    record = json.loads(capsys.readouterr().out.removeprefix('H3_PROGRESS '))
+    assert 'cuda_allocated_bytes' not in record
+
+
+def test_event_reads_existing_memory_counters_without_reset(monkeypatch, capsys):
+    monkeypatch.setattr(torch.cuda, 'is_initialized', lambda: True)
+    for name, value in [('memory_allocated', 12), ('memory_reserved', 24),
+                        ('max_memory_allocated', 18), ('max_memory_reserved', 32)]:
+        monkeypatch.setattr(torch.cuda, name, lambda value=value: value)
+    def forbidden(*args, **kwargs):
+        raise AssertionError('Observation must not reset memory counters')
+    monkeypatch.setattr(torch.cuda, 'reset_peak_memory_stats', forbidden)
+    event('after_update')
+    record = json.loads(capsys.readouterr().out.removeprefix('H3_PROGRESS '))
+    assert record['cuda_allocated_bytes'] == 12
+    assert record['cuda_peak_reserved_bytes'] == 32

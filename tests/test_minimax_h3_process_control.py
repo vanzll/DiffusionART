@@ -1,6 +1,7 @@
 import importlib.util
 import os
 from pathlib import Path
+import shlex
 import subprocess
 import sys
 import uuid
@@ -45,3 +46,36 @@ def test_only_exact_nonce_and_root_child_is_stopped(tmp_path):
             if process.poll() is None:
                 process.terminate()
             process.wait(timeout=3)
+
+
+@pytest.mark.parametrize('node_exits,failure,expected', [
+    ([0, 0, 0, 0], False, 0),
+    ([0, 1, 0, 0], False, 1),
+    ([0, None, 0, 0], False, 1),
+    ([0, 0, 0, 0], True, 1),
+])
+def test_mpi_transport_zero_requires_every_node_receipt(tmp_path, node_exits, failure, expected):
+    attempt = tmp_path / 'attempt'
+    for node_rank, status in enumerate(node_exits):
+        directory = attempt / f'nodes/{node_rank}'
+        directory.mkdir(parents=True)
+        if status is not None:
+            (directory / 'exitcode').write_text(f'{status}\n')
+    if failure:
+        (attempt / 'failure.2').write_text('failed\n')
+    mpi = tmp_path / 'transport.py'
+    mpi.write_text('raise SystemExit(0)\n')
+    original = Path(__file__).resolve().parents[1] / 'scripts/minimax_h3_mpi_attempt.sh'
+    script = tmp_path / 'coordinator.sh'
+    script.write_text(original.read_text().replace(
+        'source /m2v_intern2/zhenglin/my_bashrc.sh', ':').replace(
+        '/usr/local/mpi/bin/mpirun', f'{shlex.quote(sys.executable)} {shlex.quote(str(mpi))}'))
+    environment = tmp_path / 'launch.env'
+    environment.write_text('\n'.join([
+        f'H3_ATTEMPT_DIR={shlex.quote(str(attempt))}', 'H3_ATTEMPT_NONCE=cpu-test',
+        'H3_SSH_KNOWN_HOSTS=unused', 'H3_CHECKOUT=unused', 'H3_NNODES=4',
+    ]) + '\n')
+    result = subprocess.run(['bash', str(script), str(environment)], capture_output=True,
+                            text=True, timeout=10)
+    assert result.returncode == expected, result.stderr
+    assert (attempt / 'mpi.exitcode').read_text().strip() == str(expected)

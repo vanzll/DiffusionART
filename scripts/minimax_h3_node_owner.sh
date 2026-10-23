@@ -2,6 +2,7 @@ source /m2v_intern2/zhenglin/my_bashrc.sh
 set -euo pipefail
 unset H3_ATTEMPT_NONCE
 source "${1:?missing attempt environment}"
+export PYTHONDONTWRITEBYTECODE=1
 node_rank="${OMPI_COMM_WORLD_RANK:?missing MPI node rank}"
 host="$(hostname -s)"
 control="${H3_CHECKOUT}/scripts/minimax_h3_process_control.py"
@@ -41,6 +42,13 @@ cleanup() {
       printf '124\n' > "${node_dir}/exitcode"
       exit 124
     fi
+    if (( status == 0 )) && ! /usr/bin/python3 -c \
+      'import json,sys; result=json.load(open(sys.argv[1])); sys.exit(bool(result["signaled"]))' \
+      "${node_dir}/drain.json"; then
+      status=125
+      owner_event 'leader reported success but left descendants; attempt failed'
+      printf 'orphan-descendants\n' > "${H3_ATTEMPT_DIR}/failure.${node_rank}"
+    fi
     local deadline=$((SECONDS + 90))
     until timeout -k 2 12 /usr/bin/python3 "${control}" --empty > "${node_dir}/gpu-drain.json" 2>&1; do
       if (( SECONDS >= deadline )); then
@@ -63,6 +71,8 @@ cleanup() {
 trap cleanup EXIT
 trap stop_signal TERM INT
 owner_event "admission nonce=${H3_ATTEMPT_NONCE}"
+[[ "$(git -C "${H3_CHECKOUT}" rev-parse HEAD)" == "${H3_RUNTIME_COMMIT}" ]]
+[[ -z "$(git -C "${H3_CHECKOUT}" status --porcelain)" ]]
 timeout -k 2 12 /usr/bin/python3 "${control}" --admit > "${node_dir}/admission.json"
 flowart_gpu_lease_configure "${host}" h3-art-full-acceptance "${H3_ATTEMPT_NONCE}" "${H3_ATTEMPT_NONCE}"
 flowart_gpu_lease_acquire

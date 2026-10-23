@@ -31,13 +31,15 @@ For Linux x86-64 with Python3.12 and a CUDA12.8-compatible driver, the separate
 Torch2.11.0, torchaudio2.11.0 and torchvision0.26.0, including their official wheel
 SHA256 values. It retains the same Diffusers commit and H3 source checks, and pins
 AudioBox source to its0.0.4 release commit plus the native scorer dependencies.
+Its companion constraints file fixes the resolved transitive Linux/Python3.12
+deployment, including native NCCL2.28.9; it is not the old cluster's NCCL2.29.7.
 The original `minimax-h3.txt` remains the CPU oracle inventory, not a promise that
 its default CUDA13 wheels work with an older driver. Use a fresh environment:
 
 ```bash
-uv venv --python 3.12 .venv-h3-cu128
+uv venv --python /usr/bin/python3.12 .venv-h3-cu128
 uv pip install --python .venv-h3-cu128/bin/python -r environments/minimax-h3-cu128.txt
-uv pip install --python .venv-h3-cu128/bin/python -e .
+uv pip install --python .venv-h3-cu128/bin/python -c environments/minimax-h3-cu128-constraints.txt -e .
 .venv-h3-cu128/bin/python -m visual_rl.models.check_minimax_h3_environment --mode model-only --tiny-forward
 ```
 

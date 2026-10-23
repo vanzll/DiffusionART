@@ -13,6 +13,11 @@ def event(stage, **values):
               "attempt": os.environ.get("H3_ATTEMPT_NONCE"),
               "commit": os.environ.get("H3_RUNTIME_COMMIT"),
               "stage": stage, "unix": time.time(), **values}
+    if torch.cuda.is_initialized():
+        record.update(cuda_allocated_bytes=torch.cuda.memory_allocated(),
+                      cuda_reserved_bytes=torch.cuda.memory_reserved(),
+                      cuda_peak_allocated_bytes=torch.cuda.max_memory_allocated(),
+                      cuda_peak_reserved_bytes=torch.cuda.max_memory_reserved())
     print("H3_PROGRESS " + json.dumps(record, sort_keys=True, allow_nan=False), flush=True)
 
 
