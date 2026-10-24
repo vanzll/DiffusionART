@@ -49,6 +49,7 @@ from ..training.objectives import ARTObjective, prompt_disjoint_windows
 from ..training.resume import prepare_resume_history, validate_resume_request
 from ..training.rollout import collect_rollout
 from ..training.state import CostClock, Progress
+from ..training.timesteps import art_training_positions
 from ..training.update import accumulated_step
 from ..wandb_export import open_metrics
 
@@ -717,7 +718,7 @@ def run(c, *, resume=None, resume_rewind=False, evaluate_only=False):
         p, k = c.sampling.prompts_per_rollout, c.sampling.samples_per_prompt
         groups = torch.arange(p).repeat_interleave(k)
         sigmas = _schedule(c, c.sampling.steps)
-        selected = tuple(c.sampling.options.get("train_timesteps", ()))
+        selected = art_training_positions(c.training, c.sampling.options.get("train_timesteps", ()))
         empty_rollouts = 0
         no_signal = NoSignalGuard(c.runtime.max_consecutive_no_signal_rollouts)
         with open_metrics(c, root) as log:

@@ -36,6 +36,7 @@ from ..training.no_signal import NoSignalGuard
 from ..training.resume import prepare_resume_history, validate_resume_request
 from ..training.rollout import collect_rollout
 from ..training.state import CostClock, Progress
+from ..training.timesteps import art_training_positions
 from ..training.update import accumulated_step
 from ..wandb_export import open_metrics
 
@@ -275,7 +276,7 @@ def _run(session, c, p, k, resume, *, resume_rewind=False, evaluate_only=False):
         if validation and not resume:
             _evaluate(session, c, parts, wrapped, validation, 0, root, algorithm_state)
         sigmas = sd3._schedule(c, c.sampling.steps)
-        selected = tuple(c.sampling.options.get("train_timesteps", ()))
+        selected = art_training_positions(c.training, c.sampling.options.get("train_timesteps", ()))
         empty_rollouts = 0
         no_signal = NoSignalGuard(c.runtime.max_consecutive_no_signal_rollouts)
         while progress.optimizer_steps < c.training.max_updates:

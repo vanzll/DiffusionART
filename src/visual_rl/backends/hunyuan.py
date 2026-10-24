@@ -208,6 +208,8 @@ def _rollout_inputs(c, attempt, rank=0):
     rows = c.sampling.prompts_per_rollout * c.sampling.samples_per_prompt
     noise = torch.randn(_shape(c, rows), generator=generator,
                         dtype=torch.bfloat16 if c.training.precision == "bf16" else torch.float32)
+    if c.training.timestep_selection == "first":
+        return noise, torch.zeros((rows, 1), dtype=torch.long)
     pool = torch.tensor(c.sampling.options["train_timestep_pool"])
     selected = torch.stack([pool[torch.randperm(len(pool), generator=generator)[:c.sampling.options["train_timestep_count"]]] for _ in range(rows)])
     return noise, selected

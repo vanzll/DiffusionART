@@ -228,8 +228,11 @@ class Training:
     betas: tuple[float, float] = (0.9, 0.999)
     epsilon: float = 1e-8
     allow_tf32: bool | None = None
+    timestep_selection: str = "configured"
 
     def __post_init__(self):
+        if self.timestep_selection not in ("configured", "first"):
+            raise ConfigError("training.timestep_selection must be configured or first")
         _positive_int(self.max_updates, "training.max_updates")
         _positive_int(self.microbatch, "training.microbatch")
         for key in ("learning_rate", "grad_clip", "epsilon"):
@@ -401,6 +404,8 @@ class Experiment:
         validate_assets(self.assets)
         if self.algorithm.name == "refl" and self.sampling.samples_per_prompt != 1:
             raise ConfigError("the supported ReFL recipe requires K=1")
+        if self.training.timestep_selection != "configured" and self.algorithm.name != "diffusionart":
+            raise ConfigError("training.timestep_selection=first is supported only by DiffusionART (DiffusionART-Flash)")
         if self.task == "t2i" and self.sampling.frames != 1:
             raise ConfigError("T2I requires sampling.frames=1")
         if any(step > self.training.max_updates for step in
@@ -410,6 +415,9 @@ class Experiment:
     def to_dict(self) -> dict:
         document = asdict(self)
         document.pop("_checkpoint_identity")
+        # Preserve existing config/checkpoint identities when Flash is disabled.
+        if self.training.timestep_selection == "configured":
+            document["training"].pop("timestep_selection")
         if not self.assets:
             document.pop("assets")
         if self.data is not None:

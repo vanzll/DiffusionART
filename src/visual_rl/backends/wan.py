@@ -146,9 +146,13 @@ def _predict(c, parts, rows, manifest, repeats, device, *, attempt=0, rank=0, ev
 
 
 def training_inputs(c, attempt, rank=0):
-    return wan_video.inputs(algorithm=c.algorithm.name, seed=c.seed, rank=rank, attempt=attempt,
+    plan = wan_video.inputs(algorithm=c.algorithm.name, seed=c.seed, rank=rank, attempt=attempt,
         prompts_per_rank=c.sampling.prompts_per_rollout, k=c.sampling.samples_per_prompt,
         latent_shape=_shape(c, 1)[1:])
+    if c.training.timestep_selection == "first":
+        noise, _, innovations = plan
+        return noise, torch.zeros((len(noise), 1), dtype=torch.long), innovations
+    return plan
 
 
 def collect_training(c, parts, predict, plan, sigmas, device):

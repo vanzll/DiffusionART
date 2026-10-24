@@ -24,6 +24,8 @@
 
 ## News
 
+- ⚡ **[2026.10.23]** **[DiffusionART-Flash](#diffusionart-flash) is supported!** Training only at the initial denoising timestep substantially reduces training time while achieving comparable performance.
+
 - 🎉 **[2026.10.22]** [MiniMax-H3](docs/minimax-h3.md) is now supported for **text-to-audio/video (omni)** training with **DiffusionART, DiffusionNFT and Flow-GRPO-Fast**, including LoRA and full-parameter recipes!
 
 - 🥇 **[2026.10.12]** DiffusionART ranked **#1 on [Hugging Face Daily Papers](https://huggingface.co/papers/2610.12572)**!
@@ -151,6 +153,28 @@ for pairwise K = 2, 4, 8 and scalar K = 8, each trained for 400 updates.
 
 <p align="center"><em>Pre-trained versus DiffusionART. Video strips show four frames.</em></p>
 
+## DiffusionART-Flash
+
+**Train at the first timestep. Keep the full rollout.** DiffusionART-Flash updates
+the policy only at the initial denoising timestep. In the HunyuanVideo comparison
+below, it achieves similar VQ and MQ with **9× fewer sample–timestep training
+items per update**.
+
+<p align="center"><img src="assets/readme/art-flash-comparison.svg" width="960" alt="Original DiffusionART versus DiffusionART-Flash: raw VQ and MQ training curves against optimizer updates and elapsed GPU-hours"></p>
+
+*HunyuanVideo, VQ:MQ = 1:1, seed 42. Raw training scores.*
+
+Enable Flash in an ART configuration:
+
+```yaml
+training:
+  timestep_selection: first
+```
+
+The loss denominator follows the selected sample–timestep pairs; rollout steps
+and updates per rollout stay unchanged. See the [guide and example configs](docs/art-flash.md)
+for usage, [source runs and plot data](assets/readme/art-flash/metadata.json).
+
 ## Released Models
 
 | Task | Model | Release |
@@ -165,7 +189,7 @@ Each model card includes its inference setup, base-model requirements and exampl
 | Feature Category | Supported Capabilities |
 | --- | --- |
 | **Tasks** | ✅ Text-to-image<br>✅ Text-to-video<br>✅ Image-to-video<br>✅ Text-to-audio/video |
-| **Algorithms** | ✅ DiffusionART<br>✅ DiffusionNFT (EMA / on-policy)<br>✅ Flow-GRPO / Flow-GRPO-Fast<br>✅ Flow-DPPO<br>✅ DanceGRPO<br>✅ ReFL (video) |
+| **Algorithms** | ✅ DiffusionART / [DiffusionART-Flash](docs/art-flash.md)<br>✅ DiffusionNFT (EMA / on-policy)<br>✅ Flow-GRPO / Flow-GRPO-Fast<br>✅ Flow-DPPO<br>✅ DanceGRPO<br>✅ ReFL (video) |
 | **Base Models** | ✅ [SD3.5-M](docs/sd3-runner.md)<br>✅ [FLUX.1-dev](docs/flux-runner.md)<br>✅ [HunyuanVideo-13B](docs/hunyuan-runner.md)<br>✅ [Wan2.1-I2V-14B (CFG/step-distilled)](docs/wan-runner.md)<br>✅ [MiniMax-H3 (audio/video)](docs/minimax-h3.md) |
 | **Reward Models** | ✅ GenEval / PickScore / OCR<br>✅ CLIPScore / Aesthetic<br>✅ [VideoReward (TA / VQ / MQ)](docs/video-installation.md)<br>✅ [VideoAlign / HPSv3 / AudioBox / CLAP / DeSync](docs/minimax-h3.md#prompt-data-and-native-scorer-assets)<br>✅ [Configurable reward weights](docs/composite-rewards.md) |
 | **Feedback** | ✅ Scalar rewards<br>✅ Pairwise preferences (Hunyuan ART)<br>✅ Configurable rollout groups: K = 2, 4, 8 |
