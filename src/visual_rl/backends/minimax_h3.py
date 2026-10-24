@@ -146,6 +146,7 @@ def load_reward(c, device):
     import json
     import os
 
+    from ..models.prepare_minimax_h3 import validate_reward_provenance
     from ..rewards.audio_video import AudioVideoReward
     path = Path(c.reward.options["manifest"])
     if path.stat().st_size > 1024 * 1024:
@@ -159,11 +160,11 @@ def load_reward(c, device):
             or not isinstance(record["provenance"], dict)
             or set(record["provenance"]) != set(record["paths"])):
         raise ConfigError("every scorer asset requires explicit source provenance")
-    for source in record["provenance"].values():
-        if (not isinstance(source, dict) or set(source) != {"repo", "revision", "license"}
-                or any(not isinstance(v, str) or not v.strip() for v in source.values())
-                or not re.fullmatch(r"[0-9a-f]{40}", source["revision"])):
-            raise ConfigError("scorer provenance needs repo, fixed revision and license")
+    for name, source in record["provenance"].items():
+        try:
+            validate_reward_provenance(source, name=name)
+        except ValueError as error:
+            raise ConfigError("scorer provenance needs repo, fixed revision and license") from error
     paths = {key: os.path.abspath(path.parent / value) for key, value in record["paths"].items()}
     reward = AudioVideoReward.from_paths(paths, device=device, expected_sha256=record["sha256"])
     reward.asset_identity = {"manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),

@@ -26,6 +26,81 @@ Install `ffmpeg` and `ffprobe` on PATH. Native scorer dependencies and weights
 are separate from the model environment and are supplied through a reward manifest.
 No vLLM, Ray or verl dependency is introduced.
 
+For Linux x86-64 with Python3.12 and a CUDA12.8-compatible driver, the separate
+`environments/minimax-h3-cu128.txt` deployment file pins matched CUDA wheels for
+Torch2.11.0, torchaudio2.11.0 and torchvision0.26.0, including their official wheel
+SHA256 values. It retains the same Diffusers commit and H3 source checks, and pins
+AudioBox source to its0.0.4 release commit plus the native scorer dependencies.
+Its companion constraints file fixes the resolved transitive Linux/Python3.12
+deployment, including native NCCL2.28.9; it is not the old cluster's NCCL2.29.7.
+The original `minimax-h3.txt` remains the CPU oracle inventory, not a promise that
+its default CUDA13 wheels work with an older driver. Use a fresh environment:
+
+```bash
+uv venv --python /usr/bin/python3.12 .venv-h3-cu128
+uv pip install --python .venv-h3-cu128/bin/python -r environments/minimax-h3-cu128.txt
+uv pip install --python .venv-h3-cu128/bin/python -c environments/minimax-h3-cu128-constraints.txt -e .
+.venv-h3-cu128/bin/python -m visual_rl.models.check_minimax_h3_environment --mode model-only --tiny-forward
+```
+
+A deployment still needs full real-weight training/checkpoint/resume/media
+acceptance artifacts; an installation lock or collective gate alone is not
+acceptance. This target does not change the model, ART objective or precision
+settings. Keep only the site's verified
+driver compatibility directories when cleaning `LD_LIBRARY_PATH`; do not inherit
+Torch libraries or `site-packages` from another training environment. Record the
+actual driver/core/plugin versions and run the target's own collective and real
+FSDP gates. A fresh environment must also provide `ffmpeg`/`ffprobe`; the dependency
+file does not install system executables or prepare licensed scorer assets.
+
+The optional `scripts/minimax_h3_*` KML execution helpers use one MPI node owner
+per host and the site's existing generation-fenced lease library, supplied via
+`H3_LEASE_LIBRARY`. They are operational helpers, not another training backend.
+Each attempt needs its own immutable `launch.env`, nonce, source commit, config,
+output and preparation ID. Owners reject foreign GPU work or a dirty/wrong
+checkout, propagate any node failure, and verify nonce descendants plus GPU
+contexts drained before the current fenced owner restores holding. Do not add
+another `gpu_free`, unconditional holding trap or per-node tmux supervisor.
+Torchrun's `PET_LOG_DIR`/redirect/tee options retain separate worker logs. All
+CUDA/Triton/Torch/Numba and W&B staging caches stay under the selected task root;
+setting only `XDG_CACHE_HOME` is not sufficient for every CUDA cache.
+For the second clean-environment reproduction, set `H3_KERNEL_CACHE_ROOT` to a
+new subdirectory of that task root so compiled kernel caches are independent
+as well; verified immutable model/download assets may still be reused.
+
+Initial real32GPU capacity trials on140.40GiB H800s selected the conservative
+rollout8/update8 profile: one complete rollout and two finite updates passed on
+all32ranks, with51.05GiB worst allocated/96.37GiB reserved and97.79GiB sampled
+NVML peak. Update16 also completed, but used132.84GiB reserved/134.26GiB sampled
+NVML, leaving only4.37% physical headroom for an observed update-phase change
+from146.27s to140.68s. That small single-cycle difference is not a controlled
+speedup claim or a universal optimum. Sampling stayed8 in both cases, its real
+local trajectory limit. Their five initial reward means/stds matched exactly;
+per-window losses/gradient norms differed, so bit-exact training-batch
+equivalence is not claimed. Complete four-rollout/checkpoint/continuation
+acceptance has a separate evidence ledger in
+[the acceptance PR](https://github.com/vanzll/DiffusionART/pull/4).
+
+Independent eight-GPU trials on the same140.40GiB devices selected
+rollout4/update2. One complete real rollout and two updates used77.49GiB peak
+allocated/118.58GiB reserved and120.10GiB sampled NVML, leaving14.46% observed
+physical headroom. A bounded rollout8/update4 trial also completed; its update
+phase fell from895.60s to746.41s, but reserved memory reached131.09GiB and
+sampled NVML132.61GiB, leaving5.55% before the formal initial evaluation,
+checkpoint and four-rollout lifecycle. The conservative profile retains margin
+for those phases. This measured tradeoff does not establish a universal optimum
+or prove that the larger candidate will OOM.
+
+The two trials' model-collection intervals were174.68s and173.63s. Their total
+rollout times282.11s and338.16s include conditioning/preparation intervals of
+107.43s and164.53s, respectively. These host phase boundaries do not isolate
+GPU kernels or communication. Decode/reward/preparation took619.47s and573.77s.
+Both trials had finite five-scorer populations and nonzero gradients, but their
+reward values differed; numerical identity across sampling batch sizes is not
+claimed. These are capacity trials with evaluation disabled. Their matching
+science, actual batch shapes, full online metrics and later formal lifecycle
+receipts are recorded in the acceptance PR.
+
 The explicit scorer dependency inventory is
 `environments/minimax-h3-scorers.txt`. It is **not a completed installation lock**:
 target-compatible torchaudio/torchvision wheels, the exact AudioBox implementation
@@ -153,6 +228,17 @@ not only weights. Paths may be relative to the reward manifest location.
 
 The exact seven asset names in all three mappings are `video_align`, `hpsv3`,
 `audiobox`, `clap`, `desync`, `video_align_base`, and `desync_source`.
+VideoAlign's base configuration is Qwen2-VL-2B, whereas the released HPSv3
+checkpoint has a3584-wide7B backbone. Do not initialize HPS from VideoAlign's
+1536-wide2B configuration. Bind `hpsv3` to an explicitly inventoried directory
+containing `HPSv3.safetensors` and `base_model/` with the matching Qwen2-VL-7B
+configuration, tokenizer and processor files. Base weights are unnecessary because
+HPS loads its strict full checkpoint. The bundle overrides the shared fallback
+base path; the legacy single-checkpoint interface still accepts an explicit
+matching base path. Preserve the original bytes and record both HPS and base-model
+immutable repository revisions/licenses in this composite asset's provenance.
+The seven top-level asset names and all reward preprocessing/calibration stay
+unchanged. A directory existing is not evidence that its real weights load.
 Create a paths-only JSON mapping with those names and the actual local file or
 directory paths, plus a provenance-only JSON mapping with those same names and
 each asset's actual `repo`/`revision`/`license`. Relative input paths resolve
@@ -270,6 +356,46 @@ chosen config before checkpoint/resume acceptance; changing microbatches
 changes the config fingerprint and must use a separate tuning attempt.
 
 ### Physical H3 batching
+
+The H3 runtime enables strict PyTorch deterministic algorithms and requires
+`CUBLAS_WORKSPACE_CONFIG=:4096:8` before CUDA initialization. The supplied H3
+runtime shell sets this environment variable; callers embedding the runtime
+must set it before using CUDA. The runtime restores the caller's PyTorch flags
+and environment on exit, including failure. Conflicting workspace settings or
+late configuration are rejected. BF16 compute, FP32 masters, reward formulas
+and optimizer boundaries remain as configured. Unsupported nondeterministic
+operations raise an error rather than continuing with a warning.
+
+In a controlled full-model, 32-rank checkpoint replay, fixed cached inputs and
+unchanged model/Adam/RNG produced different gradients on three backward passes
+without this policy (worst shard relative L2 difference 0.02632). All 32 shards
+were bit identical across three passes with the combined policy. This establishes
+the tested policy's sufficiency for that replay, not the identity of a faulty
+operator or a guarantee of bit equality across hardware, versions or world sizes.
+Full training/checkpoint continuation must still be checked independently.
+
+Each replay attempt above regenerated its own cached inputs. The input hashes
+differ across the two policies, while model and Adam hashes match on all ranks;
+the change in gradient norm is therefore not a matched-input causal comparison.
+Use complete continuous/resumed training to validate the chosen policy.
+
+H3 logs decoded/scored sample counts with prompt IDs and trajectory indices,
+so a long reward phase has visible local progress before the global phase ends.
+For checkpoint continuation diagnosis, optional `H3_INPUT_AUDIT=1` writes
+pre-update hashes of cached objective tensors/options, conditioning, prompt
+identity, RNG and the sampling generator. Set a fresh safe
+`H3_ATTEMPT_NONCE` for every execution. Receipts live under
+`input-audits/<nonce>/rollout-*/rank-*.json`; separate nonces preserve both
+continuous and resumed observations without replacing earlier receipts.
+Derived statistics and mutable diagnostic accumulators are excluded; model and
+Adam integrity use the separate restore audit. The input audit checks that RNG
+is unchanged and rejects unknown value types or receipt replacement.
+
+Keep these optional audit flags identical across a comparison. Input hashing
+adds CPU work and a coordinated phase check before updates; its measured time
+is included in reward/preparation timing. Preserve that observation overhead
+when comparing stage costs. The supplied H3 runtime shell leaves input auditing
+disabled unless explicitly requested.
 
 The adapter executes a true batch through the transformer rather than looping
 over requests. Mixed text lengths use masked padding in both the text refiner
