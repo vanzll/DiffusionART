@@ -5,6 +5,7 @@ import subprocess
 import sys
 import uuid
 from pathlib import Path
+from textwrap import dedent
 
 import pytest
 
@@ -21,6 +22,70 @@ def test_generation_change_fails_closed(tmp_path):
         control.validate_lease(lease, dict(GPU_LEASE_GENERATION='4'))
 
 
+def test_supervisor_ancestry_includes_owner_and_controller_with_start_ticks(monkeypatch):
+    processes = {
+        pid: dict(pid=pid, parent_pid=parent, start_ticks=str(pid * 10), state='S')
+        for pid, parent in [(1, 0), (10, 1), (20, 10), (30, 20)]
+    }
+    monkeypatch.setattr(control, 'identity', processes.get)
+    monkeypatch.setattr(control.os, 'getpid', lambda: 30)
+    expected = dict(GPU_LEASE_PID='20', GPU_LEASE_START_TICKS='200')
+    assert control.supervisor_identities(expected) == {(1, '10'), (10, '100'),
+                                                       (20, '200'), (30, '300')}
+    expected['GPU_LEASE_START_TICKS'] = 'reused-pid'
+    with pytest.raises(RuntimeError, match='owner process identity changed'):
+        control.supervisor_identities(expected)
+
+
+@pytest.mark.skipif(not Path('/proc/self/stat').exists(), reason='Linux process ownership regression')
+def test_exported_nonce_cannot_terminate_owner_or_cleanup_supervisor(tmp_path):
+    nonce = 'inherited-nonce-' + uuid.uuid4().hex
+    environment = dict(os.environ, H3_ATTEMPT_NONCE=nonce, H3_ACCEPTANCE_ROOT=str(tmp_path))
+    program = dedent('''\
+        import importlib.util, json, os, subprocess, sys
+        from pathlib import Path
+        controller, root, nonce = sys.argv[1:]
+        specification = importlib.util.spec_from_file_location('control', controller)
+        control = importlib.util.module_from_spec(specification)
+        specification.loader.exec_module(control)
+        # Like shell unset, this does not clear Linux's initial /proc environ.
+        os.environ.pop('H3_ATTEMPT_NONCE')
+        assert f'H3_ATTEMPT_NONCE={nonce}'.encode() in Path('/proc/self/environ').read_bytes()
+        owner = control.identity(os.getpid())
+        lease = Path(root) / 'inherited-owner.env'
+        values = dict(GPU_LEASE_PID=str(os.getpid()), GPU_LEASE_START_TICKS=owner['start_ticks'],
+                      GPU_LEASE_GENERATION='1', GPU_LEASE_NONCE=nonce, GPU_LEASE_STATUS='active')
+        lease.write_text(''.join(f'{key}={value}\\n' for key, value in values.items()))
+        tagged = dict(os.environ, H3_ATTEMPT_NONCE=nonce, H3_ACCEPTANCE_ROOT=root)
+        child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)'],
+                                 env=tagged, start_new_session=True)
+        try:
+            command = [sys.executable, controller, '--lease', str(lease),
+                       '--owner-pid', str(os.getpid()), '--owner-start-ticks', owner['start_ticks'],
+                       '--generation', '1', '--nonce', nonce, '--root', root,
+                       '--terminate', '--grace', '1']
+            # An additional tagged supervisor models timeout/MPI ancestry.
+            wrapper = 'import subprocess,sys; sys.exit(subprocess.call(sys.argv[1:]))'
+            result = subprocess.run([sys.executable, '-c', wrapper, *command], env=tagged,
+                                    text=True, capture_output=True, timeout=10)
+            assert result.returncode == 0, result.stderr
+            record = json.loads(result.stdout)
+            assert record['drained'] and child.wait(timeout=3) == -15
+            assert {item[0] for item in record['signaled']} == {child.pid}
+            print(json.dumps(dict(owner_survived=True, supervisor_survived=True, drained=True)))
+        finally:
+            if child.poll() is None:
+                child.kill()
+            child.wait(timeout=3)
+    ''')
+    result = subprocess.run([sys.executable, '-c', program,
+                             str(specification.origin), str(tmp_path), nonce],
+                            env=environment, text=True, capture_output=True, timeout=20)
+    assert result.returncode == 0, result.stderr
+    assert '"owner_survived": true' in result.stdout
+
+
+@pytest.mark.skipif(not Path('/proc/self/stat').exists(), reason='Linux process ownership regression')
 def test_only_exact_nonce_and_root_child_is_stopped(tmp_path):
     nonce = 'cpu-smoke-' + uuid.uuid4().hex
     environment = dict(os.environ, H3_ATTEMPT_NONCE=nonce, H3_ACCEPTANCE_ROOT=str(tmp_path))

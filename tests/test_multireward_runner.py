@@ -101,7 +101,12 @@ def test_four_reward_art_native_updates_and_eval(tmp_path, monkeypatch):
     updates = [row for row in logs if "train/optimizer_step" in row]
     assert [row["train/optimizer_step"] for row in updates] == [1, 2, 3, 4]
     for row in updates:
-        expected = sum(row[f"train/reward/raw/{name}"] / divisor
-                       for name, divisor in divisors.items())
-        assert row["train/reward"] == pytest.approx(expected)
+        components = [row[f"train/reward/raw/{name}"] / divisor
+                      for name, divisor in divisors.items()]
+        expected = sum(components)
+        # Runtime averages FP32 per-sample sums; these logged component means
+        # are separately reduced. Bound absolute rounding by component scale,
+        # rather than a tiny cancelled total (or a changed runtime reduction).
+        rounding = 8 * torch.finfo(torch.float32).eps * sum(abs(v) for v in components)
+        assert row["train/reward"] == pytest.approx(expected, rel=0, abs=rounding)
     assert len(list(root.glob("evaluation/*/*/manifest.json"))) == 3

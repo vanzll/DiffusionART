@@ -1,17 +1,17 @@
 import argparse
 import json
 import os
-from pathlib import Path
 import shlex
 import signal
 import subprocess
 import time
+from pathlib import Path
 
 
 def identity(pid):
     try:
         fields = (Path('/proc') / str(pid) / 'stat').read_text().rsplit(') ', 1)[1].split()
-        return dict(pid=int(pid), state=fields[0], start_ticks=fields[19])
+        return dict(pid=int(pid), state=fields[0], parent_pid=int(fields[1]), start_ticks=fields[19])
     except FileNotFoundError:
         return None
 
@@ -29,7 +29,37 @@ def validate_lease(path, expected):
     return actual
 
 
-def owned_processes(nonce, root):
+def supervisor_identities(expected):
+    """Protect the live lease owner and both supervision chains from cleanup.
+
+    Linux /proc/PID/environ may retain an inherited nonce after shell unset.
+    Nonce matching alone therefore cannot distinguish a trainer from its MPI,
+    timeout, or lease supervisor. Include start ticks so PID reuse is harmless.
+    """
+    owner_pid = int(expected['GPU_LEASE_PID'])
+    owner = identity(owner_pid)
+    if (owner is None or owner['state'] == 'Z'
+            or owner['start_ticks'] != expected['GPU_LEASE_START_TICKS']):
+        raise RuntimeError('Lease owner process identity changed')
+    protected = set()
+    for pid in (owner_pid, os.getpid()):
+        for _ in range(128):
+            if pid <= 0:
+                break
+            process = identity(pid)
+            if process is None:
+                break
+            key = process['pid'], process['start_ticks']
+            if key in protected:
+                break
+            protected.add(key)
+            pid = process['parent_pid']
+        else:
+            raise RuntimeError('Cannot bound H3 supervisor ancestry')
+    return protected
+
+
+def owned_processes(nonce, root, *, protected=()):
     result = []
     for path in Path('/proc').iterdir():
         if not path.name.isdigit() or int(path.name) == os.getpid():
@@ -40,7 +70,8 @@ def owned_processes(nonce, root):
             if environment.get('H3_ATTEMPT_NONCE') != nonce or environment.get('H3_ACCEPTANCE_ROOT') != root:
                 continue
             process = identity(path.name)
-            if process and process['state'] != 'Z':
+            if (process and process['state'] != 'Z'
+                    and (process['pid'], process['start_ticks']) not in protected):
                 result.append(process)
         except (FileNotFoundError, ProcessLookupError, PermissionError):
             continue
@@ -53,7 +84,7 @@ def terminate_owned(lease_path, expected, nonce, root, *, grace=60):
         deadline = time.monotonic() + seconds
         while True:
             validate_lease(lease_path, expected)
-            processes = owned_processes(nonce, root)
+            processes = owned_processes(nonce, root, protected=supervisor_identities(expected))
             if not processes:
                 return dict(drained=True, signaled=[list(item) for item in sorted(sent)])
             for process in processes:
@@ -61,6 +92,8 @@ def terminate_owned(lease_path, expected, nonce, root, *, grace=60):
                 if key in sent:
                     continue
                 validate_lease(lease_path, expected)
+                if (process['pid'], process['start_ticks']) in supervisor_identities(expected):
+                    continue
                 current = identity(process['pid'])
                 if current is None or current['start_ticks'] != process['start_ticks']:
                     continue
@@ -72,7 +105,8 @@ def terminate_owned(lease_path, expected, nonce, root, *, grace=60):
             if time.monotonic() >= deadline:
                 break
             time.sleep(.2)
-    return dict(drained=False, remaining=owned_processes(nonce, root),
+    remaining = owned_processes(nonce, root, protected=supervisor_identities(expected))
+    return dict(drained=not remaining, remaining=remaining,
                 signaled=[list(item) for item in sorted(sent)])
 
 
@@ -112,8 +146,8 @@ def local_hcas():
     return '=' + ','.join(ports)
 
 
-def observe_owned(nonce, root):
-    processes = owned_processes(nonce, root)
+def observe_owned(nonce, root, *, protected=()):
+    processes = owned_processes(nonce, root, protected=protected)
     for process in processes:
         directory = Path('/proc') / str(process['pid'])
         try:
@@ -166,13 +200,13 @@ def main():
                     GPU_LEASE_GENERATION=args.generation, GPU_LEASE_NONCE=args.nonce)
     validate_lease(args.lease, expected)
     if args.observe:
-        result = observe_owned(args.nonce, args.root)
+        result = observe_owned(args.nonce, args.root, protected=supervisor_identities(expected))
         print(json.dumps(result), flush=True)
         return 0
     if args.terminate:
         result = terminate_owned(args.lease, expected, args.nonce, args.root, grace=args.grace)
     else:
-        processes = owned_processes(args.nonce, args.root)
+        processes = owned_processes(args.nonce, args.root, protected=supervisor_identities(expected))
         result = dict(drained=not processes, remaining=processes)
     print(json.dumps(result), flush=True)
     return 0 if result['drained'] else 2

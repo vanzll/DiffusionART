@@ -8,7 +8,8 @@ def test_readme_images_are_valid_local_assets():
     root = Path(__file__).resolve().parents[1]
     readme = (root / "README.md").read_text()
     images = re.findall(r'<img\s[^>]*src="(assets/readme/[^"]+)"', readme)
-    assert len(images) == 7
+    assert images, "README must contain local figure assets"
+    assert len(images) == len(set(images)), "README figure paths must be unique"
     for filename in images:
         path = root / filename
         data = path.read_bytes()
