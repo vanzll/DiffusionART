@@ -12,6 +12,7 @@ import subprocess
 import tempfile
 import time
 import uuid
+import warnings
 from contextlib import ExitStack, contextmanager
 from functools import partial
 from pathlib import Path
@@ -48,6 +49,7 @@ from ..wandb_export import open_metrics
 from . import minimax_h3 as backend
 from .minimax_h3_execution import execution_policy
 from .minimax_h3_observability import BatchTrace, event
+from .minimax_h3_posttraining import selected_positions
 from .sd3 import _check_run_identity, _publish_evaluation, _restore_cost
 
 
@@ -188,7 +190,11 @@ def _innovations(noise, positions, generator):
 def collect(parts, c, predict, noise, sigmas, session, generator, *, rollout_index, evaluation=False):
     _active_policy(parts, session)
     options = {}
-    if not evaluation and c.algorithm.name == "diffusionart" and c.training.timestep_selection != "configured":
+    if not evaluation and c.algorithm.options.get("post_training") is not None:
+        selections = selected_positions(c.seed, rollout_index + 1)
+        options.update(selected=tuple(sorted(set(selections["video"]) | set(selections["audio"]))),
+                       modality_selected=selections)
+    elif not evaluation and c.algorithm.name == "diffusionart" and c.training.timestep_selection != "configured":
         options["selected"] = art_training_positions(c.training, (), seed=c.seed, attempt=rollout_index + 1)
     if not evaluation and c.algorithm.name == "flow_grpo_fast":
         positions = select_fast_window(len(sigmas[0]) - 1, rollout_index=rollout_index,
@@ -318,8 +324,13 @@ def _publish_cost(session, c, root, clock):
 
 
 def _prepare_objective(c, parts, cache, predict, local_scores, population, groups, session, generator, nft):
-    local = route_rewards(local_scores.components)
-    global_routes = route_rewards(population.components)
+    post = c.algorithm.options.get("post_training")
+    if post is not None:
+        local = route_rewards(local_scores.components, groups=groups, weights=c.reward.weights, prompt_group_std=True)
+        global_routes = None
+    else:
+        local = route_rewards(local_scores.components)
+        global_routes = route_rewards(population.components)
     if c.algorithm.name == "diffusionart":
         return session.local("AV ART complete-group objective", lambda: prepare_art_objective(cache, predict,
             local["video"], local["audio"], groups, session.device, covariance_options=c.algorithm.options["covariance"],
@@ -398,11 +409,53 @@ def evaluate(session, c, parts, dataset, step, root):
                 if sample.sample_id != dataset.rows[index].sample_id or sample.prompt != dataset.rows[index].text:
                     raise ValueError("AV evaluation prompt identity differs")
                 ordered[index] = sample
-        return _publish_evaluation(c, dataset, step, root, directory, [ordered[i] for i in range(len(dataset.rows))])
+        samples = [ordered[i] for i in range(len(dataset.rows))]
+        result = _publish_evaluation(c, dataset, step, root, directory, samples)
+        if c.algorithm.options.get("post_training", {}).get("eval_gallery", False):
+            from ..evaluation.audio_video_gallery import publish_av_gallery
+            try:
+                result.update(publish_av_gallery(root, directory, samples, step))
+            except Exception as exc:
+                warnings.warn(f"H3 gallery publication failed ({type(exc).__name__}); canonical eval is saved",
+                              RuntimeWarning)
+        return result
     result = session.primary("AV evaluation manifest", publish)
     model.train()
     event("evaluation_complete", optimizer_steps=step)
     return result
+
+
+def _completed_evaluation(c, dataset, step, root):
+    """Recognize a complete boundary publication before resuming past its eval."""
+    from ..evaluation import EvaluationManifest, audit_manifest
+    from ..evaluation.audio_video_gallery import read_media_manifest
+    expected = tuple(row.sample_id for row in dataset.rows)
+    base_seed = c.seed if c.evaluation.seed is None else c.evaluation.seed
+    for directory in sorted((root / "evaluation" / f"step-{step:09d}").glob("*")):
+        try:
+            path = directory / "manifest.json"
+            if path.stat().st_size > 4 * 1024 * 1024:
+                continue
+            manifest = EvaluationManifest.from_json(path.read_text())
+            if (manifest.optimizer_step != step or set(manifest.expected_sample_ids) != set(expected)
+                    or not (directory / "summary.json").is_file()
+                    or not audit_manifest(manifest, media_root=root).complete):
+                continue
+            samples = {sample.sample_id: sample for sample in manifest.samples}
+            if set(samples) != set(expected):
+                continue
+            if any(samples[row.sample_id].prompt != row.text
+                   or samples[row.sample_id].seed != base_seed + index
+                   or set(samples[row.sample_id].scores.raw) != set(c.reward.weights)
+                   for index, row in enumerate(dataset.rows)):
+                continue
+            if not (directory / "gallery.html").is_file():
+                continue
+            read_media_manifest(root, directory / "wandb-media.json")
+            return True
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+    return False
 
 
 @execution_policy()
@@ -509,10 +562,12 @@ def _run(session, c, prompts, resume, api, *, resume_rewind, evaluate_only):
             if evaluate_only:
                 if validation is None:
                     raise ConfigError("checkpoint evaluation requires a validation manifest")
+                if c.algorithm.options.get("post_training") is not None:
+                    session.primary("AV eval-only export", lambda: resources.enter_context(open_metrics(c, root)))
                 return evaluate(session, c, parts, validation, progress.optimizer_steps, root)
             session.primary("AV resume history", lambda: prepare_resume_history(c, root, progress, receipt=resume, rewind=resume_rewind))
             session.local("AV cost lineage", lambda: _restore_cost(c, root, progress))
-            if progress.optimizer_steps == c.training.max_updates:
+            if progress.optimizer_steps == c.training.max_updates and c.algorithm.options.get("post_training") is None:
                 return
         else:
             def publish_run():
@@ -525,6 +580,16 @@ def _run(session, c, prompts, resume, api, *, resume_rewind, evaluate_only):
             session.primary("AV run identity", publish_run)
         clock = CostClock(progress, gpu_count=world if session.device.type == "cuda" else 0)
         log = session.primary("AV metrics open", lambda: resources.enter_context(open_metrics(c, root)))
+        if (resume and validation is not None and c.algorithm.options.get("post_training") is not None
+                and c.evaluation.due(progress.optimizer_steps, c.training.max_updates,
+                                     completed_rollouts=progress.completed_rollouts)):
+            complete = session.primary("AV restored boundary evaluation", lambda: _completed_evaluation(
+                c, validation, progress.optimizer_steps, root))
+            flag = torch.tensor(int(bool(complete)), dtype=torch.int32, device=session.device)
+            if session.distributed:
+                dist.broadcast(flag, src=0)
+            if not bool(flag.item()):
+                evaluate(session, c, parts, validation, progress.optimizer_steps, root)
         sigmas = sigma_schedules(c.sampling.steps, video_shift=c.sampling.options["video_shift"], audio_shift=c.sampling.options["audio_shift"])
         if validation is not None and resume is None:
             evaluate(session, c, parts, validation, 0, root)
@@ -577,6 +642,14 @@ def _run(session, c, prompts, resume, api, *, resume_rewind, evaluate_only):
                     "av/training_source_position_max": max(source_positions),
                     "av/nft_fresh_time_floor_quantized": int(nft is not None),
                 }
+                if cache.video_selected is not None:
+                    for name, schedule in (("video", cache.video_sigmas), ("audio", cache.audio_sigmas)):
+                        selected = getattr(cache, name + "_selected")
+                        sigma_metrics[f"av/training_{name}_sigma_min"] = float(schedule[list(selected)].min())
+                        sigma_metrics[f"av/training_{name}_sigma_max"] = float(schedule[list(selected)].max())
+                        sigma_metrics[f"av/training_{name}_positions"] = len(selected)
+                        for position in range(4):
+                            sigma_metrics[f"av/training_{name}_position_{position}_selected"] = int(position in selected)
                 _active_policy(parts, session)
                 phase = time.monotonic()
                 metrics = run_av_updates(model, optimizer, objective, groups,
@@ -602,13 +675,19 @@ def _run(session, c, prompts, resume, api, *, resume_rewind, evaluate_only):
                     log.flush()
                 session.primary("AV metrics publication", publish_metrics)
             step = progress.optimizer_steps
-            if actual and validation is not None and c.evaluation.due(step, c.training.max_updates):
+            checkpoint_due = actual and c.runtime.checkpoint_due(step, c.training.max_updates)
+            eval_due = actual and validation is not None and c.evaluation.due(
+                step, c.training.max_updates, completed_rollouts=progress.completed_rollouts)
+            post = c.algorithm.options.get("post_training") is not None
+            if eval_due and not post:
                 evaluate(session, c, parts, validation, step, root)
-            if actual and c.runtime.checkpoint_due(step, c.training.max_updates):
+            if checkpoint_due:
                 event("checkpoint_begin", optimizer_steps=step)
                 clock.tick()
                 save(root / "checkpoints", progress=progress, keep_last=c.runtime.checkpoint_keep, **checkpoint)
                 event("checkpoint_complete", optimizer_steps=step)
+            if eval_due and post:
+                evaluate(session, c, parts, validation, step, root)
             _publish_cost(session, c, root, clock)
         final = _publish_cost(session, c, root, clock)
         session.primary("AV completion", lambda: _atomic_json(root / "status.json", {"status": "completed",

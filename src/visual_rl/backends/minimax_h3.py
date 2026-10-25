@@ -48,7 +48,14 @@ def validate_config(c):
         raise ConfigError("prepare H3 assets before workers; training component loading is offline")
     if mo["conditioning_device"] != "cpu":
         raise ConfigError("first H3 integration keeps its 66.7GB conditioner on CPU")
-    if set(c.reward.weights) != COMPONENTS or dict(c.reward.weights) != SHARED_WEIGHTS:
+    post = c.algorithm.options.get("post_training")
+    from .minimax_h3_posttraining import POST_TRAINING
+    if post is not None and (c.algorithm.name != "diffusionart" or post != POST_TRAINING
+                             or c.training.timestep_selection != "configured"
+                             or c.sampling.samples_per_prompt != 8 or c.sampling.steps < 6):
+        raise ConfigError("H3 post-training requires ART, K8, explicit dual selection and six reward group std")
+    weights = {**SHARED_WEIGHTS, "imagebind": .5} if post is not None else SHARED_WEIGHTS
+    if set(c.reward.weights) != set(weights) or dict(c.reward.weights) != weights:
         raise ConfigError("H3 shared reward weights must explicitly be 1/1.5/.5/1/1; DeSync counted once")
     if set(c.reward.options) != {"manifest"} or not isinstance(c.reward.options["manifest"], str):
         raise ConfigError("H3 rewards require an explicit pinned scorer manifest")
@@ -76,7 +83,8 @@ def validate_config(c):
         raise ConfigError("Fast requires at least three native transitions")
     options = c.algorithm.options
     if c.algorithm.name == "diffusionart":
-        if set(options) != {"covariance", "loss", "exclude_final_step"} or options["exclude_final_step"] is not True:
+        allowed = {"covariance", "loss", "exclude_final_step"} | ({"post_training"} if post is not None else set())
+        if set(options) != allowed or options["exclude_final_step"] is not True:
             raise ConfigError("H3 ART requires covariance/loss and explicit final-transition exclusion")
         if any(k.startswith("reference") for k in options["loss"]):
             raise ConfigError("H3 integration has no pretrained reference regularizer")
@@ -109,6 +117,8 @@ def validate_config(c):
     for period in [c.evaluation.every_updates, c.runtime.checkpoint_every]:
         if period % updates_per_rollout(c):
             raise ConfigError("H3 periodic artifacts must be rollout boundaries")
+    if c.evaluation.every_rollouts and post is None:
+        raise ConfigError("H3 rollout eval cadence requires the explicit post-training recipe")
     if c.evaluation.enabled:
         if c.evaluation.fps != 24 or c.evaluation.reward_fps != 24 or c.evaluation.shift is not None:
             raise ConfigError("H3 evaluation preserves 24fps and explicit paired native shifts")
@@ -129,6 +139,13 @@ def load_datasets(c):
             if (not isinstance(text, dict) or set(text) != {"video", "audio"}
                     or any(not isinstance(v, str) or not v.strip() for v in text.values())):
                 raise ConfigError("T2AV prompt metadata requires explicit reward_text.video and reward_text.audio")
+    if c.algorithm.options.get("post_training") is not None and validation is not None:
+        if len(validation.rows) != 32:
+            raise ConfigError("the H3 post-training evaluation protocol requires exactly 32 fixed prompts")
+        train_ids = {row.sample_id for row in data.rows}
+        train_texts = {row.text.strip() for row in data.rows}
+        if any(row.sample_id in train_ids or row.text.strip() in train_texts for row in validation.rows):
+            raise ConfigError("H3 post-training evaluation prompts must be held out from training")
     return data, validation
 
 
@@ -166,6 +183,9 @@ def load_reward(c, device):
         except ValueError as error:
             raise ConfigError("scorer provenance needs repo, fixed revision and license") from error
     paths = {key: os.path.abspath(path.parent / value) for key, value in record["paths"].items()}
+    expected_six = "imagebind" in c.reward.weights
+    if expected_six != ("imagebind" in paths):
+        raise ConfigError("H3 reward asset manifest must match the configured five/six scorer set")
     reward = AudioVideoReward.from_paths(paths, device=device, expected_sha256=record["sha256"])
     reward.asset_identity = {"manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
                              "paths": paths, "sha256": record["sha256"],

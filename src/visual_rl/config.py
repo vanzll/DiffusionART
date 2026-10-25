@@ -283,6 +283,7 @@ class Data:
 @dataclass(frozen=True)
 class Evaluation:
     every_updates: int = 10
+    every_rollouts: int = 0
     manifest: str | None = None
     retain_all: bool = True
     fps: float = 8.0
@@ -297,6 +298,9 @@ class Evaluation:
 
     def __post_init__(self):
         _positive_int(self.every_updates, "evaluation.every_updates", zero=True)
+        _positive_int(self.every_rollouts, "evaluation.every_rollouts", zero=True)
+        if self.every_rollouts and (self.every_updates or self.at_updates):
+            raise ConfigError("rollout evaluation cadence cannot be mixed with update cadence")
         object.__setattr__(self, "at_updates", _update_steps(self.at_updates, "evaluation.at_updates"))
         _finite(self.fps, "evaluation.fps", positive=True)
         _finite(self.reward_fps, "evaluation.reward_fps", positive=True)
@@ -321,9 +325,14 @@ class Evaluation:
 
     @property
     def enabled(self):
-        return bool(self.every_updates or self.at_updates)
+        return bool(self.every_updates or self.every_rollouts or self.at_updates)
 
-    def due(self, step, maximum):
+    def due(self, step, maximum, *, completed_rollouts=None):
+        if self.every_rollouts:
+            if type(completed_rollouts) is not int or completed_rollouts < 0:
+                raise ConfigError("rollout evaluation requires the completed-rollout counter")
+            return step > 0 and (step == maximum or
+                                 completed_rollouts > 0 and completed_rollouts % self.every_rollouts == 0)
         return _artifact_due(step, maximum, self.every_updates, self.at_updates)
 
 
@@ -392,6 +401,8 @@ class Experiment:
             raise ConfigError("name must be a filesystem-safe experiment identifier")
         if self.task not in ("t2i", "t2v", "i2v", "t2av"):
             raise ConfigError("task must be t2i, t2v, i2v or t2av")
+        if self.evaluation.every_rollouts and self.model.name != "minimax_h3":
+            raise ConfigError("rollout-based evaluation is currently supported by MiniMax-H3 only")
         if type(self.schema_version) is not int or self.schema_version != 1:
             raise ConfigError("unsupported schema_version")
         _positive_int(self.seed, "seed", zero=True)
@@ -426,6 +437,8 @@ class Experiment:
         # Preserve existing config/checkpoint identities when Flash is disabled.
         if self.training.timestep_selection == "configured":
             document["training"].pop("timestep_selection")
+        if not self.evaluation.every_rollouts:
+            document["evaluation"].pop("every_rollouts")
         if not self.assets:
             document.pop("assets")
         if self.data is not None:
@@ -461,7 +474,7 @@ def resume_signature(document: dict) -> str:
     document["training"] = dict(document.get("training", {}))
     document["training"].pop("max_updates", None)
     document["evaluation"] = dict(document.get("evaluation", {}))
-    for key in ("every_updates", "at_updates", "retain_all"):
+    for key in ("every_updates", "every_rollouts", "at_updates", "retain_all"):
         document["evaluation"].pop(key, None)
     return config_fingerprint(document)
 

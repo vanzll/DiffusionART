@@ -1,0 +1,36 @@
+extends: minimax_h3_art_full_32gpu.yaml
+name: minimax-h3-art-posttrain-full-32gpu
+algorithm:
+  options:
+    post_training:
+      video_pool: 4
+      audio_pool: 3
+      count: 2
+      reward_normalization: prompt_group_std
+      eval_gallery: true
+reward:
+  weights:
+    video_align: 1.0
+    hpsv3: 1.5
+    audiobox: 0.5
+    clap: 1.0
+    desync: 1.0
+    imagebind: 0.5
+training:
+  max_updates: 400
+evaluation:
+  every_updates: 0
+  every_rollouts: 50
+  manifest: ${H3_EVAL_MANIFEST}
+  manifest_sha256: ${H3_EVAL_SHA256}
+  seed: 42
+  sampling_steps: 10
+  retain_all: true
+runtime:
+  output_dir: ${H3_OUTPUT_DIR}
+  checkpoint_every: 50
+  checkpoint_keep: 2
+  log: wandb
+  wandb:
+    project: diffusionart-minimax-h3
+    name: minimax-h3-art-six-reward-v4a3-rand2-full32

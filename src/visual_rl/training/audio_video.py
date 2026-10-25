@@ -127,7 +127,11 @@ def run_av_updates(model, optimizer, objective, groups, *, algorithm: str, micro
             values = [item[name] for item in items]
             output = name if window is None else f"av/window_{window}/{name.removeprefix('av/')}"
             records.append((name, output))
-            moments.append([sum(values), len(values), sum(value * value for value in values)])
+            selector = next((f"av/{modality}_selected" for modality in ("video", "audio")
+                             if name.startswith(f"av/{modality}_") and not name.endswith("_selected")), None)
+            weights = [item.get(selector, 1.) for item in items]
+            moments.append([sum(v * w for v, w in zip(values, weights)), sum(weights),
+                            sum(v * v * w for v, w in zip(values, weights))])
     totals = torch.tensor(moments, dtype=torch.float64, device=next(model.parameters()).device)
     if torch.distributed.is_available() and torch.distributed.is_initialized():
         torch.distributed.all_reduce(totals, group=getattr(model, "process_group", None))

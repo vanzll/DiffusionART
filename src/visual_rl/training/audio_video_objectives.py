@@ -27,17 +27,43 @@ ROUTING = {
 
 
 @torch.no_grad()
-def route_rewards(components: Mapping[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+def route_rewards(components: Mapping[str, torch.Tensor], *, groups=None, weights=None,
+                  prompt_group_std=False) -> dict[str, torch.Tensor]:
     """Accept transformed training components, never raw scorer units.
 
     DeSync enters both modality routes and enters the Fast scalar exactly once.
     """
-    if set(components) != set(ROUTING["shared"]):
+    expected = set(ROUTING["shared"])
+    if weights is not None:
+        expected.add("imagebind")
+        if set(weights) != expected:
+            raise ValueError("six-reward routes require all six explicit weights")
+    if set(components) != expected:
         raise ValueError("AV reward routing requires all five explicit scorer components")
     values = {key: value.detach().float() for key, value in components.items()}
     shape = next(iter(values.values())).shape
     if len(shape) != 1 or not shape[0] or any(v.shape != shape or not torch.isfinite(v).all() for v in values.values()):
         raise ValueError("AV scorer components must be finite equal nonempty vectors")
+    if prompt_group_std:
+        if groups is None:
+            raise ValueError("prompt-group reward normalization requires complete K8 group identities")
+        inverse, count = validate_groups(groups, shape[0], even=True)
+        counts = inverse.bincount()
+        if not bool((counts == 8).all()):
+            raise ValueError("prompt-group reward normalization requires complete K8 groups before splitting")
+        for name, value in values.items():
+            normalized = torch.empty_like(value)
+            for group in range(count):
+                selected = (inverse == group).to(value.device)
+                raw = value[selected]
+                normalized[selected] = (torch.zeros_like(raw) if bool((raw == raw[0]).all()) else
+                                        (raw - raw.mean()) / (raw.std(correction=1) + 1e-4))
+            values[name] = normalized
+    if weights is not None:
+        names = {"video": {"video_align", "hpsv3", "desync", "imagebind"},
+                 "audio": {"audiobox", "clap", "desync", "imagebind"}, "shared": expected}
+        return {route: sum(float(weights[key]) * values[key] for key in sorted(keys))
+                for route, keys in names.items()}
     return {route: sum(weight * values[key] for key, weight in weights.items())
             for route, weights in ROUTING.items()}
 
@@ -146,11 +172,21 @@ class AVARTObjective:
                 getattr(self.directions.select(rows), name).to(self.device), magnitude[rows].to(self.device),
                 state=x, ode_velocity_coefficient=dt, current_ode_mean=x + expanded * current,
                 old_ode_mean=x + expanded * frozen, **self.options)
-            losses.append(terms["per_item_loss"])
-            _record_diagnostics(self, items, {f"av/{name}_loss": terms["per_item_loss"],
-                f"av/{name}_mask_fraction": terms["masked"].float(),
+            selected = getattr(self.cache, name + "_selected")
+            active = torch.ones_like(sigma, dtype=torch.bool) if selected is None else torch.tensor(
+                [int(step) in selected for step in steps], device=sigma.device)
+            # The owner averages over union slots. Restore each modality's own
+            # sample*time denominator before the equal-modal loss combination.
+            factor = 1. if selected is None else len(self.cache.selected) / len(selected)
+            policy = torch.where(active, terms["per_item_loss"], 0.)
+            losses.append(policy * factor)
+            diagnostics = {f"av/{name}_loss": policy,
+                f"av/{name}_mask_fraction": torch.where(active, terms["masked"].float(), 0.),
                 f"av/{name}_current_old_rms": feature_mean((current.detach() - frozen).square(),
-                    getattr(state, name + "_mask")).sqrt()})
+                    getattr(state, name + "_mask")).sqrt()}
+            if selected is not None:
+                diagnostics[f"av/{name}_selected"] = active.float()
+            _record_diagnostics(self, items, diagnostics)
         return .5 * losses[0] + .5 * losses[1]
 
 

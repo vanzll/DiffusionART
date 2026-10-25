@@ -1,4 +1,4 @@
-"""Five real AV scorers with explicit transforms, native rates and text routing.
+"""Five legacy AV scorers and an opt-in sixth ImageBind scorer with explicit transforms, native rates and text routing.
 
 Native model/scoring implementations are attributed in _native_av/provenance.json.
 This module imports optional dependencies only when the requested scorer loads.
@@ -17,6 +17,7 @@ import torch
 from ..training.audio_video_types import AVMedia
 
 COMPONENTS = ("video_align", "hpsv3", "audiobox", "clap", "desync")
+SIX_COMPONENTS = (*COMPONENTS, "imagebind")
 
 
 @dataclass(frozen=True)
@@ -56,8 +57,9 @@ class AudioVideoReward:
     """Sequential rowwise scoring, preserving prompt and modality identity."""
 
     def __init__(self, models, *, device="cpu"):
-        if set(models) != set(COMPONENTS):
-            raise ValueError("all five real AV scorers must be supplied")
+        if set(models) not in (set(COMPONENTS), set(SIX_COMPONENTS)):
+            raise ValueError("supply exactly the five legacy AV scorers or all six scorers")
+        self.components = SIX_COMPONENTS if "imagebind" in models else COMPONENTS
         self.models = dict(models)
         self.device = torch.device(device)
 
@@ -65,8 +67,9 @@ class AudioVideoReward:
     def from_paths(cls, paths, *, device, expected_sha256=None):
         required = {"video_align", "hpsv3", "audiobox", "clap", "desync",
                     "video_align_base", "desync_source"}
-        if set(paths) != required or any(not Path(v).exists() for v in paths.values()):
-            raise ValueError("AV scorer paths must explicitly resolve all five models and sources")
+        if (set(paths) not in (required, required | {"imagebind", "imagebind_source"})
+                or any(not Path(v).exists() for v in paths.values())):
+            raise ValueError("AV scorer paths require the seven legacy assets or those plus imagebind/imagebind_source")
         validate_asset_inventory(paths, expected_sha256)
         from ._native_av.audiobox import AudioBoxModel
         from ._native_av.clap import CLAPModel
@@ -87,6 +90,9 @@ class AudioVideoReward:
                                        model_kwargs={"local_files_only": True},
                                        processor_kwargs={"local_files_only": True})
             models["desync"] = DeSyncModel(paths["desync"], device, paths["desync_source"])
+            if "imagebind" in paths:
+                from ._native_av.imagebind import ImageBindModel
+                models["imagebind"] = ImageBindModel(paths["imagebind"], device, paths["imagebind_source"])
             return cls(models, device=target_device)
         except BaseException:
             for model in models.values():
@@ -123,7 +129,7 @@ class AudioVideoReward:
         # Deliberately no engine batch objects; these functions receive one
         # canonical decoded media row, as in pinned native scorer paths.
         from ._native_av import audiobox, clap, desync, hpsv3_reward, videoalign
-        values = {key: [] for key in COMPONENTS}
+        values = {key: [] for key in self.components}
         diagnostics = {}
         for i in range(len(media)):
             video = media.video[i].detach().cpu().permute(1, 0, 2, 3).mul(255).round().to(torch.uint8)
@@ -149,9 +155,15 @@ class AudioVideoReward:
                 with self._active("desync") as model:
                     ds = await desync.compute_score(solution_image=video, extra_info=extra,
                         reward_model=model, fps=media.fps)
-                return va, hps, ab, cl, ds
+                results = (va, hps, ab, cl, ds)
+                if "imagebind" in self.models:
+                    from ._native_av import imagebind
+                    with self._active("imagebind") as model:
+                        ib = await imagebind.compute_score(solution_image=video, extra_info=extra, reward_model=model)
+                    results += (ib,)
+                return results
             results = asyncio.run(compute())
-            for key, result in zip(COMPONENTS, results):
+            for key, result in zip(self.components, results):
                 score = float(result["score"])
                 if not math.isfinite(score):
                     raise ValueError(f"nonfinite {key} reward")

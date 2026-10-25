@@ -63,3 +63,33 @@ def test_missing_ffmpeg_and_ffprobe_fail(monkeypatch):
 def test_all_scorers_requires_actual_source_manifest():
     with pytest.raises(ValueError, match="--reward-manifest"):
         probe.probe_synchformer(None)
+
+
+def test_imagebind_probe_is_opt_in_and_requires_paired_assets(tmp_path):
+    path = tmp_path / "rewards.json"
+    path.write_text(json.dumps({"paths": {"desync_source": "legacy"}}))
+    assert probe.probe_imagebind(path) == ({}, {}, [])
+    path.write_text(json.dumps({"paths": {"imagebind": "checkpoint"}}))
+    with pytest.raises(ValueError, match="both"):
+        probe.probe_imagebind(path)
+
+
+def test_imagebind_probe_checks_source_without_loading_checkpoint(tmp_path, monkeypatch):
+    from visual_rl.rewards._native_av import imagebind
+    source = tmp_path / "source"
+    source.mkdir()
+    module = source / "fixture.py"
+    module.write_text("# fixture source\n")
+    checkpoint = tmp_path / "imagebind.pth"
+    checkpoint.write_bytes(b"not-a-real-checkpoint")
+    path = tmp_path / "rewards.json"
+    path.write_text(json.dumps({"paths": {"imagebind": "imagebind.pth", "imagebind_source": "source"},
+        "sha256": {"imagebind_source": {"fixture.py": hashlib.sha256(module.read_bytes()).hexdigest()}}}))
+    monkeypatch.setattr(probe, "probe_imports", lambda imports: ({"fixture": "1"}, {}, []))
+    monkeypatch.setattr(imagebind, "import_model_source", lambda root: SimpleNamespace(__file__=str(module)))
+    packages, sources, errors = probe.probe_imagebind(path)
+    assert packages == {"fixture": "1"} and not errors
+    assert sources["supplied_imagebind"]["path"] == str(module.resolve())
+    module.write_text("# changed source\n")
+    with pytest.raises(ValueError, match="checksum mismatch"):
+        probe.probe_imagebind(path)

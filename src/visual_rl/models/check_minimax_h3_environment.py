@@ -1,7 +1,7 @@
 """Bounded H3 environment probe. No checkpoints, Hub calls or license actions.
 
 Default CPU import checks distinguish the model-only stack from all five native
-scorers. Optional tiny forward/backward uses random local weights and is not a
+scorers (plus ImageBind when present in the manifest). Optional tiny forward/backward uses random local weights and is not a
 real-weight or distributed acceptance test.
 """
 
@@ -43,6 +43,41 @@ SCORER_IMPORTS = (
     ("visual_rl.rewards._native_av.clap", "visual-diffusion-rl"),
     ("visual_rl.rewards._native_av.desync", "visual-diffusion-rl"),
 )
+
+IMAGEBIND_IMPORTS = (
+    ("timm", "timm"), ("ftfy", "ftfy"), ("regex", "regex"),
+    ("einops", "einops"), ("iopath", "iopath"),
+    ("visual_rl.rewards._native_av.imagebind", "visual-diffusion-rl"),
+)
+
+
+def probe_imagebind(manifest_path):
+    """Check optional supplied implementation imports/bytes without weights."""
+    path = Path(manifest_path).resolve(strict=True)
+    if path.stat().st_size > 32 * 1024 * 1024:
+        raise ValueError("reward manifest exceeds probe size bound")
+    data = json.loads(path.read_text())
+    names = set(data["paths"]) & {"imagebind", "imagebind_source"}
+    if not names:
+        return {}, {}, []
+    if names != {"imagebind", "imagebind_source"}:
+        raise ValueError("ImageBind requires both checkpoint and implementation source")
+    from ..rewards._native_av.imagebind import import_model_source
+    from ..rewards.audio_video import validate_asset_inventory
+    paths = {}
+    for name in names:
+        root = Path(data["paths"][name])
+        paths[name] = root if root.is_absolute() else path.parent / root
+    # Import probe verifies source bytes only; checkpoint byte validation belongs
+    # to preparation/runtime, avoiding multi-GB reads in this bounded probe.
+    validate_asset_inventory({"imagebind_source": paths["imagebind_source"]},
+                             {"imagebind_source": data["sha256"]["imagebind_source"]})
+    if not paths["imagebind"].is_file():
+        raise ValueError("ImageBind checkpoint must be an explicit local file")
+    packages, sources, errors = probe_imports(IMAGEBIND_IMPORTS)
+    if not errors:
+        sources["supplied_imagebind"] = _source_record(import_model_source(paths["imagebind_source"]))
+    return packages, sources, errors
 
 
 def _source_record(module):
@@ -159,6 +194,13 @@ def run_probe(mode="model-only", *, tiny_forward=False, cuda=False, reward_manif
             sources["supplied_synchformer"] = probe_synchformer(reward_manifest)
         except Exception as exc:
             errors.append(f"Synchformer: {type(exc).__name__}: {str(exc)[:400]}")
+        try:
+            extra_packages, extra_sources, extra_errors = probe_imagebind(reward_manifest)
+            packages.update(extra_packages)
+            sources.update(extra_sources)
+            errors.extend(extra_errors)
+        except Exception as exc:
+            errors.append(f"ImageBind: {type(exc).__name__}: {str(exc)[:400]}")
     result = {"ok": not errors, "mode": mode, "python": sys.version.split()[0],
               "packages": packages, "source_files": sources, "native_source_sha256": native,
               "expected_diffusers_revision": DIFFUSERS_REVISION, "tools": tools, "errors": errors,

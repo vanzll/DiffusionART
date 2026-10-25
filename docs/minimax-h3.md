@@ -467,3 +467,106 @@ updates and correct U1/U2 counts, native media/rewards, checkpoint save/load/
 continuation and distributed rank progress. Keep healthy experiments running.
 CPU oracles, ready assets and launch commands do not replace these runtime
 records. The existing `track.md` holds actual evidence and remaining limits.
+
+## Six-reward ART post-training on 32 GPUs
+
+`configs/examples/minimax_h3_art_posttrain_full_32gpu.yaml` is a full-parameter
+T2AV recipe with P32/K8, two disjoint half-K updates, BF16 computation and FP32
+FSDP master parameters. It uses the same fixed model, optimizer and native
+video-shift12/audio-shift3 schedule as the full32 example. Sampling remains
+10 sigma boundaries and nine actual denoising transitions, with CFG1.
+
+Each rollout independently draws two video positions from `[0,1,2,3]` and two
+audio positions from `[0,1,2]`, without replacement. The pairs are chronological
+and shared across every rank, sample and both updates. A private seed/attempt/
+modality RNG leaves generation RNG untouched. Joint forwards replay the original
+paired video/audio states at the union of positions; each output contributes
+loss only when that modality selected the position. Each modality averages over
+its own two positions before the final equal-weight video/audio mean. The union
+can contain two to four positions; it is not a Cartesian product of independently
+re-noised states.
+
+The sixth scorer is ImageBind **audio-video cosine**, not its temperature-scaled
+logits or its `all` mode. Retain the original five scorer transformations. Center
+each of the six components within the complete prompt K8, divide by that
+component's sample std (`correction=1`) plus `1e-4`, then route:
+
+- video: VideoAlign +1.5 HPSv3 +DeSync +0.5 ImageBind;
+- audio: 0.5 AudioBox +CLAP +DeSync +0.5 ImageBind.
+
+Constant components give zero signal. Statistics are frozen before U2 splitting;
+evaluation uses single-sample original scorer values, never K8 normalization.
+Video/audio covariance, RMS, corrective mask and feature means remain separate.
+The original five-scorer ART/NFT/Fast configurations retain their existing behavior.
+
+### Bind assets and evaluation
+
+The new reward manifest extends the seven original asset entries with the
+`imagebind` checkpoint file and `imagebind_source` directory. Source is pinned to
+`facebookresearch/ImageBind@53680b02d7e37b19b124fa37bae4b6c98c38f5be`;
+the bridge verifies its four model implementation files, uses an isolated import
+namespace and never downloads weights. Include the upstream license in a minimal
+source export. `environments/minimax-h3-scorers.txt` documents its dependencies.
+The ImageBind implementation/weights and derived bridge carry CC-BY-NC-SA-4.0;
+see `licenses/ImageBind-CC-BY-NC-SA-4.0.txt` and `THIRD_PARTY_NOTICES.md`.
+The existing preparation CLI accepts the full nine-entry paths/provenance JSON:
+
+```bash
+.venv-h3-cu128/bin/python -m visual_rl.models.prepare_minimax_h3 \
+  --reward-paths /absolute/path/nine-reward-assets.json \
+  --reward-provenance /absolute/path/nine-reward-provenance.json \
+  --manifest /absolute/path/h3-six-reward-manifest.json
+```
+
+A ready-made, manually authored 32-prompt evaluation suite is provided at
+`configs/examples/data/minimax_h3_eval32.jsonl`. Its visible sound-producing
+scenes cover dialogue, animals, instruments, actions, transport and environments.
+It is a fixed qualitative monitoring suite, not a benchmark result. The loader
+requires exactly32 evaluation rows and rejects shared sample IDs or exact prompt
+texts with training. Freeze the file/order/hash for a run; each row uses seed
+`evaluation.seed + row_index`, with one generated AV sample.
+
+```bash
+export H3_EVAL_MANIFEST="$PWD/configs/examples/data/minimax_h3_eval32.jsonl"
+export H3_EVAL_SHA256="$(.venv-h3-cu128/bin/python -c \
+  'import hashlib,os; print(hashlib.sha256(open(os.environ["H3_EVAL_MANIFEST"],"rb").read()).hexdigest())')"
+export H3_OUTPUT_DIR=/absolute/persistent/path/fresh-h3-posttraining-run
+# Also bind H3_MODEL, H3_TRAIN_MANIFEST, H3_TRAIN_SHA256 and H3_REWARD_MANIFEST.
+.venv-h3-cu128/bin/python -m visual_rl.train \
+  --config configs/examples/minimax_h3_art_posttrain_full_32gpu.yaml --validate
+```
+
+### Evaluation, checkpoints and AV playback
+
+The recipe trains for400 optimizer updates (normally200 completed rollouts).
+Evaluation runs before training, every **50 completed rollouts** and at the final
+update. `evaluation.every_rollouts=50` is a rollout counter, not W&B's internal
+row number or an update count; failed/zero-signal skipped attempts do not advance
+it. Evaluation always runs the complete sampling schedule, independent of sparse
+training positions. It uses current policy weights, fixed prompt seeds and raw
+six-component scores.
+
+Every50 optimizer updates, and at the final update, all ranks publish a complete
+model/Adam/RNG/data-cursor checkpoint; retain the latest two published snapshots.
+At coincident boundaries the checkpoint is saved first. Continuation repairs a
+missing/incomplete due evaluation before advancing or returning from a final
+checkpoint, without repeating an already verified complete evaluation. Resume
+and `--eval-only` use the same FSDP topology and published checkpoint manifest;
+these are resume checkpoints rather than standalone Hugging Face exports.
+
+Each evaluation writes an MP4 **with its AAC stereo audio track**, an original
+float PCM WAV master, sample metadata, scored manifest and summary. The local
+`evaluation/step-*/<id>/gallery.html` has32 players with sound controls, prompt,
+seed and scores. The W&B `eval/audio_video` table uses the already muxed MP4 file,
+preserving audio instead of re-encoding frame arrays into silent videos. Six
+raw component curves remain available under `eval/reward/raw/*`.
+
+W&B media publishing stays in the independent exporter. Upload errors are
+reported in its status, leave the local gallery intact and do not fail optimizer
+work. Upload may be delayed; local manifests/media are authoritative. Keep the
+whole evaluation directory tree together when copying galleries, and enable
+sound in the browser player. Media are retained separately from checkpoint
+cleanup.
+
+Launch four nodes with the same distributed command/environment described above,
+substituting the new config. Site GPU leases and MPI owners remain unchanged.

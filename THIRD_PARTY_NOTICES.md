@@ -129,3 +129,22 @@ service/device/media utilities are replaced by explicit standalone boundaries.
 Model weights and external scorer source/assets are not redistributed.
 Their independent repository revisions and licenses must be supplied and
 recorded in the asset manifest; the software does not accept licenses for users.
+
+The opt-in sixth scorer's decoded preprocessing bridge in
+`src/visual_rl/rewards/_native_av/imagebind.py` is adapted from Meta
+ImageBind's `imagebind/data.py` at
+`53680b02d7e37b19b124fa37bae4b6c98c38f5be`:
+https://github.com/facebookresearch/ImageBind.
+Portions Copyright (c) Meta Platforms, Inc. and affiliates. All rights reserved.
+This derived preprocessing is licensed under CC-BY-NC-SA-4.0; the full upstream
+license is preserved in `licenses/ImageBind-CC-BY-NC-SA-4.0.txt`. Local changes
+replace file decoders with canonical decoded tensors, explicitly downmix stereo,
+namespace and byte-verify separately supplied model source, and require a local
+checkpoint. The upstream clip timing/frame/resize conventions also refer to
+ImageBind's pinned PyTorchVideo revision
+`6cdc929315aab1b5674b6dcf73b16ec99147735f`; PyTorchVideo is separately sourced
+under Apache-2.0 and no PyTorchVideo source is bundled. Exact source metadata
+is recorded in `_native_av/provenance.json` and `imagebind.SOURCE_SHA256`.
+ImageBind's noncommercial/share-alike terms apply independently of this
+repository's Apache-2.0 license. ImageBind implementation files and weights
+remain separately supplied, with their own explicit manifest provenance.

@@ -190,7 +190,8 @@ def test_prepared_extended_provenance_roundtrips_runtime(reward_assets, monkeypa
         observed.update(paths=actual_paths, device=device, sha256=expected_sha256)
         return SimpleNamespace()
     monkeypatch.setattr(AudioVideoReward, 'from_paths', classmethod(make_reward))
-    config = SimpleNamespace(reward=SimpleNamespace(options={'manifest': str(path)}))
+    config = SimpleNamespace(reward=SimpleNamespace(options={'manifest': str(path)},
+        weights=dict(video_align=1., hpsv3=1.5, audiobox=.5, clap=1., desync=1.)))
     reward = load_reward(config, 'cpu')
     assert reward.asset_identity['provenance'] == provenance
     assert observed['sha256'] == manifest['sha256']
@@ -268,3 +269,33 @@ def test_frozen_component_staging_rejects_policy_and_offloads_after_failure():
             raise RuntimeError("forward failure")
     assert all(p.device.type == "cpu" for m in frozen for p in m.parameters())
     assert all(p.dtype == torch.float32 for m in frozen for p in m.parameters())
+
+
+def test_six_reward_manifest_requires_paired_assets_and_fixed_source(reward_assets, monkeypatch):
+    from visual_rl.rewards._native_av import imagebind
+    root, paths, provenance = reward_assets
+    checkpoint = root / "imagebind_huge.pth"
+    checkpoint.write_bytes(b"fixture-not-real-imagebind-weights")
+    paths["imagebind"] = str(checkpoint)
+    provenance["imagebind"] = dict(repo="fixture/weights", revision="b" * 40, license="fixture")
+    with pytest.raises(ValueError, match="nine"):
+        build_reward_manifest(paths, provenance, base_dir=root)
+    source = root / "source"
+    implementation = source / "imagebind/models/imagebind_model.py"
+    implementation.parent.mkdir(parents=True)
+    implementation.write_text("# immutable fixture source\n")
+    monkeypatch.setattr(imagebind, "SOURCE_SHA256", {
+        "imagebind/models/imagebind_model.py": hashlib.sha256(implementation.read_bytes()).hexdigest()})
+    paths["imagebind_source"] = str(source)
+    provenance["imagebind_source"] = dict(repo=imagebind.IMAGEBIND_REPOSITORY,
+        revision=imagebind.IMAGEBIND_REVISION, license=imagebind.IMAGEBIND_LICENSE)
+    manifest = build_reward_manifest(paths, provenance, base_dir=root)
+    assert len(manifest["paths"]) == 9
+    assert manifest["sha256"]["imagebind"] == {".": hashlib.sha256(checkpoint.read_bytes()).hexdigest()}
+    provenance["imagebind_source"]["revision"] = "b" * 40
+    with pytest.raises(ValueError, match="fixed upstream"):
+        build_reward_manifest(paths, provenance, base_dir=root)
+    provenance["imagebind_source"]["revision"] = imagebind.IMAGEBIND_REVISION
+    implementation.write_text("changed fixture\n")
+    with pytest.raises(ValueError, match="source differs"):
+        build_reward_manifest(paths, provenance, base_dir=root)

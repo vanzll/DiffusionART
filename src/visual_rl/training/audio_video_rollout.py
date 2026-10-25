@@ -128,6 +128,8 @@ class AVRollout:
     old_log_probs: torch.Tensor | None
     stochastic: tuple[int, ...]
     noise_level: float = .8
+    video_selected: tuple[int, ...] | None = None
+    audio_selected: tuple[int, ...] | None = None
 
     @property
     def items(self):
@@ -148,7 +150,7 @@ def collect_av_rollout(predict: Callable, noise: AVState, video_sigmas: torch.Te
                        audio_sigmas: torch.Tensor, *, selected: Sequence[int] | None = None,
                        stochastic: Sequence[int] = (), innovations: Mapping[int, AVState] | None = None,
                        microbatch: int = 1, noise_level: float = .8, unselected_kind: str = "ode",
-                       device=None) -> AVRollout:
+                       device=None, modality_selected=None) -> AVRollout:
     """One joint forward/step with independent schedules; detached CPU caches.
 
     Caller activates NFT's old policy around collection. ART defaults to all
@@ -160,6 +162,17 @@ def collect_av_rollout(predict: Callable, noise: AVState, video_sigmas: torch.Te
     validate_schedules(video_sigmas, audio_sigmas)
     count = len(video_sigmas) - 1
     selected = tuple(range(count - 1)) if selected is None else tuple(selected)
+    video_selected = audio_selected = None
+    if modality_selected is not None:
+        if set(modality_selected) != {"video", "audio"}:
+            raise ValueError("explicit AV selection requires both modalities")
+        video_selected, audio_selected = (tuple(modality_selected[n]) for n in ("video", "audio"))
+        for positions in (video_selected, audio_selected):
+            if (not positions or tuple(sorted(set(positions))) != positions
+                    or any(type(p) is not int or not 0 <= p < count - 1 for p in positions)):
+                raise ValueError("modality positions must be distinct chronological nonfinal transitions")
+        if selected != tuple(sorted(set(video_selected) | set(audio_selected))):
+            raise ValueError("cached positions must be the union of modality selections")
     stochastic = tuple(stochastic)
     if type(microbatch) is not int or microbatch < 1 or unselected_kind not in ("ode", "cps_zero_noise"):
         raise ValueError("invalid AV rollout microbatch or deterministic transition")
@@ -218,4 +231,5 @@ def collect_av_rollout(predict: Callable, noise: AVState, video_sigmas: torch.Te
         endpoints.video[rows.cpu()] = state.video.float().cpu()
         endpoints.audio[rows.cpu()] = state.audio.float().cpu()
     return AVRollout(endpoints, selected, video_sigmas.detach().float().cpu().clone(),
-        audio_sigmas.detach().float().cpu().clone(), states, velocities, following, logp, stochastic, noise_level)
+        audio_sigmas.detach().float().cpu().clone(), states, velocities, following, logp, stochastic, noise_level,
+        video_selected, audio_selected)

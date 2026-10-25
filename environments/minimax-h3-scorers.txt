@@ -32,3 +32,18 @@
 # The seven reward assets need repo/revision/license + complete byte inventory.
 # Native model loading and one actual score from each scorer, with offline Hub
 # mode, remain necessary before declaring this dependency set complete.
+#
+# Optional sixth scorer (requires both imagebind + imagebind_source assets):
+# - facebookresearch/ImageBind @ 53680b02d7e37b19b124fa37bae4b6c98c38f5be,
+#   CC-BY-NC-SA-4.0. Source root contains imagebind/models/{helpers,
+#   multimodal_preprocessors,transformer,imagebind_model}.py. The bridge checks
+#   fixed upstream SHA256s and uses a private namespace, without a global install.
+# - Explicit local imagebind_huge.pth; strict state-dict loading, pretrained=False,
+#   no download fallback. Inventory its actual bytes and record weight provenance.
+# - Requires matching torchaudio plus timm, einops, numpy, ftfy, regex, iopath;
+#   target CUDA environment pins these. Decoded bridge needs no pytorchvideo/decord.
+# - ImageBind source provenance uses repo="facebookresearch/ImageBind", the above
+#   immutable revision, license="CC-BY-NC-SA-4.0". The nine-asset manifest must
+#   inventory both new assets completely. Legacy seven-asset manifests stay valid.
+# - An import probe and CPU preprocessing tests do not establish native checkpoint
+#   or GPU acceptance; require an offline real-weight cosine before formal use.

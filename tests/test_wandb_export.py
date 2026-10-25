@@ -144,7 +144,8 @@ def test_standalone_deadline_interrupts_hung_sdk_import(tmp_path):
     (fake / "wandb.py").write_text("import time\ntime.sleep(120)\n")
     process = subprocess.Popen([sys.executable, "-m", "visual_rl.wandb_export", "--root", str(tmp_path),
         "--destination", str(tmp_path / "export"), "--timeout-seconds", ".2"],
-        env={**os.environ, "PYTHONPATH": str(fake)}, start_new_session=True)
+        env={**os.environ, "PYTHONPATH": os.pathsep.join([str(fake), str(Path(module.__file__).parents[1])])},
+        start_new_session=True)
     try:
         assert process.wait(timeout=5) != 0
     finally:
@@ -160,7 +161,8 @@ def test_follow_eof_interrupts_hung_sdk_import(tmp_path):
     (fake / "wandb.py").write_text("import time\ntime.sleep(120)\n")
     process = subprocess.Popen([sys.executable, "-m", "visual_rl.wandb_export", "--root", str(tmp_path),
         "--destination", str(tmp_path / "export"), "--follow-stdin"], stdin=subprocess.PIPE,
-        env={**os.environ, "PYTHONPATH": str(fake)}, start_new_session=True)
+        env={**os.environ, "PYTHONPATH": os.pathsep.join([str(fake), str(Path(module.__file__).parents[1])])},
+        start_new_session=True)
     process.stdin.close()
     try:
         assert process.wait(timeout=15) != 0
@@ -178,7 +180,8 @@ def test_deadline_remains_armed_during_exception_atexit(tmp_path):
         "import time, atexit\natexit.register(time.sleep, 120)\nraise RuntimeError('injected')\n")
     process = subprocess.Popen([sys.executable, "-m", "visual_rl.wandb_export", "--root", str(tmp_path),
         "--destination", str(tmp_path / "export"), "--timeout-seconds", ".2"],
-        env={**os.environ, "PYTHONPATH": str(fake)}, start_new_session=True,
+        env={**os.environ, "PYTHONPATH": os.pathsep.join([str(fake), str(Path(module.__file__).parents[1])])},
+        start_new_session=True,
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         assert process.wait(timeout=5) in (-module.signal.SIGKILL, 124)

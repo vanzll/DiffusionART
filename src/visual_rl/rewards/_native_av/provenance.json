@@ -29,5 +29,22 @@
     "CLAP supports package import only. Scoring math and native model classes retained.",
     "Return additional raw scorer diagnostics without changing training score calculations; import ordering normalized.",
     "Represent the HPS prompt trailing space with a Python escape; runtime prompt text is unchanged."
-  ]
+  ],
+  "optional_imagebind": {
+    "upstream": "facebookresearch/ImageBind",
+    "revision": "53680b02d7e37b19b124fa37bae4b6c98c38f5be",
+    "license": "CC-BY-NC-SA-4.0",
+    "preprocessing_source": {
+      "url": "https://raw.githubusercontent.com/facebookresearch/ImageBind/53680b02d7e37b19b124fa37bae4b6c98c38f5be/imagebind/data.py",
+      "source_sha256": "55f8b207a687f49bd8880e74bd04c2561d559dfb1ca8b7ede2946b4449b4bdd2"
+    },
+    "pytorchvideo_revision": "6cdc929315aab1b5674b6dcf73b16ec99147735f",
+    "implementation": "Four local model source files supplied as imagebind_source, with immutable SHA256s in imagebind.SOURCE_SHA256; no full source tree or weights bundled.",
+    "local_changes": [
+      "Adapt file-decoding preprocessing to explicit canonical decoded uint8 TCHW video and CT audio with native fps/rate.",
+      "Explicit stereo-to-mono mean before native resampling/filterbank; retain native clip windows, mel padding/normalization, frame endpoints, resize and three spatial crops.",
+      "Load verified source under a private namespace; strict local checkpoint loading with pretrained=False and no download fallback.",
+      "Use only audio/video embeddings and their unscaled cosine in [-1,1]; no text route."
+    ]
+  }
 }

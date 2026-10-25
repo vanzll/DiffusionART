@@ -1,4 +1,4 @@
-"""Isolated scalar W&B export; training JSONL and eval summaries stay authoritative."""
+"""Isolated W&B export; local metrics and explicitly opted-in AV stay authoritative."""
 
 import argparse
 import importlib.util
@@ -18,6 +18,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from .config import ConfigError
+from .evaluation.audio_video_gallery import MEDIA_FILENAME, read_media_manifest
 
 
 def execution_source():
@@ -126,6 +127,48 @@ class Records:
         return values
 
 
+class MediaRecords:
+    """Attempt each explicit media publication once, independently of scalars.
+
+    Mark before validation/SDK calls: after an unknown SDK write, retries could
+    duplicate uploads. A failed batch never prevents subsequent batches.
+    """
+
+    def __init__(self, root):
+        self.root = Path(root)
+        self.attempted = set()
+        self.errors = []
+
+    def failed(self, path, exc):
+        self.errors.append({"manifest": str(path.relative_to(self.root)),
+                            "error_type": type(exc).__name__})
+        warnings.warn("W&B AV media export failed; local gallery remains authoritative",
+                      RuntimeWarning)
+
+    def read(self):
+        for path in sorted((self.root / "evaluation").glob(f"*/*/{MEDIA_FILENAME}")):
+            if path in self.attempted:
+                continue
+            self.attempted.add(path)
+            try:
+                yield path, read_media_manifest(self.root, path)
+            except Exception as exc:
+                self.failed(path, exc)
+
+
+def _media_table(wandb, root, payload):
+    columns = ["sample_id", "prompt", "seed", "optimizer_step",
+               *payload["reward_columns"], "video"]
+    table = wandb.Table(columns=columns)
+    for row in payload["samples"]:
+        # A filename preserves the existing muxed AV bytes. Passing decoded
+        # frames to wandb.Video would silently discard the original audio.
+        video = wandb.Video(str((root / row["video"]["path"]).resolve()), format="mp4")
+        table.add_data(row["sample_id"], row["prompt"], row["seed"], row["optimizer_step"],
+                       *(row["raw_rewards"][key] for key in payload["reward_columns"]), video)
+    return table
+
+
 def export(root, destination, *, follow_fd=None, source_record=None):
     """One SDK owner, one fresh run per export, no retry of unknown SDK writes."""
     root, destination = Path(root), Path(destination)
@@ -172,13 +215,22 @@ def export(root, destination, *, follow_fd=None, source_record=None):
         record.update(state="running", run_id=run.id, url=run.url,
                       sdk_dir=run.dir, mode=mode)
         _publish(status, record)
-        reader = Records(root)
+        reader, media_reader = Records(root), MediaRecords(root)
         while True:
             # EOF is sent only after the parent's final metric has been flushed.
             done = follow_fd is None or bool(select.select([follow_fd], [], [], 0)[0])
             for row in reader.read():
                 run.log(row)
                 record["records"] += 1
+            for path, payload in media_reader.read():
+                try:
+                    run.log({"eval/optimizer_step": payload["optimizer_step"],
+                             "eval/audio_video": _media_table(wandb, root, payload)})
+                    record["media_records"] = record.get("media_records", 0) + 1
+                except Exception as exc:
+                    media_reader.failed(path, exc)
+            if media_reader.errors:
+                record["media_errors"] = media_reader.errors
             _publish(status, record)
             if done:
                 break

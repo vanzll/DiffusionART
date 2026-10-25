@@ -34,6 +34,8 @@ REWARD_ASSETS = frozenset((
     "video_align", "hpsv3", "audiobox", "clap", "desync", "video_align_base", "desync_source",
 ))
 
+SIX_REWARD_ASSETS = REWARD_ASSETS | {"imagebind", "imagebind_source"}
+
 
 def _sha256(path):
     digest = hashlib.sha256()
@@ -208,10 +210,22 @@ def build_reward_manifest(paths, provenance, *, base_dir="."):
     This is a complete recursive ordinary-file inventory. Symlinked files and
     directories are rejected instead of following mutable external locations.
     """
-    if set(paths) != REWARD_ASSETS or set(provenance) != REWARD_ASSETS:
-        raise ValueError("reward paths/provenance require exactly the seven native asset names")
+    if set(paths) not in (REWARD_ASSETS, SIX_REWARD_ASSETS) or set(provenance) != set(paths):
+        raise ValueError("reward paths/provenance require exactly the seven legacy assets or all nine six-reward assets")
+    if "imagebind" in paths:
+        from ..rewards._native_av.imagebind import (
+            IMAGEBIND_LICENSE,
+            IMAGEBIND_REPOSITORY,
+            IMAGEBIND_REVISION,
+            validate_source,
+        )
+        source = provenance["imagebind_source"]
+        validate_reward_provenance(source, name="imagebind_source")
+        if (source["repo"] != IMAGEBIND_REPOSITORY or source["revision"] != IMAGEBIND_REVISION
+                or source["license"] != IMAGEBIND_LICENSE):
+            raise ValueError("ImageBind source provenance must identify the fixed upstream revision/license")
     resolved, hashes = {}, {}
-    for name in sorted(REWARD_ASSETS):
+    for name in sorted(paths):
         source = provenance[name]
         validate_reward_provenance(source, name=name)
         if not isinstance(paths[name], str) or not paths[name]:
@@ -242,6 +256,10 @@ def build_reward_manifest(paths, provenance, *, base_dir="."):
             raise ValueError(f"reward asset must be a regular file or directory: {name}")
         if not inventory:
             raise ValueError(f"reward asset directory is empty: {name}")
+        if name == "imagebind_source":
+            validate_source(path)
+        if name == "imagebind" and not path.is_file():
+            raise ValueError("ImageBind checkpoint must be an explicit local file")
         resolved[name] = str(path)
         hashes[name] = dict(sorted(inventory.items()))
     return {"schema_version": 1, "paths": resolved, "sha256": hashes,
@@ -293,7 +311,7 @@ def main():
     action.add_argument("--download", action="store_true", help="download required native components")
     action.add_argument("--inspect", action="store_true", help="metadata/configs only; NOT training-ready")
     action.add_argument("--validate-only", action="store_true", help="offline local manifest validation")
-    action.add_argument("--reward-paths", help="JSON file mapping the seven native reward assets to paths")
+    action.add_argument("--reward-paths", help="JSON file mapping seven legacy or nine six-reward native assets to paths")
     parser.add_argument("--cache-dir")
     parser.add_argument("--model-root")
     parser.add_argument("--manifest")

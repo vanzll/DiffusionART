@@ -25,3 +25,8 @@ submitit==1.5.4
 rich==15.0.0
 PyYAML==6.0.3
 wandb==0.31.0
+# Optional six-reward ImageBind bridge; implementation is supplied through the
+# byte-inventoried imagebind_source asset, never installed from a floating URL.
+ftfy==6.3.1
+regex==2026.9.29
+iopath==0.1.10
