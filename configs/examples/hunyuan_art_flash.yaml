@@ -1,6 +1,6 @@
 extends: hunyuan_art.yaml
 name: hunyuan-art-flash
 training:
-  timestep_selection: first
+  timestep_selection: high_noise
 runtime:
   output_dir: outputs/hunyuan-art-flash

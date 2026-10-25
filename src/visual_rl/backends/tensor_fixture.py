@@ -21,6 +21,7 @@ from ..training.objectives import (
 )
 from ..training.rollout import collect_rollout, endpoint_renoising
 from ..training.state import CostClock, PolicyShadow, Progress
+from ..training.timesteps import art_training_positions
 from ..training.update import accumulated_step
 
 
@@ -141,8 +142,6 @@ def _run_owned(config, root, resume, algorithm, p, k, *, resume_rewind=False):
     groups = torch.arange(p).repeat_interleave(k)
     condition = groups.float() / p
     sigmas = shifted_schedule(config.sampling.steps, 1.0)
-    selected = ((0,) if config.training.timestep_selection == "first"
-                else tuple(range(config.sampling.steps - 1)))
 
     def predict(state, sigma, rows):
         return model(state, sigma, condition[rows])
@@ -155,6 +154,8 @@ def _run_owned(config, root, resume, algorithm, p, k, *, resume_rewind=False):
         while progress.optimizer_steps < config.training.max_updates:
             with clock.training_phase():
                 progress.attempts += 1
+                selected = art_training_positions(config.training, range(config.sampling.steps - 1),
+                                                  seed=config.seed, attempt=progress.attempts)
                 noise = torch.randn((p * k, 4), generator=generator)
                 policy_gradient = algorithm in (
                     "flow_grpo",
@@ -193,7 +194,7 @@ def _run_owned(config, root, resume, algorithm, p, k, *, resume_rewind=False):
                         torch.zeros(p * k, dtype=torch.bool),
                         torch.device("cpu"),
                     )
-                    windows = prompt_disjoint_windows(groups, len(chosen))
+                    windows = prompt_disjoint_windows(groups, len(cache.selected))
                 elif policy_gradient:
                     advantages = group_advantages(
                         rewards,

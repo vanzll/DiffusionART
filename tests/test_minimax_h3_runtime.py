@@ -391,11 +391,13 @@ def test_checkpoint_asset_component_is_immutable():
 
 
 @pytest.mark.parametrize("mode", ["full", "lora"])
-def test_flash_keeps_full_av_rollout_and_uses_one_position_per_update(config_factory, monkeypatch, mode):
+@pytest.mark.parametrize("selection", ["first", "high_noise"])
+def test_flash_keeps_full_av_rollout_and_uses_selected_positions_per_update(config_factory, monkeypatch, mode, selection):
     from dataclasses import replace
 
     c = config_factory("art", mode)
-    c = replace(c, training=replace(c.training, timestep_selection="first"))
+    c = replace(c, sampling=replace(c.sampling, steps=6 if selection == "high_noise" else 5),
+                training=replace(c.training, timestep_selection=selection))
     collect = runtime.collect_av_rollout
     observations = []
     def capture(predict, noise, video_sigmas, audio_sigmas, **kwargs):
@@ -409,18 +411,23 @@ def test_flash_keeps_full_av_rollout_and_uses_one_position_per_update(config_fac
     monkeypatch.setattr(runtime, "collect_av_rollout", capture)
     result = runtime.run(c, backend_api=fixture_api([]))
     assert result["optimizer_steps"] == 4 and result["completed_rollouts"] == 2
-    assert observations == [((0,), 4), ((0,), 4)]
+    from visual_rl.training.timesteps import art_training_positions
+    expected = [art_training_positions(c.training, (), seed=c.seed, attempt=attempt) for attempt in (1, 2)]
+    assert observations == [(pair, c.sampling.steps - 1) for pair in expected]
     rows = [json.loads(line) for line in (Path(c.runtime.output_dir) / "metrics.jsonl").read_text().splitlines()]
-    assert all(row["av/training_positions"] == 1 and row["av/training_source_position_max"] == 0 for row in rows)
+    assert all(row["av/training_positions"] == len(expected[0]) for row in rows)
+    assert [row["av/training_source_position_max"] for row in rows] == [max(pair) for pair in expected]
 
 
 @pytest.mark.parametrize("mode", ["full", "lora"])
-def test_flash_two_rank_fsdp_save_and_exact_resume(config_factory, tmp_path, mode):
+@pytest.mark.parametrize("selection", ["first", "high_noise"])
+def test_flash_two_rank_fsdp_save_and_exact_resume(config_factory, tmp_path, mode, selection):
     from dataclasses import replace
 
     def flashed(algorithm, finetune):
         c = config_factory(algorithm, finetune)
-        return replace(c, training=replace(c.training, timestep_selection="first"))
+        return replace(c, sampling=replace(c.sampling, steps=6 if selection == "high_noise" else 5),
+                       training=replace(c.training, timestep_selection=selection))
     test_real_two_rank_fsdp_six_fixture_paths_save_resume(flashed, tmp_path, "art", mode)
     rows = [json.loads(line) for line in (tmp_path / "original/metrics.jsonl").read_text().splitlines()]
-    assert all(row["av/training_positions"] == 1 for row in rows)
+    assert all(row["av/training_positions"] == (2 if selection == "high_noise" else 1) for row in rows)

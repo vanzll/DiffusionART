@@ -75,26 +75,20 @@ The explicit `algorithm.options.multi_reward_advantage` option also supports
 joint advantages in the native image GRPO/NFT update paths. When absent, their
 existing scalar-reward normalization is unchanged. With it enabled, clipping
 remains in the original algorithm objective, after advantage combination.
-Do not infer executed historical behavior from an archived config flag alone;
-the recipe's source/evidence notes distinguish verified code from config intent.
 The supplied GRPO-family recipes enable joint advantages. The NFT recipes
-instead normalize the summed scalar, matching the inspected reference trainer,
-which did not consume the archived joint-advantage flag.
+instead normalize the summed scalar.
 
-## Provenance And Acceptance
+## Training And Acceptance
 
-ART derives from `3t35bwps` at `c81b12bab6a7594f23a0398cb49b30442a5b0f27`:
-P48/K24, ten ODE sampling steps, ten update positions, two disjoint updates,
-LR 0.0003, FP16, no CFG, no reference KL and no evaluation EMA. Its source
-training budget is 1000 successful-update candidates; the main paper displays
-the first 500 steps. These are different quantities.
+ART uses P48/K24, ten ODE sampling steps, ten update positions, two disjoint updates,
+LR 0.0003, FP16, no CFG, no reference KL and no evaluation EMA.
+The training budget is 1000 successful optimizer updates.
 
 The author's later-approved public scalar zero-signal rule is retained:
 no restoration on exact-zero-signal rows, with the original window denominator.
 This is not advertised as bitwise identity with historical training. Historical
 asset hashes, sampler/RNG order and GPU result parity remain unverified.
 
-See the independent [scientific evidence](paper-multireward-evidence.json) and
-configuration tests. CPU tests check score pairing, quantization, component
+Configuration CPU tests check score pairing, quantization, component
 scales, advantage composition, configuration boundaries and update integration.
 They do not certify pretrained HPS GPU inference or full paper-curve reproduction.

@@ -6,26 +6,21 @@ backends and pinned release-example assets. No training was launched.
 
 ## Coverage
 
-| Model / benchmark | Methods | Source runs |
-| --- | --- | --- |
-| SD3.5-M / geneval | ART, GRPO, Fast, DPPO, NFT EMA, NFT on-policy, Dance | 11pq0iy3, wxissl19, kj09p7ee, ienj38uu, 7zirilwj, u64dtm5f, 2fryhvvf |
-| SD3.5-M / ocr | ART, GRPO, Fast, DPPO, NFT EMA, NFT on-policy, Dance | 9c0zrzlw, x4cywydr, g3949kwe, x76d50t3, uxe86tf6, s408j3eh, 92ahoxm2 |
-| SD3.5-M / pickscore | ART, GRPO, Fast, DPPO, NFT EMA, NFT on-policy, Dance | mofumvbw, dosfn01k, 0qvzsp36, gzqhxeg0, pm9ouohi, 6wvdti47, bt84xzy0 |
-| SD3.5-M / four rewards | ART, GRPO, Fast, DPPO, NFT EMA, NFT on-policy, Dance | 3t35bwps, nv2hv2l1, ye14mp5t, dvmnd177, ujnglsgl, ldpbaea3, gpxub5g5 |
-| FLUX.1-dev / GenEval | ART, Fast, DPPO, NFT EMA | z9gkdemj, dmrybr9d, yghomcbn, asge8y6v |
-| SD3.5-M / OCR restoration | ART one-update ablation | v4nt8roi |
+| Model / benchmark | Methods |
+| --- | --- |
+| SD3.5-M / geneval | ART, GRPO, Fast, DPPO, NFT EMA, NFT on-policy, Dance |
+| SD3.5-M / ocr | ART, GRPO, Fast, DPPO, NFT EMA, NFT on-policy, Dance |
+| SD3.5-M / pickscore | ART, GRPO, Fast, DPPO, NFT EMA, NFT on-policy, Dance |
+| SD3.5-M / four rewards | ART, GRPO, Fast, DPPO, NFT EMA, NFT on-policy, Dance |
+| FLUX.1-dev / GenEval | ART, Fast, DPPO, NFT EMA |
+| SD3.5-M / OCR restoration | ART one-update ablation |
 
-FLUX NFT EMA `asge8y6v` is recovered from a separate archived W&B response and
-its actual runtime `98d76252de5f194df39a6441f33ddf7e2843e06d`. The compact archive
-alone does not contain it. Its dedicated runtime freezes P48/K24, 144 rows per
+FLUX NFT EMA freezes P48/K24, 144 rows per
 rank, one full-rollout update, five of six fresh-noising positions, BF16,
 rollout/update microbatch six and independent old/evaluation shadows.
 
 All four FLUX profiles use the same 12 LoRA target suffixes, rank 32 and
-alpha 64. These match ART's `train_flux.py` at `b52a36d`, Fast/DPPO's
-`train_flux.py` at `7325877`, and NFT EMA's `train_nft_flux.py` at `98d7625`.
-The ART example previously selected only four attention projections; it now
-also includes the historical context-attention and feed-forward projections.
+alpha 64, including context-attention and feed-forward projections.
 Regression tests check the exact targets and identical trainable parameter
 inventories on a small native FLUX model. Per-method update counts, EMA,
 learning rates and mask settings are unchanged; this is not a new GPU
@@ -36,10 +31,8 @@ config require that original config to resume.
 
 The four-reward profiles use a separate
 [setup and score contract](multireward.md), with HPSv2.1 rather than aesthetic
-prediction. Their seven recipes have their own allowlisted W&B evidence in
-`paper-multireward-evidence.json`. Main-paper plotting stops at 500 steps;
-the candidate training budget remains 1000. Historical baseline runtime source
-is not recovered; reference mappings are explicitly marked, not certified.
+prediction. Their candidate training budget is 1000 successful optimizer updates.
+Historical runtime and result parity are not certified.
 
 ### Automatic PickScore Entry Point
 
@@ -63,7 +56,7 @@ while `--validate` checks the planned config without downloading assets.
 ### Other Benchmarks And Local Overrides
 
 Each YAML inherits its integration recipe and overrides scientific values from
-its own run. GenEval/OCR prompts are downloaded from the pinned
+the selected training contract. GenEval/OCR prompts are downloaded from the pinned
 [HF dataset](https://huggingface.co/datasets/vanzl/DiffusionART-Prompts).
 Their public Flow-GRPO splits preserve annotations and repeated evaluation rows;
 they are not certified byte-identical copies of private historical data.
@@ -110,36 +103,31 @@ protocol remain recorded but inactive. Also clear explicit checkpoint points
 when shortening the update budget. Restoring the original cadence reactivates
 the original evaluation protocol; a short check does not validate that lifecycle.
 
-All candidates stop at **1000 successful optimizer updates**, the plotted
-horizon. Explicit archived `paper_max_wandb_step=1000` is preserved; legacy
-`num_epochs=100000` is not treated as the release budget. Historical W&B
-zero-based indices, overflow skips and 1002-step overshoot are not certified.
+All candidates stop at **1000 successful optimizer updates**.
+Historical W&B indexing, overflow skips and overshoot parity are not certified.
 
 All public paper profiles evaluate every 50 successful optimizer updates,
-including initial and final evaluation. This is an author-approved common
-cadence, not the heterogeneous historical schedules. Extra `at_updates` are
-empty so old sparse schedules do not trigger additional evaluations.
+including initial and final evaluation. Extra `at_updates` are empty.
 Image paper recipes also save a complete training checkpoint every 200 successful
 optimizer updates for recovery. Archived explicit save points are retained, so
 some recipes save more frequently. Checkpoint cadence is independent of evaluation.
 
-Global prompt count is derived per run as
+Global prompt count follows
 `P = train_batch_size * num_batches_per_epoch * 8 / K`, not copied from a
 neighboring method. Most GenEval/GRPO profiles use P48/K24; OCR ART uses P64/K16,
 and PickScore ART/Fast/NFT use P64/K18. Training AdamW learning rate, betas,
-epsilon, weight decay, clipping, precision and TF32 follow each archived run.
+epsilon, weight decay, clipping, precision and TF32 are explicit in each YAML.
 
 GRPO-family candidates use two disjoint updates and archived logical batch
 counts (16 SD3, 48 FLUX). Typical historical SD3 accumulation was eight batches.
 `sd3_ocr_art_one_update.yaml` inherits the OCR ART profile and explicitly sets
-`algorithm.options.updates_per_rollout=1`. Its archived `v4nt8roi` accumulation
-is sixteen rather than eight: one whole rollout window per successful update,
+`algorithm.options.updates_per_rollout=1`: one whole rollout window per successful update,
 with the same restoration loss, P64/K16 and artifact cadence. The 1000-update
 budget therefore consumes twice as many rollouts as the two-update profile.
 Runtime source and exact ordering parity remain unresolved for this ablation.
 NFT defaults to one full-rollout update (normally equivalent to sixteen source
 batches), with old-policy decay separate from evaluation EMA. **OCR NFT EMA
-`uxe86tf6` differs:** beta 0.1, decay type 2, accumulation eight and two disjoint
+differs:** beta 0.1, decay type 2, accumulation eight and two disjoint
 updates. Its config explicitly enables two windows; the old shadow remains
 frozen through both, then refreshes once at the completed rollout boundary.
 Evaluation EMA refreshes after each successful update. Both one- and two-update
@@ -151,19 +139,13 @@ methods use the common 50-update evaluation cadence.
   Current candidates use prompt-major local complete groups. Selection,
   filtering/padding, gradient accumulation order and RNG parity remain pending;
   valid backend configuration is not reproduction evidence.
-- NFT decay types 0/1/2 map to existing old-policy rate/maximum/delay using
-  `scripts/train_nft_sd3.py::return_decay` at research
-  `3ca2a36f6b20c53a06813013234666d9c033a660`. EMA defaults come from that
-  source, not invented extra archived fields. Exact historical EMA timing and
-  successful-update versus epoch indexing remain unverified.
-- SD3 DPPO sources resumed at 700/500/800 updates. Candidates start at base
-  weights, not those unavailable predecessor checkpoints.
+- NFT old-policy rate/maximum/delay and evaluation EMA are configured separately.
+  Exact historical EMA timing and successful-update versus epoch indexing remain unverified.
+- SD3 DPPO candidates start at base weights; predecessor checkpoints are unavailable.
 - Dance A2 declares `prompt_global_std`, ratio clip 1e-5, eta 0.8, K24,
   shared per-prompt initialization and nine-of-ten per-row selections.
   `last_x0` and the kernel are native DanceGRPO 15cc71d adaptations.
-  Source commits were recovered for GenEval/OCR (`aa3cb43c...`) and PickScore
-  (`db5aecf8...`), but their SD3 code bodies remain unavailable. Endpoint,
-  terminal eligibility and exact sharing/order are not historically certified.
+  Endpoint, terminal eligibility and exact sharing/order are not historically certified.
 - Fast CPS uses the source branch's reduced negative-MSE likelihood even when
   archived `logprob_type=gaussian`: the research CPS branch ignores that label.
   SD3 window [0,5) and FLUX window [0,3) are preserved.
@@ -173,16 +155,15 @@ methods use the common 50-update evaluation cadence.
 - Full-budget CPU/GPU execution, clean-environment acceptance and paper-curve
   equivalence have not been established.
 
-## Evidence Tests
+## Configuration Tests
 
-`tests/test_paper_image_configs.py` validates the original 26 backend configurations
-against [the bundled scientific evidence](paper-image-evidence.json), extracted
-from archived W&B configs independently of the release YAML. Only explicit
-scientific fields are included; full source snapshots are identified by SHA256.
-Normal checks require no private archive. Optional `PAPER_IMAGE_ARCHIVE` and
-`PAPER_FLUX_NFT_ARCHIVE` point to original snapshots for further cross-checking;
-only that optional original-file check skips when absent. No credentials or
-private host paths are stored in the bundled evidence or profiles. The seven
-four-reward candidates are separately checked by
-`tests/test_paper_multireward_configs.py`, including sum-reporting and the
-algorithm-specific normalization branches.
+`tests/test_paper_image_configs.py` validates the 26 backend configurations
+against independently fixed scientific constants, without private archives or
+historical run mappings. Checks retain optimizer settings, batch sizes, sampling,
+LoRA targets and per-method loss settings. The seven four-reward candidates are
+separately checked by `tests/test_paper_multireward_configs.py`, including
+sum-reporting and algorithm-specific normalization branches.
+
+Removing historical provenance changes the full configuration fingerprint.
+Resume existing checkpoints with their original configuration; the cleaned
+profiles do not bypass checkpoint identity validation.

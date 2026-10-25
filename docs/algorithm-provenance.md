@@ -49,10 +49,8 @@ at that upstream revision: native flow-SDE mean/variance, detached observed
 likelihood, and final pre-transition x0 scoring. Its upstream-style config uses
 group sample std plus `1e-8`. Per-prompt shared initialization and SD3 timestep
 selection are explicit adaptations. Archived SD3 A2 configs instead declare
-global reward std and evaluation EMA. W&B run commit and code metadata agree on
-`aa3cb43cc7c362ba24aa5296c14e39ef36582d7c` (GenEval/OCR) and
-`db5aecf8fbb6e002527ef8aff09e75a53ece4312` (PickScore), but the full runtime
-sources have not been recovered. These identities are not proof of A2 parity.
+global reward std and evaluation EMA. Exact historical runtime identity and
+A2 parity remain unverified.
 
 The local incident/progress notes and recent applicable Git diffs were inspected.
 In particular, `60ba9322eb6a671c687c0be20dcd0a1d83b05c4d` added opt-in raw

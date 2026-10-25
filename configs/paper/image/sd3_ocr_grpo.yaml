@@ -103,33 +103,11 @@ runtime:
   - 1000
 provenance:
   kind: training_candidate_not_fullhistorical_reproduction
-  source_run: x4cywydr
-  source_url: https://wandb.ai/stableNFT-baselines/baselines/runs/x4cywydr
-  runtime_commit: null
-  runtime_source_status: unresolved
-  research_reference_commit: 3ca2a36f6b20c53a06813013234666d9c033a660
-  archived_model: stabilityai/stable-diffusion-3.5-medium
-  archived_model_revision: main
-  source_world_size: 8
-  source_train_batch_size: 9
-  source_num_batches_per_epoch: 16
-  source_gradient_accumulation_steps: 8
-  source_updates_per_rollout: 2
   candidate_updates_per_rollout: 2
-  source_timestep_fraction: 0.99
-  source_sde_type: sde
-  source_logprob_type: gaussian
-  source_global_std: true
-  source_same_latent: false
-  source_resume_global_step: 0
   budget_basis: 1000_successful_updates_plotted_horizon_candidate
   cadence_basis: public_common_every50_optimizer_updates
   semantic_gaps:
-  - Prompt-major local groups replace historical DistributedKRepeatSampler shuffled mixed rows; exact
-    order and RNG parity pending.
-  - Model/reward revisions and text/LoRA asset conventions are release example pins, not recovered historical
-    artifact hashes.
-  - 1000 successful optimizer updates are the plotted-horizon training candidate; historical W&B indexing/overflow/overshoot
-    parity is not certified.
-  - EMA decay/refresh defaults are mapped from research 3ca2a36f; historical runtime implementations remain
-    unresolved.
+  - Prompt-major local groups replace historical DistributedKRepeatSampler shuffled mixed rows; exact order and RNG parity pending.
+  - Model/reward revisions and text/LoRA asset conventions are release example pins, not recovered historical artifact hashes.
+  - 1000 successful optimizer updates are the plotted-horizon training candidate; historical W&B indexing/overflow/overshoot parity is not certified.
+  - EMA decay/refresh defaults are mapped from research 3ca2a36f; historical runtime implementations remain unresolved.

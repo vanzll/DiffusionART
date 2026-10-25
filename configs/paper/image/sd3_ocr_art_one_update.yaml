@@ -8,9 +8,4 @@ runtime:
   log: wandb
   output_dir: ${PAPER_OUTPUT_ROOT}/sd3_ocr_art_one_update
 provenance:
-  source_run: v4nt8roi
-  source_url: https://wandb.ai/vanzl3386-chinese-university-of-hong-kong-shenzhen/flow-grpo-algo/runs/v4nt8roi
-  source_algorithm: stablecov-schedmetric-1upd
-  source_gradient_accumulation_steps: 16
-  source_updates_per_rollout: 1
   candidate_updates_per_rollout: 1

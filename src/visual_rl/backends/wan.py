@@ -27,6 +27,8 @@ _shape = hunyuan._shape
 
 
 def validate_config(c):
+    if c.training.timestep_selection == "high_noise":
+        raise ConfigError("Wan high_noise is unsupported: its four-step native schedule has only three nonfinal ART positions")
     try:
         fixed = reference_mode(c.model.options) == "fixed_images"
         evaluation_reference_mode(c.model.options)

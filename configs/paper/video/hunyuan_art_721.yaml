@@ -31,14 +31,6 @@ runtime:
   checkpoint_every: 200
 provenance:
   kind: corrected_eval_training_reproduction
-  inventory_group: t2v-main
-  run_id: gyvtocue
-  runtime_sha: 163d069661b765298964b59a8f06661dcce8ce73
-  runtime_sha_status: recorded_in_inventory_object_unavailable_locally
-  reference_sha: 3ca2a36f6b20c53a06813013234666d9c033a660
-  reference_location: runners/t2v_formal_batch_v1/flowart_main721_val150.json
-  runtime_location: flow_grpo_alg/video/backends/hunyuan_public_flowart.py
   evaluation_protocol: corrected_common_video8_rm4_shift7_every50_retain_all
-  historical_evaluation: video18_shift7_sparse_steps_retained32_MQ_rescore_lineage
   budget_basis: 400_global_optimizer_updates_200_rollouts
   artifact_policy: native_full_resume_checkpoint_every200_updates_all_scored_media

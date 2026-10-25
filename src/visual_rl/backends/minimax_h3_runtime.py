@@ -43,6 +43,7 @@ from ..training.fsdp_checkpoint import load_fsdp_checkpoint, save_fsdp_checkpoin
 from ..training.image_contracts import tf32_policy
 from ..training.resume import prepare_resume_history, validate_resume_request
 from ..training.state import CostClock, Progress
+from ..training.timesteps import art_training_positions
 from ..wandb_export import open_metrics
 from . import minimax_h3 as backend
 from .minimax_h3_execution import execution_policy
@@ -187,8 +188,8 @@ def _innovations(noise, positions, generator):
 def collect(parts, c, predict, noise, sigmas, session, generator, *, rollout_index, evaluation=False):
     _active_policy(parts, session)
     options = {}
-    if not evaluation and c.algorithm.name == "diffusionart" and c.training.timestep_selection == "first":
-        options["selected"] = (0,)
+    if not evaluation and c.algorithm.name == "diffusionart" and c.training.timestep_selection != "configured":
+        options["selected"] = art_training_positions(c.training, (), seed=c.seed, attempt=rollout_index + 1)
     if not evaluation and c.algorithm.name == "flow_grpo_fast":
         positions = select_fast_window(len(sigmas[0]) - 1, rollout_index=rollout_index,
             seed=c.sampling.options["window_seed"], size=c.sampling.options["window_size"],

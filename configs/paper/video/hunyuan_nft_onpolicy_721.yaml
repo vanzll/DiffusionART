@@ -5,6 +5,3 @@ algorithm:
     old_policy: {mode: no-ema, rate: 0.00125, maximum: 0.6}
 runtime:
   output_dir: ${PAPER_VIDEO_OUTPUT_ROOT}/hunyuan-nft-onpolicy-721
-provenance:
-  run_id: y5vn56yr
-  reference_location: runners/t2v_formal_batch_v1/nft_noema_eval8fps.json

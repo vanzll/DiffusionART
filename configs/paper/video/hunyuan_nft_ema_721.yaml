@@ -13,13 +13,5 @@ runtime:
   output_dir: ${PAPER_VIDEO_OUTPUT_ROOT}/hunyuan-nft-ema-721
   checkpoint_every: 100
 provenance:
-  inventory_group: t2v-main
-  run_id: bjb9ed8b
-  runtime_sha: 75778e7667c5399aaec49fa468bb087cf886bed4
-  runtime_sha_status: inspected_local_git_object
-  reference_sha: 75778e7667c5399aaec49fa468bb087cf886bed4
-  reference_location: runners/t2v_formal_batch_v1/nft_slowema_eval8fps.json
-  runtime_location: flow_grpo_alg/video/backends/hunyuan_public_nft.py
-  historical_evaluation: video8_shift7_sparse_steps_retained32
   budget_basis: 400_global_optimizer_updates_400_rollouts
   artifact_policy: native_full_resume_checkpoint_every100_updates_all_scored_media

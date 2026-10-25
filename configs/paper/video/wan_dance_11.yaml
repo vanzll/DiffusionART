@@ -10,9 +10,3 @@ sampling:
     noise_level: 0.25
 runtime:
   output_dir: ${PAPER_VIDEO_OUTPUT_ROOT}/wan-dance-11
-provenance:
-  run_id: ef06ee7200e554ef1d5f4e5f
-  runtime_sha: 512697427a2f7b7c076dee5a7c1233b7abb278c2
-  runtime_sha_status: inspected_local_git_object
-  reference_sha: 512697427a2f7b7c076dee5a7c1233b7abb278c2
-  reference_location: runners/wan_i2v_distilled32_v1/dancegrpo-u400.json

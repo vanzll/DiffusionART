@@ -1,96 +1,76 @@
 # DiffusionART-Flash
 
-DiffusionART-Flash trains at the initial denoising position while retaining
-the complete rollout for reward evaluation and covariance guidance. The switch
-works with the SD3, FLUX, HunyuanVideo, distilled Wan and MiniMax-H3 ART runners,
-including their supported DDP/FSDP and full/LoRA paths. The comparison shown in
-the README is a HunyuanVideo experiment; it does not establish quality on every
-model family.
+DiffusionART-Flash concentrates policy updates in the high-noise part of a
+complete denoising trajectory. For the 16-step HunyuanVideo recipe, sample two
+of the first four positions for each rollout. This greatly reduces the number
+of sample–timestep pairs processed during updates while achieving comparable
+performance to training across the full denoising schedule.
 
 ## Enable
-
-Add this field to an existing ART YAML, or inherit one:
 
 ```yaml
 extends: hunyuan_art.yaml
 name: hunyuan-art-flash
+sampling:
+  steps: 16
 training:
-  timestep_selection: first
+  timestep_selection: high_noise
 runtime:
   output_dir: outputs/hunyuan-art-flash
 ```
 
-`configured` is the default and preserves the backend's existing position
-selection. `first` overrides it with rollout index `[0]`, including when the
-configured pool/list does not start at zero. In the shipped schedules this is
-sigma approximately one. This field changes training replay only: do not change
-`sampling.steps` to one. The original next sigma remains in the ART coefficient
-and mask calculation; it is not replaced by zero. Other algorithms reject the
-Flash switch rather than silently ignoring it.
+`high_noise` draws two distinct zero-based positions from `[0, 1, 2, 3]` and
+replays them in chronological order. One pair is shared across the global
+rollout: every rank, trajectory, modality and both optimizer windows use the
+same selection. The private selection RNG depends on the experiment seed and
+rollout attempt, so retries and checkpoint continuation reproduce the pair
+without consuming the generation RNG. Each new rollout resamples; a pair may
+recur.
+
+Keep the complete generation schedule. The original next sigma and cached
+prediction at each chosen position remain in the ART coefficient and mask.
+Prompt groups, rewards, covariance, batches and optimizer updates per rollout
+remain unchanged. This is training replay selection, not shortened generation.
 
 | Model | Example |
 | --- | --- |
 | SD3 | [sd3_art_flash.yaml](../configs/examples/sd3_art_flash.yaml) |
 | FLUX | [flux_art_flash.yaml](../configs/examples/flux_art_flash.yaml) |
 | HunyuanVideo | [hunyuan_art_flash.yaml](../configs/examples/hunyuan_art_flash.yaml) |
-| Wan I2V | [wan_art_flash.yaml](../configs/examples/wan_art_flash.yaml) |
 | MiniMax-H3, 8 GPUs | [minimax_h3_art_flash_full_8gpu.yaml](../configs/examples/minimax_h3_art_flash_full_8gpu.yaml) |
 | MiniMax-H3, 32 GPUs | [minimax_h3_art_flash_full_32gpu.yaml](../configs/examples/minimax_h3_art_flash_full_32gpu.yaml) |
 
-Set the same model/data/asset environment bindings as each parent recipe, then
-use its normal launcher, e.g.:
+Set the model/data/asset environment bindings required by the parent recipe,
+then use its normal launcher:
 
 ```bash
 python -m visual_rl.train --config configs/examples/hunyuan_art_flash.yaml --validate
 python -m visual_rl.train --config configs/examples/hunyuan_art_flash.yaml --nproc-per-node 8
 ```
 
-These are inherited integration recipes. For a paper profile, inherit that
-profile and override only `training.timestep_selection`, name and output path.
-Keep its batch, group size, optimizer, rewards, schedules and update windows.
+These are inherited integration recipes. For an existing training profile,
+override only the selection, name and output path. Keep its batch sizes,
+optimizer, rewards and rollout schedule. The README plots show training VQ/MQ
+for HunyuanVideo; support in another runner is not a quality claim for that model.
 
-## Normalization and checkpoints
+## Loss averaging and compatibility
 
-Each update averages over its actual selected sample–timestep pairs. For
-uniform selection, the denominator is `window_trajectories * selected_positions`;
-distributed accumulation sums the participating ranks' denominators and corrects
-the gradient averaging. Masked items contribute zero loss but remain in the
-original denominator. Physical microbatch boundaries do not change this mean.
+Each update averages over the actual selected sample–timestep pairs. Two
+selected positions give a temporal denominator of **2**, regardless of the
+original pool size. Masked items remain in the denominator; microbatch and rank
+boundaries do not change the global mean. For a 128-trajectory window, the
+update processes 256 training pairs. Relative to 16 positions, selecting two
+uses eight times fewer pairs; relative to a recipe excluding the final position,
+it uses 7.5 times fewer. This reduction applies to update items, not generation.
 
-For the README comparison, each update contains 128 trajectories. Original ART
-trains 9 positions per trajectory (1,152 training items); Flash trains 1 (128
-items). Each rollout still generates 256 trajectories and makes 2 disjoint
-updates. The temporal averaging denominator becomes 1; there is no extra
-division by the original 9. This reduces backward work, not the number of
-generated trajectories or complete prompt groups used for guidance.
+`configured` remains the default and preserves the existing backend selection.
+The previous `first` mode remains available for compatibility. The native
+four-transition Wan recipe retains its [legacy Flash example](../configs/examples/wan_art_flash.yaml):
+it has only three eligible ART positions and rejects `high_noise` rather than
+changing its rollout or final-position policy. Other short schedules also fail
+validation if they do not contain four eligible positions.
 
 Default `configured` is omitted from serialized configs, preserving historical
-config/checkpoint hashes. `first` is recorded and changes the training signature;
-resuming between Original and Flash requires a new experiment rather than
-bypassing configuration checks.
-
-## README evidence
-
-The figure uses raw training VQ/MQ from these two seed 42, 32-GPU HunyuanVideo runs:
-
-- [Original, 9 positions per trajectory](https://wandb.ai/vanzl3386-chinese-university-of-hong-kong-shenzhen/flow-grpo-algo/runs/4dnkgeto).
-- [DiffusionART-Flash, initial position only](https://wandb.ai/vanzl3386-chinese-university-of-hong-kong-shenzhen/flow-grpo-algo/runs/gswb6l1m).
-
-Both use 16-step generation, P32/K8, VQ:MQ=1:1, the same model/reward revisions,
-mask settings, optimizer and physical microbatches. Execution commits and
-asset locations differ. The figure uses raw measurements without extrapolation,
-smoothing or invented error bars.
-
-One raw reward is logged twice per rollout, once per update. The plot retains
-the second record as the completed-rollout point. Final 10-rollout means are
-VQ/MQ 15.071/11.133 for Original and 14.645/11.154 for Flash; these are training
-scores from one seed, not held-out evaluation or multi-seed equivalence tests.
-The 9× figure describes fewer update items, not an asserted 9× wall-clock speedup.
-
-Frozen [tidy data](../assets/readme/art-flash/curves.csv) and
-[metadata](../assets/readme/art-flash/metadata.json) include exact keys, identities,
-cost scope and plotting choices. Regenerate the SVG, PDF and 600-DPI PNG with:
-
-```bash
-python scripts/plot_art_flash_readme.py
-```
+checkpoint identity. Nondefault selections are recorded in the training
+signature. Changing the selection requires a new experiment; do not bypass
+resume checks.

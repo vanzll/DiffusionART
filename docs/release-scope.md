@@ -32,13 +32,11 @@ coverage and release gates. Repository names and published URLs remain unchanged
 | I2V | Paper's distilled Wan-14B profile | DiffusionART, Fast-SDE, DanceGRPO, NFT EMA |
 | ReFL | T2V and I2V | Actual final-step differentiable reward training profiles |
 
-`reproduction-inventory.json` records candidate run identities and known runtime
-commits. It does not assert that all runs are publicly accessible or that the
-listed code has passed a new reproduction test.
-Motivation entries remain historical references, explicitly marked out of scope.
+Public configurations retain scientific parameters and immutable asset pins.
+They do not establish exact historical-runtime or result parity.
 
 The 2026-10-10 review used the released Arxiv manuscript, which includes
-four-reward joint optimization in its main experiments. The earlier inventory
+four-reward joint optimization in its main experiments. The recipe coverage table
 is not exhaustive. See [the release review](release-review.md) for verified
 coverage gaps and implementation differences. Figure numbering alone is not
 a stable experiment identity.

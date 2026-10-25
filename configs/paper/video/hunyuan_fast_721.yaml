@@ -4,12 +4,3 @@ reward:
   weights: {VQ: 0.2, MQ: 0.1, TA: 0.7}
 runtime:
   output_dir: ${PAPER_VIDEO_OUTPUT_ROOT}/hunyuan-fast-721
-provenance:
-  inventory_group: t2v-main-721
-  run_id: a419ds0n
-  runtime_sha: 64cadf0573b2172295973aedf838cc9d0df76575
-  runtime_sha_status: inspected_local_git_object
-  reference_sha: 64cadf0573b2172295973aedf838cc9d0df76575
-  reference_location: runners/t2v_formal_batch_v1/fastsde_main721.json
-  historical_evaluation: video18_shift7_sparse_steps_retained32
-  historical_observed_updates: 348

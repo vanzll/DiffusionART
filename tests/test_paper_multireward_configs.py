@@ -1,11 +1,7 @@
-"""Offline evidence and executed-branch checks, without scorer assets or GPUs."""
+"""Pinned science and executed-branch checks, without scorer assets or GPUs."""
 
-import hashlib
-import json
 import math
-import os
 import re
-import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -22,16 +18,190 @@ from visual_rl.training.grpo import prepare_grpo_update
 
 ROOT = Path(__file__).resolve().parents[1]
 PROFILES = ROOT / "configs/paper/image"
-EVIDENCE = ROOT / "docs/paper-multireward-evidence.json"
-RUNS = {
-    "art": "3t35bwps",
-    "grpo": "nv2hv2l1",
-    "dance": "gpxub5g5",
-    "fast": "ye14mp5t",
-    "nft_ema": "ujnglsgl",
-    "nft_onpolicy": "ldpbaea3",
-    "dppo": "dvmnd177",
-}
+METHODS = ('art', 'grpo', 'dance', 'fast', 'nft_ema', 'nft_onpolicy', 'dppo')
+# Independently pinned numerical expectations for optimizer, batch and loss contracts.
+SAMPLE_EXPECTATIONS = [{'num_steps': 10,
+  'num_image_per_prompt': 24,
+  'train_batch_size': 9,
+  'num_batches_per_epoch': 16,
+  'guidance_scale': 1,
+  'eval_num_steps': 40,
+  'noise_level': 0.8,
+  'sde_window_size': 0,
+  'sde_window_range': [0, 10],
+  'same_latent': False},
+ {'num_steps': 10,
+  'num_image_per_prompt': 24,
+  'train_batch_size': 9,
+  'num_batches_per_epoch': 16,
+  'guidance_scale': 1,
+  'eval_num_steps': 40,
+  'noise_level': 0.8,
+  'sde_window_size': 0,
+  'sde_window_range': [0, 10],
+  'same_latent': True},
+ {'num_steps': 10,
+  'num_image_per_prompt': 24,
+  'train_batch_size': 9,
+  'num_batches_per_epoch': 16,
+  'guidance_scale': 1,
+  'eval_num_steps': 40,
+  'noise_level': 0.8,
+  'sde_window_size': 3,
+  'sde_window_range': [0, 5],
+  'same_latent': False},
+ {'num_steps': 10,
+  'num_image_per_prompt': 24,
+  'train_batch_size': 9,
+  'num_batches_per_epoch': 16,
+  'guidance_scale': 1,
+  'eval_num_steps': 40,
+  'solver': 'dpm2',
+  'noise_level': 0.7,
+  'sde_window_size': 0,
+  'sde_window_range': [0, 10],
+  'same_latent': False}]
+TRAIN_EXPECTATIONS = [{'learning_rate': 0.0003,
+  'batch_size': 9,
+  'adam_weight_decay': 0.0001,
+  'adam_beta1': 0.9,
+  'adam_beta2': 0.999,
+  'adam_epsilon': 1e-08,
+  'max_grad_norm': 1,
+  'gradient_accumulation_steps': 8,
+  'timestep_fraction': 1,
+  'timestep_shift': 3,
+  'covariance_guidance_scale_mode': 'unit_normalized_covariance',
+  'covariance_guidance_gain': 1,
+  'covariance_guidance_loss_space': 'velocity_linear_sigma',
+  'x0_covariance_mask_space': 'velocity',
+  'x0_covariance_velocity_mask_metric': 'scheduler_reference_metric',
+  'x0_covariance_corrective_mask_enabled': True,
+  'x0_covariance_q2_reference_sde_noise_level': 0.8,
+  'x0_covariance_q2_reference_kl_threshold': 1e-05,
+  'adv_clip_max': 5,
+  'ema': False,
+  'clip_range': 1e-05},
+ {'learning_rate': 0.0003,
+  'batch_size': 9,
+  'adam_weight_decay': 0.0001,
+  'adam_beta1': 0.9,
+  'adam_beta2': 0.999,
+  'adam_epsilon': 1e-08,
+  'max_grad_norm': 1,
+  'gradient_accumulation_steps': 8,
+  'timestep_fraction': 0.99,
+  'timestep_shift': 3,
+  'adv_clip_max': 5,
+  'ema': True,
+  'clip_range': 1e-05},
+ {'learning_rate': 0.0003,
+  'batch_size': 9,
+  'adam_weight_decay': 0.0001,
+  'adam_beta1': 0.9,
+  'adam_beta2': 0.999,
+  'adam_epsilon': 1e-08,
+  'max_grad_norm': 1,
+  'gradient_accumulation_steps': 8,
+  'timestep_fraction': 1,
+  'timestep_shift': 3,
+  'adv_clip_max': 5,
+  'ema': True,
+  'clip_range': 1e-05},
+ {'learning_rate': 0.0003,
+  'batch_size': 9,
+  'adam_weight_decay': 0.0001,
+  'adam_beta1': 0.9,
+  'adam_beta2': 0.999,
+  'adam_epsilon': 1e-08,
+  'max_grad_norm': 1,
+  'gradient_accumulation_steps': 16,
+  'timestep_fraction': 0.99,
+  'timestep_shift': 3,
+  'adv_clip_max': 5,
+  'adv_mode': 'all',
+  'ema': True,
+  'clip_range': 1e-05},
+ {'learning_rate': 0.0003,
+  'batch_size': 9,
+  'adam_weight_decay': 0.0001,
+  'adam_beta1': 0.9,
+  'adam_beta2': 0.999,
+  'adam_epsilon': 1e-08,
+  'max_grad_norm': 1,
+  'gradient_accumulation_steps': 8,
+  'timestep_fraction': 0.99,
+  'timestep_shift': 3,
+  'adv_clip_max': 5,
+  'ema': True,
+  'flow_dppo_kl_threshold': 1e-05,
+  'clip_range': 1e-05}]
+SCIENCE_EXPECTATIONS = {'art': {'seed': 42,
+         'mixed_precision': 'fp16',
+         'allow_tf32': True,
+         'resolution': 512,
+         'reward_fn': {'hpsv2': 1, 'geneval': 1, 'clipscore': 1, 'pickscore': 1},
+         'activation_checkpointing': False,
+         'sample': 0,
+         'train': 0},
+ 'grpo': {'seed': 42,
+          'mixed_precision': 'fp16',
+          'allow_tf32': True,
+          'resolution': 512,
+          'reward_fn': {'hpsv2': 1, 'geneval': 1, 'clipscore': 1, 'pickscore': 1},
+          'activation_checkpointing': False,
+          'sample': 0,
+          'train': 1},
+ 'dance': {'seed': 42,
+           'mixed_precision': 'fp16',
+           'allow_tf32': True,
+           'resolution': 512,
+           'reward_fn': {'hpsv2': 1, 'geneval': 1, 'clipscore': 1, 'pickscore': 1},
+           'activation_checkpointing': False,
+           'sample': 1,
+           'train': 1},
+ 'fast': {'seed': 42,
+          'mixed_precision': 'fp16',
+          'allow_tf32': True,
+          'resolution': 512,
+          'reward_fn': {'hpsv2': 1, 'geneval': 1, 'clipscore': 1, 'pickscore': 1},
+          'activation_checkpointing': False,
+          'sample': 2,
+          'train': 2},
+ 'nft_ema': {'seed': 42,
+             'mixed_precision': 'fp16',
+             'allow_tf32': True,
+             'resolution': 512,
+             'reward_fn': {'hpsv2': 1, 'geneval': 1, 'clipscore': 1, 'pickscore': 1},
+             'beta': 1,
+             'decay_type': 1,
+             'activation_checkpointing': False,
+             'sample': 3,
+             'train': 3},
+ 'nft_onpolicy': {'seed': 42,
+                  'mixed_precision': 'fp16',
+                  'allow_tf32': True,
+                  'resolution': 512,
+                  'reward_fn': {'hpsv2': 1, 'geneval': 1, 'clipscore': 1, 'pickscore': 1},
+                  'beta': 1,
+                  'decay_type': 0,
+                  'activation_checkpointing': False,
+                  'sample': 3,
+                  'train': 3},
+ 'dppo': {'seed': 42,
+          'mixed_precision': 'fp16',
+          'allow_tf32': True,
+          'resolution': 512,
+          'reward_fn': {'hpsv2': 1, 'geneval': 1, 'clipscore': 1, 'pickscore': 1},
+          'activation_checkpointing': False,
+          'sample': 0,
+          'train': 4}}
+
+
+def scientific_expectation(name):
+    row = SCIENCE_EXPECTATIONS[name]
+    return {**row, "sample": SAMPLE_EXPECTATIONS[row["sample"]], "train": TRAIN_EXPECTATIONS[row["train"]]}
+
 DIVISORS = {"geneval": 1, "pickscore": 26, "clipscore": 30, "hpsv2": 1}
 JOINT = {"art", "grpo", "dance", "fast", "dppo"}
 
@@ -45,29 +215,23 @@ def asset_environment(monkeypatch):
                 monkeypatch.setenv(name, value)
 
 
-@pytest.fixture(scope="module")
-def evidence():
-    return json.loads(EVIDENCE.read_text())
 
 
 def profile(method):
     return load_config(PROFILES / f"sd3_multireward_{method}.yaml")
 
 
-def test_seven_candidate_coverage_and_fragment_is_not_a_profile(evidence):
-    expected = {f"sd3_multireward_{method}.yaml" for method in RUNS}
+def test_seven_candidate_coverage_and_fragment_is_not_a_profile():
+    expected = {f"sd3_multireward_{method}.yaml" for method in METHODS}
     assert {p.name for p in PROFILES.glob("sd3_multireward_*.yaml")} == (
         expected | {"sd3_multireward_rewards.yaml"}
     )
     fragment = yaml.safe_load((PROFILES / "sd3_multireward_rewards.yaml").read_text())
     assert set(fragment) == {"reward", "assets"}
-    assert set(evidence["runs"]) == set(RUNS.values())
-    assert set(evidence["coverage"]["emitted_methods"]) == set(RUNS)
-    assert evidence["coverage"]["certified_historical_baselines"] == []
 
 
-@pytest.mark.parametrize("method", RUNS)
-def test_backend_assets_full_data_and_no_inherited_art_options(method, evidence):
+@pytest.mark.parametrize("method", METHODS)
+def test_backend_assets_full_data_and_no_inherited_art_options(method):
     c = profile(method)
     assert get_backend(c).name == "sd3"
     assert c.runtime.distributed == "ddp" and c.runtime.log == "wandb"
@@ -92,15 +256,11 @@ def test_backend_assets_full_data_and_no_inherited_art_options(method, evidence)
     assert hps["options"]["checkpoint_sha256"] == (
         "c57a38fb4a2f7e7c15bf00da2ea377cdf165448b4dd1052a484c215a998c9837"
     )
-    assert c.provenance["source_run"] == RUNS[method]
-    assert c.provenance["runtime_commit"] == evidence["runs"][RUNS[method]]["runtime_commit"]
-    assert c.provenance["main_paper_plotted_steps"] == 500
     assert c.training.max_updates == 1000
     assert c.provenance["semantic_gaps"]
     if method != "art":
         assert "train_timesteps" not in c.sampling.options
         assert not {"covariance", "restore_zero_signal"} & set(c.algorithm.options)
-        assert c.provenance["runtime_source_status"] == "commit_recorded_source_unrecovered"
     if method in JOINT:
         joint = c.algorithm.options["multi_reward_advantage"]
         assert joint == {
@@ -115,10 +275,10 @@ def test_backend_assets_full_data_and_no_inherited_art_options(method, evidence)
         assert "deliberately omits" in " ".join(c.provenance["semantic_gaps"])
 
 
-@pytest.mark.parametrize("method", RUNS)
-def test_scientific_settings_against_separate_api_projection(method, evidence):
+@pytest.mark.parametrize("method", METHODS)
+def test_scientific_settings_against_independent_constants(method):
     c = profile(method)
-    source = evidence["runs"][RUNS[method]]["config"]
+    source = scientific_expectation(method)
     sample, train = source["sample"], source["train"]
     assert c.seed == source["seed"]
     assert c.training.precision == source["mixed_precision"]
@@ -141,16 +301,11 @@ def test_scientific_settings_against_separate_api_projection(method, evidence):
     assert c.sampling.options["shift"] == train["timestep_shift"]
     assert c.evaluation.sampling_steps == sample["eval_num_steps"]
     assert c.reward.weights == source["reward_fn"]
-    assert train["multi_reward_advantage"]["enabled"] is True
-    assert train["multi_reward_advantage"]["renormalize_combined"] is False
     updates = sample["num_batches_per_epoch"] // train["gradient_accumulation_steps"]
     assert c.algorithm.options["updates_per_rollout"] == updates
-    assert c.provenance["source_gradient_accumulation_steps"] == train["gradient_accumulation_steps"]
-    assert c.provenance["source_resume_global_step"] == source["resume_global_step"]
     if method == "art":
-        assert c.runtime.checkpoint_at_updates == tuple(source["paper_save_wandb_steps"])
+        assert c.runtime.checkpoint_at_updates == (1000,)
         assert c.sampling.options["train_timesteps"] == list(range(10))
-        assert train["covariance_guidance_reward_source"] == "combined_multi_reward_advantage"
     else:
         assert c.runtime.checkpoint_at_updates == tuple(range(100, 1001, 100))
         count = int(sample["num_steps"] * train["timestep_fraction"])
@@ -203,7 +358,7 @@ def group_oracle(values, prompts, *, global_std=False):
     return torch.tensor(result, dtype=torch.float64)
 
 
-@pytest.mark.parametrize("method", RUNS)
+@pytest.mark.parametrize("method", METHODS)
 def test_reporting_is_sum_not_quarter_mean(method):
     scores = score_fixture(profile(method))
     expected = sum(scores.raw[key] / divisor for key, divisor in DIVISORS.items())
@@ -269,7 +424,7 @@ def test_art_covariance_receives_joint_advantage_and_two_complete_disjoint_windo
     monkeypatch.setattr(sd3, "art_scalar_covariance", capture)
     groups = torch.tensor([0, 1] * 4)
     _, windows = sd3._art_update(
-        c, SimpleNamespace(endpoints=torch.arange(24.0).reshape(8, 3)), None,
+        c, SimpleNamespace(endpoints=torch.arange(24.0).reshape(8, 3), selected=tuple(range(10))), None,
         SimpleNamespace(scores=scores), groups, 2, 4, tuple(range(10)),
         torch.Generator().manual_seed(42), torch.device("cpu"), guidance_scores=guidance,
     )
@@ -280,7 +435,7 @@ def test_art_covariance_receives_joint_advantage_and_two_complete_disjoint_windo
     assert c.provenance["approved_public_scalar_semantics"]["denominator"] == "original_full_update_window"
 
 
-@pytest.mark.parametrize("method", sorted(set(RUNS) - {"art"}))
+@pytest.mark.parametrize("method", sorted(set(METHODS) - {"art"}))
 def test_baseline_clamp_is_after_advantage_construction(method):
     from visual_rl.algorithms import nft_loss
 
@@ -323,35 +478,3 @@ def test_full_prompt_metadata_required_without_truncation():
     validate_reward_prompts(c.reward, [prompt], metadata=[metadata])
     with pytest.raises(ValueError, match="GenEval"):
         validate_reward_prompts(c.reward, [prompt], metadata=[{**metadata, "prompt": prompt[:128]}])
-
-
-def test_public_evidence_distinguishes_read_source_from_runtime_certification(evidence):
-    assert not re.search(r"/m2v_|/Users/|WANDB_API_KEY|api_key|password", EVIDENCE.read_text())
-    nft_sources = [s for s in evidence["sources"] if s["path"] == "scripts/train_nft_sd3.py"]
-    assert len(nft_sources) == 2
-    assert all(s["multi_reward_advantage_symbol_occurrences"] == 0 for s in nft_sources)
-    assert all(re.fullmatch(r"[0-9a-f]{64}", s["sha256"]) for s in evidence["sources"])
-    for method, run in RUNS.items():
-        source = evidence["runs"][run]
-        assert source["config_status"] == "bounded_wandb_api_config_verified"
-        if method != "art":
-            assert source["archived_advantage_execution"] == "unknown_actual_runtime_source"
-            assert source["archived_multi_flag_is_execution_proof"] is False
-    assert evidence["runs"]["gpxub5g5"]["config"]["resume_global_step"] == 100
-    assert evidence["runs"]["dvmnd177"]["config"]["resume_global_step"] == 600
-
-
-def test_optional_reference_git_hashes_and_excerpts(evidence):
-    repository = os.environ.get("PAPER_MULTIREWARD_REFERENCE_REPO")
-    if not repository:
-        pytest.skip("Optional source-repository cross-check; bundled semantic checks always run")
-    for source in evidence["sources"]:
-        raw = subprocess.check_output(
-            ["git", "-C", repository, "show", f"{source['commit']}:{source['path']}"], timeout=10,
-        )
-        assert hashlib.sha256(raw).hexdigest() == source["sha256"]
-        lines = raw.decode().splitlines()
-        for excerpt in source["excerpts"]:
-            start = excerpt["start_line"] - 1
-            expected = excerpt["text"].splitlines()
-            assert lines[start:start + len(expected)] == expected

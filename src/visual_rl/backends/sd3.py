@@ -718,13 +718,14 @@ def run(c, *, resume=None, resume_rewind=False, evaluate_only=False):
         p, k = c.sampling.prompts_per_rollout, c.sampling.samples_per_prompt
         groups = torch.arange(p).repeat_interleave(k)
         sigmas = _schedule(c, c.sampling.steps)
-        selected = art_training_positions(c.training, c.sampling.options.get("train_timesteps", ()))
         empty_rollouts = 0
         no_signal = NoSignalGuard(c.runtime.max_consecutive_no_signal_rollouts)
         with open_metrics(c, root) as log:
             while progress.optimizer_steps < c.training.max_updates:
                 with clock.training_phase():
                     progress.attempts += 1
+                    selected = art_training_positions(c.training, c.sampling.options.get("train_timesteps", ()),
+                                                      seed=c.seed, attempt=progress.attempts)
                     rows = stream.take(p)
                     predict = _predict(c, parts, [row.text for row in rows], k)
                     noise_dtype = (
@@ -935,6 +936,6 @@ def _art_update(
     # The one-window setting is the explicit restoration ablation.
     order = torch.randperm(p * k, generator=generator, device=device).cpu().tolist()
     windows = prompt_disjoint_windows(
-        groups, len(selected), updates=c.algorithm.options.get("updates_per_rollout", 2), order=order
+        groups, len(cache.selected), updates=c.algorithm.options.get("updates_per_rollout", 2), order=order
     )
     return objective, windows

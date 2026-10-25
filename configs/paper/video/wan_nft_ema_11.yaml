@@ -14,7 +14,5 @@ runtime:
   output_dir: ${PAPER_VIDEO_OUTPUT_ROOT}/wan-nft-ema-11
   checkpoint_every: 100
 provenance:
-  run_id: a6ce1ae3fe255baf889d5c03
-  reference_location: runners/wan_i2v_distilled32_v1/nft-slowema-recovery-u400.json
   budget_basis: 400_global_optimizer_updates_400_rollouts
   artifact_policy: native_full_resume_checkpoint_every100_updates_all_scored_media

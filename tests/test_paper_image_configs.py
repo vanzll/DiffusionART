@@ -1,11 +1,6 @@
-"""Paper candidates: backend validation plus independent archived-config checks."""
+"""Paper candidates: backend validation plus independently pinned science checks."""
 
-import base64
-import hashlib
-import json
-import os
 import re
-import zlib
 from pathlib import Path
 
 import pytest
@@ -15,37 +10,596 @@ from visual_rl.registry import get_backend
 
 ROOT = Path(__file__).resolve().parents[1]
 PROFILES = ROOT / "configs/paper/image"
-EXPECTED_RUNS = {
-    "sd3_geneval_art.yaml": "11pq0iy3",
-    "sd3_geneval_grpo.yaml": "wxissl19",
-    "sd3_geneval_dance.yaml": "kj09p7ee",
-    "sd3_geneval_fast.yaml": "ienj38uu",
-    "sd3_geneval_nft_ema.yaml": "7zirilwj",
-    "sd3_geneval_nft_onpolicy.yaml": "u64dtm5f",
-    "sd3_geneval_dppo.yaml": "2fryhvvf",
-    "sd3_ocr_art.yaml": "9c0zrzlw",
-    "sd3_ocr_art_one_update.yaml": "v4nt8roi",
-    "sd3_ocr_grpo.yaml": "x4cywydr",
-    "sd3_ocr_dance.yaml": "g3949kwe",
-    "sd3_ocr_fast.yaml": "x76d50t3",
-    "sd3_ocr_nft_ema.yaml": "uxe86tf6",
-    "sd3_ocr_nft_onpolicy.yaml": "s408j3eh",
-    "sd3_ocr_dppo.yaml": "92ahoxm2",
-    "sd3_pickscore_art.yaml": "mofumvbw",
-    "sd3_pickscore_grpo.yaml": "dosfn01k",
-    "sd3_pickscore_dance.yaml": "bt84xzy0",
-    "sd3_pickscore_fast.yaml": "0qvzsp36",
-    "sd3_pickscore_nft_ema.yaml": "pm9ouohi",
-    "sd3_pickscore_nft_onpolicy.yaml": "6wvdti47",
-    "sd3_pickscore_dppo.yaml": "gzqhxeg0",
-    "flux_geneval_art.yaml": "z9gkdemj",
-    "flux_geneval_fast.yaml": "dmrybr9d",
-    "flux_geneval_dppo.yaml": "yghomcbn",
-    "flux_geneval_nft_ema.yaml": "asge8y6v",
-}
+PROFILES_EXPECTED = ('sd3_geneval_art.yaml',
+ 'sd3_geneval_grpo.yaml',
+ 'sd3_geneval_dance.yaml',
+ 'sd3_geneval_fast.yaml',
+ 'sd3_geneval_nft_ema.yaml',
+ 'sd3_geneval_nft_onpolicy.yaml',
+ 'sd3_geneval_dppo.yaml',
+ 'sd3_ocr_art.yaml',
+ 'sd3_ocr_art_one_update.yaml',
+ 'sd3_ocr_grpo.yaml',
+ 'sd3_ocr_dance.yaml',
+ 'sd3_ocr_fast.yaml',
+ 'sd3_ocr_nft_ema.yaml',
+ 'sd3_ocr_nft_onpolicy.yaml',
+ 'sd3_ocr_dppo.yaml',
+ 'sd3_pickscore_art.yaml',
+ 'sd3_pickscore_grpo.yaml',
+ 'sd3_pickscore_dance.yaml',
+ 'sd3_pickscore_fast.yaml',
+ 'sd3_pickscore_nft_ema.yaml',
+ 'sd3_pickscore_nft_onpolicy.yaml',
+ 'sd3_pickscore_dppo.yaml',
+ 'flux_geneval_art.yaml',
+ 'flux_geneval_fast.yaml',
+ 'flux_geneval_dppo.yaml',
+ 'flux_geneval_nft_ema.yaml')
+# Independently pinned numerical expectations for optimizer, batch and loss contracts.
+SAMPLE_EXPECTATIONS = [{'num_steps': 10,
+  'num_image_per_prompt': 24,
+  'train_batch_size': 9,
+  'num_batches_per_epoch': 16,
+  'guidance_scale': 1,
+  'eval_num_steps': 40,
+  'noise_level': 0.8,
+  'sde_window_size': 0,
+  'sde_window_range': [0, 10],
+  'same_latent': False},
+ {'num_steps': 10,
+  'num_image_per_prompt': 24,
+  'train_batch_size': 9,
+  'num_batches_per_epoch': 16,
+  'guidance_scale': 1,
+  'eval_num_steps': 40,
+  'noise_level': 0.8,
+  'sde_window_size': 0,
+  'sde_window_range': [0, 10],
+  'same_latent': True},
+ {'num_steps': 10,
+  'num_image_per_prompt': 24,
+  'train_batch_size': 9,
+  'num_batches_per_epoch': 16,
+  'guidance_scale': 1,
+  'eval_num_steps': 40,
+  'noise_level': 0.8,
+  'sde_window_size': 3,
+  'sde_window_range': [0, 5],
+  'same_latent': False},
+ {'num_steps': 10,
+  'num_image_per_prompt': 24,
+  'train_batch_size': 9,
+  'num_batches_per_epoch': 16,
+  'guidance_scale': 1,
+  'eval_num_steps': 40,
+  'solver': 'dpm2',
+  'noise_level': 0.7,
+  'sde_window_size': 0,
+  'sde_window_range': [0, 10],
+  'same_latent': False},
+ {'num_steps': 10,
+  'num_image_per_prompt': 16,
+  'train_batch_size': 8,
+  'num_batches_per_epoch': 16,
+  'guidance_scale': 1,
+  'eval_num_steps': 40,
+  'noise_level': 0.8,
+  'sde_window_size': 0,
+  'sde_window_range': [0, 10],
+  'same_latent': False},
+ {'num_steps': 10,
+  'num_image_per_prompt': 16,
+  'train_batch_size': 8,
+  'num_batches_per_epoch': 16,
+  'guidance_scale': 1,
+  'eval_num_steps': 40,
+  'noise_level': 0.8,
+  'sde_window_size': 3,
+  'sde_window_range': [0, 5],
+  'same_latent': False},
+ {'num_steps': 10,
+  'num_image_per_prompt': 16,
+  'train_batch_size': 8,
+  'num_batches_per_epoch': 16,
+  'guidance_scale': 1,
+  'eval_num_steps': 40,
+  'solver': 'dpm2',
+  'noise_level': 0.7,
+  'sde_window_size': 0,
+  'sde_window_range': [0, 5],
+  'same_latent': False},
+ {'num_steps': 10,
+  'num_image_per_prompt': 18,
+  'train_batch_size': 9,
+  'num_batches_per_epoch': 16,
+  'guidance_scale': 1,
+  'eval_num_steps': 40,
+  'noise_level': 0.8,
+  'sde_window_size': 0,
+  'sde_window_range': [0, 10],
+  'same_latent': False},
+ {'num_steps': 10,
+  'num_image_per_prompt': 18,
+  'train_batch_size': 9,
+  'num_batches_per_epoch': 16,
+  'guidance_scale': 1,
+  'eval_num_steps': 40,
+  'noise_level': 0.8,
+  'sde_window_size': 3,
+  'sde_window_range': [0, 5],
+  'same_latent': False},
+ {'num_steps': 10,
+  'num_image_per_prompt': 18,
+  'train_batch_size': 9,
+  'num_batches_per_epoch': 16,
+  'guidance_scale': 1,
+  'eval_num_steps': 40,
+  'solver': 'dpm2',
+  'noise_level': 0.7,
+  'sde_window_size': 0,
+  'sde_window_range': [0, 5],
+  'same_latent': False},
+ {'num_steps': 6,
+  'num_image_per_prompt': 24,
+  'train_batch_size': 3,
+  'num_batches_per_epoch': 48,
+  'guidance_scale': 3.5,
+  'eval_num_steps': 28,
+  'noise_level': 0.8,
+  'sde_window_size': 3,
+  'sde_window_range': [0, 3],
+  'same_latent': False},
+ {'num_steps': 6,
+  'num_image_per_prompt': 24,
+  'train_batch_size': 3,
+  'num_batches_per_epoch': 48,
+  'guidance_scale': 3.5,
+  'eval_num_steps': 28,
+  'noise_level': 0.7,
+  'sde_window_size': 3,
+  'sde_window_range': [0, 3],
+  'same_latent': False}]
+TRAIN_EXPECTATIONS = [{'learning_rate': 0.0003,
+  'batch_size': 9,
+  'adam_weight_decay': 0.0001,
+  'adam_beta1': 0.9,
+  'adam_beta2': 0.999,
+  'adam_epsilon': 1e-08,
+  'max_grad_norm': 1,
+  'gradient_accumulation_steps': 8,
+  'timestep_fraction': 1,
+  'timestep_shift': 3,
+  'covariance_guidance_scale_mode': 'unit_normalized_covariance',
+  'covariance_guidance_gain': 1,
+  'covariance_guidance_loss_space': 'velocity_linear_sigma',
+  'x0_covariance_mask_space': 'velocity',
+  'x0_covariance_velocity_mask_metric': 'scheduler_reference_metric',
+  'x0_covariance_corrective_mask_enabled': True,
+  'x0_covariance_q2_reference_sde_noise_level': 0.8,
+  'x0_covariance_q2_reference_kl_threshold': 1e-05,
+  'adv_clip_max': 5,
+  'ema': False,
+  'clip_range': 1e-05},
+ {'learning_rate': 0.0003,
+  'batch_size': 9,
+  'adam_weight_decay': 0.0001,
+  'adam_beta1': 0.9,
+  'adam_beta2': 0.999,
+  'adam_epsilon': 1e-08,
+  'max_grad_norm': 1,
+  'gradient_accumulation_steps': 8,
+  'timestep_fraction': 0.99,
+  'timestep_shift': 3,
+  'adv_clip_max': 5,
+  'ema': True,
+  'clip_range': 1e-05},
+ {'learning_rate': 0.0003,
+  'batch_size': 9,
+  'adam_weight_decay': 0.0001,
+  'adam_beta1': 0.9,
+  'adam_beta2': 0.999,
+  'adam_epsilon': 1e-08,
+  'max_grad_norm': 1,
+  'gradient_accumulation_steps': 8,
+  'timestep_fraction': 1,
+  'timestep_shift': 3,
+  'adv_clip_max': 5,
+  'ema': True,
+  'clip_range': 1e-05},
+ {'learning_rate': 0.0003,
+  'batch_size': 9,
+  'adam_weight_decay': 0.0001,
+  'adam_beta1': 0.9,
+  'adam_beta2': 0.999,
+  'adam_epsilon': 1e-08,
+  'max_grad_norm': 1,
+  'gradient_accumulation_steps': 16,
+  'timestep_fraction': 0.99,
+  'timestep_shift': 3,
+  'adv_clip_max': 5,
+  'adv_mode': 'all',
+  'ema': True,
+  'clip_range': 1e-05},
+ {'learning_rate': 0.0003,
+  'batch_size': 9,
+  'adam_weight_decay': 0.0001,
+  'adam_beta1': 0.9,
+  'adam_beta2': 0.999,
+  'adam_epsilon': 1e-08,
+  'max_grad_norm': 1,
+  'gradient_accumulation_steps': 8,
+  'timestep_fraction': 0.99,
+  'timestep_shift': 3,
+  'adv_clip_max': 5,
+  'ema': True,
+  'flow_dppo_kl_threshold': 1e-05,
+  'clip_range': 1e-05},
+ {'learning_rate': 0.0003,
+  'batch_size': 8,
+  'adam_weight_decay': 0.0001,
+  'adam_beta1': 0.9,
+  'adam_beta2': 0.999,
+  'adam_epsilon': 1e-08,
+  'max_grad_norm': 1,
+  'gradient_accumulation_steps': 8,
+  'timestep_fraction': 1,
+  'timestep_shift': 3,
+  'covariance_guidance_scale_mode': 'unit_normalized_covariance',
+  'covariance_guidance_gain': 1,
+  'covariance_guidance_loss_space': 'velocity_linear_sigma',
+  'x0_covariance_mask_space': 'velocity',
+  'x0_covariance_velocity_mask_metric': 'scheduler_reference_metric',
+  'x0_covariance_corrective_mask_enabled': True,
+  'x0_covariance_q2_reference_sde_noise_level': 0.8,
+  'x0_covariance_q2_reference_kl_threshold': 1e-05,
+  'adv_clip_max': 5,
+  'ema': False,
+  'clip_range': 1e-05},
+ {'learning_rate': 0.0003,
+  'batch_size': 8,
+  'adam_weight_decay': 0.0001,
+  'adam_beta1': 0.9,
+  'adam_beta2': 0.999,
+  'adam_epsilon': 1e-08,
+  'max_grad_norm': 1,
+  'gradient_accumulation_steps': 16,
+  'timestep_fraction': 1,
+  'timestep_shift': 3,
+  'covariance_guidance_scale_mode': 'unit_normalized_covariance',
+  'covariance_guidance_gain': 1,
+  'covariance_guidance_loss_space': 'velocity_linear_sigma',
+  'x0_covariance_mask_space': 'velocity',
+  'x0_covariance_velocity_mask_metric': 'scheduler_reference_metric',
+  'x0_covariance_corrective_mask_enabled': True,
+  'x0_covariance_q2_reference_sde_noise_level': 0.8,
+  'x0_covariance_q2_reference_kl_threshold': 1e-05,
+  'adv_clip_max': 5,
+  'ema': False,
+  'clip_range': 1e-05},
+ {'learning_rate': 0.0003,
+  'batch_size': 8,
+  'adam_weight_decay': 0.0001,
+  'adam_beta1': 0.9,
+  'adam_beta2': 0.999,
+  'adam_epsilon': 1e-08,
+  'max_grad_norm': 1,
+  'gradient_accumulation_steps': 8,
+  'timestep_fraction': 1,
+  'timestep_shift': 3,
+  'adv_clip_max': 5,
+  'ema': True,
+  'clip_range': 1e-05},
+ {'learning_rate': 0.0003,
+  'batch_size': 8,
+  'adam_weight_decay': 0.0001,
+  'adam_beta1': 0.9,
+  'adam_beta2': 0.999,
+  'adam_epsilon': 1e-08,
+  'max_grad_norm': 1,
+  'gradient_accumulation_steps': 8,
+  'timestep_fraction': 1,
+  'timestep_shift': 3,
+  'adv_clip_max': 5,
+  'adv_mode': 'all',
+  'ema': True,
+  'clip_range': 1e-05},
+ {'learning_rate': 0.0003,
+  'batch_size': 8,
+  'adam_weight_decay': 0.0001,
+  'adam_beta1': 0.9,
+  'adam_beta2': 0.999,
+  'adam_epsilon': 1e-08,
+  'max_grad_norm': 1,
+  'gradient_accumulation_steps': 16,
+  'timestep_fraction': 1,
+  'timestep_shift': 3,
+  'adv_clip_max': 5,
+  'adv_mode': 'all',
+  'ema': True,
+  'clip_range': 1e-05},
+ {'learning_rate': 0.0003,
+  'batch_size': 9,
+  'adam_weight_decay': 0.0001,
+  'adam_beta1': 0.9,
+  'adam_beta2': 0.999,
+  'adam_epsilon': 1e-08,
+  'max_grad_norm': 1,
+  'gradient_accumulation_steps': 16,
+  'timestep_fraction': 1,
+  'timestep_shift': 3,
+  'adv_clip_max': 5,
+  'adv_mode': 'all',
+  'ema': True,
+  'clip_range': 1e-05},
+ {'learning_rate': 0.0003,
+  'batch_size': 3,
+  'adam_weight_decay': 0.0001,
+  'adam_beta1': 0.9,
+  'adam_beta2': 0.999,
+  'adam_epsilon': 1e-08,
+  'max_grad_norm': 1,
+  'gradient_accumulation_steps': 24,
+  'timestep_fraction': 1,
+  'timestep_shift': 3,
+  'covariance_guidance_scale_mode': 'unit_normalized_covariance',
+  'covariance_guidance_gain': 1,
+  'covariance_guidance_loss_space': 'velocity_linear_sigma',
+  'x0_covariance_mask_space': 'velocity',
+  'x0_covariance_velocity_mask_metric': 'scheduler_reference_metric',
+  'x0_covariance_corrective_mask_enabled': True,
+  'x0_covariance_q2_reference_sde_noise_level': 0.8,
+  'x0_covariance_q2_reference_kl_threshold': 1e-05,
+  'adv_clip_max': 5,
+  'ema': False,
+  'clip_range': 1e-05},
+ {'learning_rate': 0.0003,
+  'batch_size': 3,
+  'adam_weight_decay': 0.0001,
+  'adam_beta1': 0.9,
+  'adam_beta2': 0.999,
+  'adam_epsilon': 1e-08,
+  'max_grad_norm': 1,
+  'gradient_accumulation_steps': 24,
+  'timestep_fraction': 1,
+  'timestep_shift': 3,
+  'adv_clip_max': 5,
+  'ema': True,
+  'clip_range': 1e-05},
+ {'learning_rate': 0.0003,
+  'batch_size': 3,
+  'adam_weight_decay': 0.0001,
+  'adam_beta1': 0.9,
+  'adam_beta2': 0.999,
+  'adam_epsilon': 1e-08,
+  'max_grad_norm': 1,
+  'gradient_accumulation_steps': 24,
+  'timestep_fraction': 0.5,
+  'timestep_shift': 3,
+  'adv_clip_max': 5,
+  'ema': False,
+  'flow_dppo_kl_threshold': 1e-05,
+  'clip_range': 1e-05}]
+SCIENCE_EXPECTATIONS = {'sd3_geneval_art.yaml': {'seed': 42,
+                          'mixed_precision': 'fp16',
+                          'allow_tf32': True,
+                          'resolution': 512,
+                          'reward_fn': {'geneval': 1},
+                          'activation_checkpointing': False,
+                          'sample': 0,
+                          'train': 0},
+ 'sd3_geneval_grpo.yaml': {'seed': 42,
+                           'mixed_precision': 'fp16',
+                           'allow_tf32': True,
+                           'resolution': 512,
+                           'reward_fn': {'geneval': 1},
+                           'activation_checkpointing': False,
+                           'sample': 0,
+                           'train': 1},
+ 'sd3_geneval_dance.yaml': {'seed': 42,
+                            'mixed_precision': 'fp16',
+                            'allow_tf32': True,
+                            'resolution': 512,
+                            'reward_fn': {'geneval': 1},
+                            'activation_checkpointing': False,
+                            'sample': 1,
+                            'train': 1},
+ 'sd3_geneval_fast.yaml': {'seed': 42,
+                           'mixed_precision': 'fp16',
+                           'allow_tf32': True,
+                           'resolution': 512,
+                           'reward_fn': {'geneval': 1},
+                           'activation_checkpointing': False,
+                           'sample': 2,
+                           'train': 2},
+ 'sd3_geneval_nft_ema.yaml': {'seed': 42,
+                              'mixed_precision': 'fp16',
+                              'allow_tf32': True,
+                              'resolution': 512,
+                              'reward_fn': {'geneval': 1},
+                              'beta': 1,
+                              'decay_type': 1,
+                              'activation_checkpointing': False,
+                              'sample': 3,
+                              'train': 3},
+ 'sd3_geneval_nft_onpolicy.yaml': {'seed': 42,
+                                   'mixed_precision': 'fp16',
+                                   'allow_tf32': True,
+                                   'resolution': 512,
+                                   'reward_fn': {'geneval': 1},
+                                   'beta': 1,
+                                   'decay_type': 0,
+                                   'activation_checkpointing': False,
+                                   'sample': 3,
+                                   'train': 3},
+ 'sd3_geneval_dppo.yaml': {'seed': 42,
+                           'mixed_precision': 'fp16',
+                           'allow_tf32': True,
+                           'resolution': 512,
+                           'reward_fn': {'geneval': 1},
+                           'activation_checkpointing': False,
+                           'sample': 0,
+                           'train': 4},
+ 'sd3_ocr_art.yaml': {'seed': 42,
+                      'mixed_precision': 'fp16',
+                      'allow_tf32': True,
+                      'resolution': 512,
+                      'reward_fn': {'ocr': 1},
+                      'activation_checkpointing': False,
+                      'sample': 4,
+                      'train': 5},
+ 'sd3_ocr_art_one_update.yaml': {'seed': 42,
+                                 'mixed_precision': 'fp16',
+                                 'allow_tf32': True,
+                                 'resolution': 512,
+                                 'reward_fn': {'ocr': 1},
+                                 'activation_checkpointing': False,
+                                 'sample': 4,
+                                 'train': 6},
+ 'sd3_ocr_grpo.yaml': {'seed': 42,
+                       'mixed_precision': 'fp16',
+                       'allow_tf32': True,
+                       'resolution': 512,
+                       'reward_fn': {'ocr': 1},
+                       'activation_checkpointing': False,
+                       'sample': 0,
+                       'train': 1},
+ 'sd3_ocr_dance.yaml': {'seed': 42,
+                        'mixed_precision': 'fp16',
+                        'allow_tf32': True,
+                        'resolution': 512,
+                        'reward_fn': {'ocr': 1},
+                        'activation_checkpointing': False,
+                        'sample': 1,
+                        'train': 1},
+ 'sd3_ocr_fast.yaml': {'seed': 42,
+                       'mixed_precision': 'fp16',
+                       'allow_tf32': True,
+                       'resolution': 512,
+                       'reward_fn': {'ocr': 1},
+                       'activation_checkpointing': False,
+                       'sample': 5,
+                       'train': 7},
+ 'sd3_ocr_nft_ema.yaml': {'seed': 42,
+                          'mixed_precision': 'fp16',
+                          'allow_tf32': True,
+                          'resolution': 512,
+                          'reward_fn': {'ocr': 1},
+                          'beta': 0.1,
+                          'decay_type': 2,
+                          'activation_checkpointing': False,
+                          'sample': 6,
+                          'train': 8},
+ 'sd3_ocr_nft_onpolicy.yaml': {'seed': 42,
+                               'mixed_precision': 'fp16',
+                               'allow_tf32': True,
+                               'resolution': 512,
+                               'reward_fn': {'ocr': 1},
+                               'beta': 1,
+                               'decay_type': 0,
+                               'activation_checkpointing': False,
+                               'sample': 6,
+                               'train': 9},
+ 'sd3_ocr_dppo.yaml': {'seed': 42,
+                       'mixed_precision': 'fp16',
+                       'allow_tf32': True,
+                       'resolution': 512,
+                       'reward_fn': {'ocr': 1},
+                       'activation_checkpointing': False,
+                       'sample': 0,
+                       'train': 4},
+ 'sd3_pickscore_art.yaml': {'seed': 42,
+                            'mixed_precision': 'fp16',
+                            'allow_tf32': True,
+                            'resolution': 512,
+                            'reward_fn': {'pickscore': 1},
+                            'activation_checkpointing': False,
+                            'sample': 7,
+                            'train': 0},
+ 'sd3_pickscore_grpo.yaml': {'seed': 42,
+                             'mixed_precision': 'fp16',
+                             'allow_tf32': True,
+                             'resolution': 512,
+                             'reward_fn': {'pickscore': 1},
+                             'activation_checkpointing': False,
+                             'sample': 0,
+                             'train': 1},
+ 'sd3_pickscore_dance.yaml': {'seed': 42,
+                              'mixed_precision': 'fp16',
+                              'allow_tf32': True,
+                              'resolution': 512,
+                              'reward_fn': {'pickscore': 1},
+                              'activation_checkpointing': False,
+                              'sample': 1,
+                              'train': 1},
+ 'sd3_pickscore_fast.yaml': {'seed': 42,
+                             'mixed_precision': 'fp16',
+                             'allow_tf32': True,
+                             'resolution': 512,
+                             'reward_fn': {'pickscore': 1},
+                             'activation_checkpointing': False,
+                             'sample': 8,
+                             'train': 2},
+ 'sd3_pickscore_nft_ema.yaml': {'seed': 42,
+                                'mixed_precision': 'fp16',
+                                'allow_tf32': True,
+                                'resolution': 512,
+                                'reward_fn': {'pickscore': 1},
+                                'beta': 1,
+                                'decay_type': 1,
+                                'activation_checkpointing': False,
+                                'sample': 9,
+                                'train': 10},
+ 'sd3_pickscore_nft_onpolicy.yaml': {'seed': 42,
+                                     'mixed_precision': 'fp16',
+                                     'allow_tf32': True,
+                                     'resolution': 512,
+                                     'reward_fn': {'pickscore': 1},
+                                     'beta': 1,
+                                     'decay_type': 0,
+                                     'activation_checkpointing': False,
+                                     'sample': 9,
+                                     'train': 10},
+ 'sd3_pickscore_dppo.yaml': {'seed': 42,
+                             'mixed_precision': 'fp16',
+                             'allow_tf32': True,
+                             'resolution': 512,
+                             'reward_fn': {'pickscore': 1},
+                             'activation_checkpointing': False,
+                             'sample': 0,
+                             'train': 4},
+ 'flux_geneval_art.yaml': {'seed': 42,
+                           'mixed_precision': 'bf16',
+                           'allow_tf32': True,
+                           'resolution': 512,
+                           'reward_fn': {'geneval': 1},
+                           'activation_checkpointing': False,
+                           'sample': 10,
+                           'train': 11},
+ 'flux_geneval_fast.yaml': {'seed': 42,
+                            'mixed_precision': 'bf16',
+                            'allow_tf32': True,
+                            'resolution': 512,
+                            'reward_fn': {'geneval': 1},
+                            'activation_checkpointing': False,
+                            'sample': 10,
+                            'train': 12},
+ 'flux_geneval_dppo.yaml': {'seed': 42,
+                            'mixed_precision': 'bf16',
+                            'allow_tf32': True,
+                            'resolution': 512,
+                            'reward_fn': {'geneval': 1},
+                            'activation_checkpointing': False,
+                            'sample': 11,
+                            'train': 13}}
+
+
+def scientific_expectation(name):
+    row = SCIENCE_EXPECTATIONS[name]
+    return {**row, "sample": SAMPLE_EXPECTATIONS[row["sample"]], "train": TRAIN_EXPECTATIONS[row["train"]]}
+
 METHODS = ("art", "grpo", "fast", "dppo", "nft_ema", "nft_onpolicy", "dance")
 FLUX_METHODS = ("art", "fast", "dppo", "nft_ema")
-# Runtime sources: train_flux.py at b52a36d / 7325877 and train_nft_flux.py at 98d7625.
 FLUX_LORA_TARGETS = (
     "attn.to_k", "attn.to_q", "attn.to_v", "attn.to_out.0",
     "attn.add_k_proj", "attn.add_q_proj", "attn.add_v_proj", "attn.to_add_out",
@@ -64,16 +618,10 @@ def asset_environment(monkeypatch):
         monkeypatch.setenv(name, value)
 
 
-@pytest.fixture(scope="module")
-def archive():
-    override = os.environ.get("PAPER_IMAGE_ARCHIVE")
-    if override:
-        return json.loads(zlib.decompress(base64.b64decode(Path(override).read_bytes())))
-    return json.loads((ROOT / "docs/paper-image-evidence.json").read_text())["runs"]
 
 
 def test_candidate_coverage():
-    assert set(EXPECTED_RUNS) <= {p.name for p in PROFILES.glob("*.yaml")}
+    assert set(PROFILES_EXPECTED) <= {p.name for p in PROFILES.glob("*.yaml")}
     for benchmark in ("geneval", "ocr", "pickscore"):
         for method in METHODS:
             assert (PROFILES / f"sd3_{benchmark}_{method}.yaml").is_file()
@@ -81,7 +629,7 @@ def test_candidate_coverage():
 
 
 @pytest.mark.parametrize("method", FLUX_METHODS)
-def test_flux_lora_matches_historical_comparison(method):
+def test_flux_lora_matches_pinned_comparison(method):
     c = load_config(PROFILES / f"flux_geneval_{method}.yaml")
     finetune = c.model.options["finetune"]
     assert finetune["mode"] == "lora"
@@ -116,14 +664,13 @@ def test_flux_comparison_has_identical_trainable_parameter_inventory():
     assert all(inventory == inventories[0] for inventory in inventories[1:])
 
 
-@pytest.mark.parametrize("filename", sorted(EXPECTED_RUNS))
+@pytest.mark.parametrize("filename", sorted(PROFILES_EXPECTED))
 def test_backend_and_public_candidate_contract(filename):
     c = load_config(PROFILES / filename)
     assert get_backend(c).name == c.model.name
     assert c.runtime.distributed == "ddp"
     assert c.runtime.log == "wandb"
     assert c.training.max_updates == 1000
-    assert c.provenance["source_run"] == EXPECTED_RUNS[filename]
     assert c.provenance["kind"] == "training_candidate_not_fullhistorical_reproduction"
     assert c.provenance["semantic_gaps"]
     assert c.training.allow_tf32 is True
@@ -141,15 +688,13 @@ def test_backend_and_public_candidate_contract(filename):
     if c.algorithm.name == "dancegrpo":
         assert c.algorithm.options["advantage_mode"] == "prompt_global_std"
         assert c.sampling.options["endpoint_kind"] == "last_x0"
-        assert c.provenance["runtime_commit"]
         assert "source unavailable" in " ".join(c.provenance["semantic_gaps"])
 
 
-@pytest.mark.parametrize("filename", sorted(set(EXPECTED_RUNS) - {"flux_geneval_nft_ema.yaml"}))
-def test_scientific_parameters_against_independent_archive(filename, archive):
+@pytest.mark.parametrize("filename", sorted(set(PROFILES_EXPECTED) - {"flux_geneval_nft_ema.yaml"}))
+def test_scientific_parameters_against_independent_constants(filename):
     c = load_config(PROFILES / filename)
-    raw = archive[EXPECTED_RUNS[filename]]["config"]
-    source = {key: item["value"] for key, item in raw.items()}
+    source = scientific_expectation(filename)
     sample, train = source["sample"], source["train"]
     assert c.seed == source["seed"]
     assert c.training.precision == source["mixed_precision"]
@@ -170,10 +715,6 @@ def test_scientific_parameters_against_independent_archive(filename, archive):
     assert c.sampling.height == c.sampling.width == source["resolution"]
     assert c.evaluation.sampling_steps == sample["eval_num_steps"]
     assert c.reward.weights == source["reward_fn"]
-    assert c.provenance["source_gradient_accumulation_steps"] == train["gradient_accumulation_steps"]
-    assert c.provenance["source_resume_global_step"] == source.get("resume_global_step", 0)
-    if source.get("paper_eval_wandb_steps"):
-        assert c.runtime.checkpoint_at_updates == tuple(source["paper_save_wandb_steps"])
     assert c.evaluation.every_updates == 50 and c.evaluation.at_updates == ()
     a, s = c.algorithm.options, c.sampling.options
     count = int(sample["num_steps"] * train["timestep_fraction"])
@@ -226,7 +767,6 @@ def test_scientific_parameters_against_independent_archive(filename, archive):
             assert s["count"] == count
         if c.algorithm.name == "dancegrpo":
             assert s["same_latent"] == sample["same_latent"]
-            assert c.provenance["source_global_std"] == sample["global_std"]
 
 
 def test_ocr_art_one_update_preserves_restoration_and_full_window():
@@ -241,7 +781,6 @@ def test_ocr_art_one_update_preserves_restoration_and_full_window():
     for field in ("model", "reward", "data", "sampling", "training", "evaluation"):
         assert getattr(one, field) == getattr(two, field)
     assert one.runtime.output_dir != two.runtime.output_dir
-    assert one.provenance["source_gradient_accumulation_steps"] == 16
     assert one.provenance["candidate_updates_per_rollout"] == 1
     assert one.provenance["semantic_gaps"] == two.provenance["semantic_gaps"]
     rows = one.sampling.prompts_per_rollout * one.sampling.samples_per_prompt
@@ -254,69 +793,31 @@ def test_ocr_art_one_update_preserves_restoration_and_full_window():
 
 def test_known_unresolved_semantics_remain_declared():
     c = load_config(PROFILES / "sd3_ocr_nft_ema.yaml")
-    assert c.provenance["source_gradient_accumulation_steps"] == 8
-    assert c.provenance["source_updates_per_rollout"] == 2
     assert c.provenance["candidate_updates_per_rollout"] == 2
     assert c.algorithm.options["updates_per_rollout"] == 2
     for filename in ("sd3_geneval_dppo.yaml", "sd3_ocr_dppo.yaml", "sd3_pickscore_dppo.yaml"):
         c = load_config(PROFILES / filename)
-        assert c.provenance["source_resume_global_step"] > 0
         assert "checkpoint unavailable" in " ".join(c.provenance["semantic_gaps"])
 
 
-def test_flux_nft_against_separately_archived_runtime():
-    override = os.environ.get("PAPER_FLUX_NFT_ARCHIVE")
-    if override:
-        document = json.loads(Path(override).read_text())
-        run = next(row for row in document["records"] if row["id"] == "asge8y6v")["data"]["project"]["run"]
-        raw = json.loads(run["config"])
-    else:
-        raw = json.loads((ROOT / "docs/paper-image-evidence.json").read_text())["runs"]["asge8y6v"]["config"]
-    archived = {k: v["value"] for k, v in raw.items()}
+
+
+
+
+
+
+def test_flux_nft_pinned_scientific_contract():
     c = load_config(PROFILES / "flux_geneval_nft_ema.yaml")
-    native = archived["nft_flux"]
-    assert c.provenance["runtime_commit"] == native["runtime_commit"]
-    assert c.sampling.prompts_per_rollout == native["prompts_per_rollout"] == 48
-    assert c.sampling.samples_per_prompt == archived["sample"]["num_image_per_prompt"] == 24
-    assert c.sampling.microbatch == native["rollout_microbatch"]
-    assert c.training.microbatch == native["update_microbatch"]
-    assert c.training.max_updates == native["max_successful_updates"]
+    assert c.sampling.prompts_per_rollout == 48
+    assert c.sampling.samples_per_prompt == 24
+    assert c.sampling.microbatch == c.training.microbatch == 6
+    assert c.training.max_updates == 1000
     assert c.evaluation.every_updates == 50 and c.evaluation.at_updates == ()
-    assert c.runtime.checkpoint_at_updates == tuple(native["save_updates"])
-    assert c.sampling.steps == archived["sample"]["num_steps"] == 6
-    assert c.sampling.options["train_timestep_count"] == int(6 * archived["train"]["timestep_fraction"])
-    assert c.training.precision == archived["mixed_precision"] == "bf16"
-    assert c.training.learning_rate == archived["train"]["learning_rate"]
-    assert c.algorithm.options["loss"]["nft_beta"] == archived["beta"]
+    assert c.runtime.checkpoint_at_updates == (100, 250, 500, 800, 1000)
+    assert c.sampling.steps == 6
+    assert c.sampling.options["train_timestep_count"] == 5
+    assert c.training.precision == "bf16"
+    assert c.training.learning_rate == 0.0003
+    assert c.algorithm.options["loss"]["nft_beta"] == 1
     assert c.algorithm.options["updates_per_rollout"] == 1
-    assert c.model.options["gradient_checkpointing"] == archived["activation_checkpointing"]
-
-
-def test_public_scientific_evidence_has_no_private_fields():
-    text = (ROOT / "docs/paper-image-evidence.json").read_text()
-    evidence = json.loads(text)
-    assert len(evidence["runs"]) == 26
-    assert not re.search(r"/m2v_|/Users/|WANDB_API_KEY|10\.83\.", text)
-    assert {load_config(PROFILES / name).provenance["source_run"]
-            for name in EXPECTED_RUNS} == set(evidence["runs"])
-    assert all(re.fullmatch(r"[0-9a-f]{64}", source["sha256"]) for source in evidence["sources"])
-
-
-def test_public_evidence_matches_original_snapshot_when_available():
-    default = ROOT.parent / "paper_data/t2i-draft-20260910/t2i_draft_metadata_compact.b64"
-    path = Path(os.environ.get("PAPER_IMAGE_ARCHIVE", default))
-    if not path.is_file():
-        pytest.skip("Original private archive is optional; bundled scientific checks still run")
-    evidence = json.loads((ROOT / "docs/paper-image-evidence.json").read_text())
-    assert hashlib.sha256(path.read_bytes()).hexdigest() == evidence["sources"][0]["sha256"]
-    original = json.loads(zlib.decompress(base64.b64decode(path.read_bytes())))
-    for run, source in evidence["runs"].items():
-        if run == "asge8y6v":
-            continue
-        config = original[run]["config"]
-        for key, wrapped in source["config"].items():
-            expected = config[key]["value"]
-            if isinstance(wrapped["value"], dict):
-                assert wrapped["value"] == {name: expected[name] for name in wrapped["value"]}
-            else:
-                assert wrapped["value"] == expected
+    assert c.model.options["gradient_checkpointing"] is True

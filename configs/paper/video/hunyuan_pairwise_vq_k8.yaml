@@ -8,8 +8,3 @@ algorithm:
     pairwise: {seed: 42}
 runtime:
   output_dir: ${PAPER_VIDEO_OUTPUT_ROOT}/hunyuan-pairwise-vq-k8
-provenance:
-  run_id: p6jdpon4
-  runtime_sha: ccab6ad888df249d98d589be5ce6db7bf5dfcd77
-  reference_sha: ccab6ad888df249d98d589be5ce6db7bf5dfcd77
-  reference_location: runners/t2v_formal_batch_v1/flowart_pairwise_vq_k8_eval8fps.json

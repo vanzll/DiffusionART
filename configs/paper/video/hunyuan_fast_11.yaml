@@ -14,11 +14,3 @@ sampling:
     noise_level: 0.8
 runtime:
   output_dir: ${PAPER_VIDEO_OUTPUT_ROOT}/hunyuan-fast-11
-provenance:
-  inventory_group: t2v-main
-  run_id: ontwcush
-  runtime_sha: a2a3dad8cbe24792f461f4063b937fca083bea74
-  runtime_sha_status: inspected_local_git_object
-  reference_sha: a2a3dad8cbe24792f461f4063b937fca083bea74
-  reference_location: runners/t2v_formal_batch_v1/fastsde_vqmq11.json
-  runtime_location: flow_grpo_alg/video/backends/hunyuan_public_fast_sde.py

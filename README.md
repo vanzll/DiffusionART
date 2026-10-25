@@ -24,7 +24,7 @@
 
 ## News
 
-- ⚡ **[2026.10.23]** **[DiffusionART-Flash](#diffusionart-flash) is supported!** Training only at the initial denoising timestep substantially reduces training time while achieving comparable performance.
+- ⚡ **[2026.10.25]** **[Diffusion-ART Flash](#diffusionart-flash) is supported.** Training only high-noise timesteps achieves comparable performance to full-schedule training with substantially less update time.
 
 - 🎉 **[2026.10.22]** [MiniMax-H3](docs/minimax-h3.md) is now supported for **text-to-audio/video (omni)** training with **DiffusionART, DiffusionNFT and Flow-GRPO-Fast**, including LoRA and full-parameter recipes!
 
@@ -135,6 +135,21 @@ Left: VQ train reward versus GPU hours. Right: final evaluation VQ and total GPU
 for pairwise K = 2, 4, 8 and scalar K = 8, each trained for 400 updates.
 </em></p>
 
+<a id="diffusionart-flash"></a>
+
+**DiffusionART-Flash** trains on high-noise timesteps. Over a **16-step** denoising
+trajectory, our recommended recipe **randomly selects two of the first four
+timesteps** for each rollout. It processes far fewer sample–timestep pairs during
+policy updates while achieving comparable performance to training across the
+full denoising schedule. Generation still follows the complete trajectory.
+
+<p align="center"><img src="assets/readme/art-flash-comparison.svg" width="900" alt="Original DiffusionART and DiffusionART-Flash: VQ and MQ versus training step"></p>
+
+<p align="center"><em>HunyuanVideo, VQ:MQ = 1:1. Raw training scores.</em></p>
+
+Enable with `training.timestep_selection: high_noise`.
+See the [Flash guide and example configs](docs/art-flash.md).
+
 ### Key Advantages
 
 - ✅ **ODE solver:** deterministic rollouts, with no reverse-transition likelihood.
@@ -152,28 +167,6 @@ for pairwise K = 2, 4, 8 and scalar K = 8, each trained for 400 updates.
 <p align="center"><img src="assets/readme/qualitative-comparison.png" width="900" alt="Square text-to-image and text-to-video comparison: four image prompts and three video prompts, pre-trained versus DiffusionART, with four frames per video"></p>
 
 <p align="center"><em>Pre-trained versus DiffusionART. Video strips show four frames.</em></p>
-
-## DiffusionART-Flash
-
-**Train at the first timestep. Keep the full rollout.** DiffusionART-Flash updates
-the policy only at the initial denoising timestep. In the HunyuanVideo comparison
-below, it achieves similar VQ and MQ with **9× fewer sample–timestep training
-items per update**.
-
-<p align="center"><img src="assets/readme/art-flash-comparison.svg" width="960" alt="Original DiffusionART versus DiffusionART-Flash: raw VQ and MQ training curves against optimizer updates and elapsed GPU-hours"></p>
-
-*HunyuanVideo, VQ:MQ = 1:1, seed 42. Raw training scores.*
-
-Enable Flash in an ART configuration:
-
-```yaml
-training:
-  timestep_selection: first
-```
-
-The loss denominator follows the selected sample–timestep pairs; rollout steps
-and updates per rollout stay unchanged. See the [guide and example configs](docs/art-flash.md)
-for usage, [source runs and plot data](assets/readme/art-flash/metadata.json).
 
 ## Released Models
 

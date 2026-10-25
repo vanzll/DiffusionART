@@ -77,28 +77,7 @@ runtime:
   checkpoint_at_updates: [1000]
 provenance:
   kind: training_candidate_not_fullhistorical_reproduction
-  source_run: 3t35bwps
-  source_url: https://wandb.ai/vanzl3386-chinese-university-of-hong-kong-shenzhen/flow-grpo-algo/runs/3t35bwps
-  runtime_commit: c81b12bab6a7594f23a0398cb49b30442a5b0f27
-  runtime_source_status: inspected_git_source
-  release_base_commit: 6570fd2
-  research_reference_commit: c81b12bab6a7594f23a0398cb49b30442a5b0f27
-  evidence: docs/paper-multireward-evidence.json
-  archived_model: stabilityai/stable-diffusion-3.5-medium
-  archived_model_revision: main
-  source_world_size: 8
-  source_world_size_basis: archived_accelerate_launcher_num_processes
-  source_train_batch_size: 9
-  source_num_batches_per_epoch: 16
-  source_gradient_accumulation_steps: 8
-  source_updates_per_rollout: 2
   candidate_updates_per_rollout: 2
-  source_timestep_fraction: 1
-  source_sde_type: ode
-  source_covariance_guidance_reward_source: combined_multi_reward_advantage
-  source_resume_global_step: 0
-  main_paper_plotted_steps: 500
-  source_max_wandb_step: 1000
   budget_basis: 1000_successful_optimizer_updates_not_500_plot_truncation
   cadence_basis: public_common_every50_optimizer_updates
   dataset_contract: GenEval_full_prompt_train_with_structured_metadata
@@ -109,8 +88,8 @@ provenance:
     denominator: original_full_update_window
     zero_signal_mode: exact
   semantic_gaps:
-    - Prompt-major groups and release RNG ordering are not certified identical to the historical distributed sampler.
-    - Public model and reward revision pins are not recovered historical artifact hashes; archived SD3 revision was main.
-    - Successful optimizer updates do not certify historical W&B indexing, skipped FP16 steps, or overshoot parity.
-    - Public scalar zero-signal protection and restore_zero_signal=false with the original full-window denominator are intentional approved semantics, not the later active-item-denominator no-mask repair.
-    - GenEval worker, manifest bundle and full structured training/evaluation data are user-bound as documented in docs/geneval.md; common assets prepare only the five model snapshots. No dataset or scorer was downloaded or GPU-validated here.
+  - Prompt-major groups and release RNG ordering are not certified identical to the historical distributed sampler.
+  - Public model and reward revision pins are not recovered historical artifact hashes; archived SD3 revision was main.
+  - Successful optimizer updates do not certify historical W&B indexing, skipped FP16 steps, or overshoot parity.
+  - Public scalar zero-signal protection and restore_zero_signal=false with the original full-window denominator are intentional approved semantics, not the later active-item-denominator no-mask repair.
+  - GenEval worker, manifest bundle and full structured training/evaluation data are user-bound as documented in docs/geneval.md; common assets prepare only the five model snapshots. No dataset or scorer was downloaded or GPU-validated here.

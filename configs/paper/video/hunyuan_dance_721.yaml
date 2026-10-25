@@ -5,12 +5,4 @@ reward:
 runtime:
   output_dir: ${PAPER_VIDEO_OUTPUT_ROOT}/hunyuan-dance-721
 provenance:
-  inventory_group: t2v-main-721
-  run_id: 5ttd9ord
-  runtime_sha: 8aa9801da623a9cf5586494fa3e1e4c24b91437d
-  runtime_sha_status: inspected_local_git_object
-  reference_sha: 8aa9801da623a9cf5586494fa3e1e4c24b91437d
-  reference_location: runners/t2v_formal_batch_v1/dancegrpo_main721.json
-  historical_evaluation: video18_shift7_sparse_steps_retained32
-  historical_observed_updates: 368
   budget_basis: 400_global_optimizer_updates_200_rollouts_bounded_recipe_not_unbounded_runtime

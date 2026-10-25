@@ -1,10 +1,9 @@
 """Paper science contracts, frozen independently of the example/YAML defaults.
 
-Constants were checked with git show against the runtime sources named below.
+Scientific constants remain fixed independently of recipe defaults.
 Tests do not require the private research checkout, pretrained weights or CUDA.
 """
 
-import json
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -24,30 +23,26 @@ from visual_rl.training.video_nft import VideoNFTState
 ROOT = Path(__file__).resolve().parents[1]
 CONFIGS = ROOT / "configs/paper/video"
 # Expected coverage is fixed rather than discovered by glob (deletions must fail).
-RUNS = {
-    "hunyuan_art_721": "gyvtocue",
-    "hunyuan_fast_721": "a419ds0n",
-    "hunyuan_dance_721": "5ttd9ord",
-    "hunyuan_fast_11": "ontwcush",
-    "hunyuan_dance_11": "1a9gbm4p",
-    "hunyuan_nft_ema_721": "bjb9ed8b",
-    "hunyuan_nft_onpolicy_721": "y5vn56yr",
-    "hunyuan_scalar_vq_k8": "1iwf5sj9",
-    "hunyuan_pairwise_vq_k2": "x9mzbm4c",
-    "hunyuan_pairwise_vq_k4": "sdi90cn1",
-    "hunyuan_pairwise_vq_k8": "p6jdpon4",
-    "cover_hunyuan_art_11": "4dnkgeto",
-    "cover_hunyuan_nft_ema_11": "njpjfulm",
-    "cover_hunyuan_fast_11_long": "76zs2v12",
-    "wan_art_11": "08ca4146a532752c473f1f37",
-    "wan_fast_11": "31223c0be629580537f55ae2",
-    "wan_dance_11": "ef06ee7200e554ef1d5f4e5f",
-    "wan_nft_ema_11": "a6ce1ae3fe255baf889d5c03",
-    "hunyuan_refl_11": "a0ba6dc83810b89403515067",
-    "wan_refl_11": "16cc3f7450393e017fd6e1de",
-}
-# DiffusionART loss at ccab6ad8, also the 8b2f8a8d cover recipe;
-# 3ca2a36f:wan_i2v_distilled_algorithms.py reuses the same ART objective.
+PROFILES_EXPECTED = ('hunyuan_art_721',
+ 'hunyuan_fast_721',
+ 'hunyuan_dance_721',
+ 'hunyuan_fast_11',
+ 'hunyuan_dance_11',
+ 'hunyuan_nft_ema_721',
+ 'hunyuan_nft_onpolicy_721',
+ 'hunyuan_scalar_vq_k8',
+ 'hunyuan_pairwise_vq_k2',
+ 'hunyuan_pairwise_vq_k4',
+ 'hunyuan_pairwise_vq_k8',
+ 'cover_hunyuan_art_11',
+ 'cover_hunyuan_nft_ema_11',
+ 'cover_hunyuan_fast_11_long',
+ 'wan_art_11',
+ 'wan_fast_11',
+ 'wan_dance_11',
+ 'wan_nft_ema_11',
+ 'hunyuan_refl_11',
+ 'wan_refl_11')
 ART_LOSS = {
     "loss_space": "velocity_linear_sigma",
     "direction_normalization": "rms",
@@ -57,8 +52,6 @@ ART_LOSS = {
     "q2_reference_sde_noise_level": 0.8,
     "q2_reference_kl_threshold": 1e-5,
 }
-# a2a3dad8:hunyuan_public_fast_sde.py MAIN_PLAN, NOISE_LEVEL, RATIO_CLIP;
-# a2a3dad8:hunyuan_public_dancegrpo.py; c56245ec/51269742 Wan contracts.
 GRPO = {"flow_grpo_fast": (0.8, 1e-5, 1e-4), "dancegrpo": (0.25, 1e-4, 1e-8)}
 
 
@@ -83,7 +76,7 @@ def profile(name):
     return load_config(CONFIGS / f"{name}.yaml")
 
 
-@pytest.mark.parametrize("name", RUNS)
+@pytest.mark.parametrize("name", PROFILES_EXPECTED)
 def test_real_backend_validation_budget_and_inventory(configured_env, name):
     c = profile(name)
     backend = get_backend(c)  # Invokes the actual native backend config validator.
@@ -115,17 +108,10 @@ def test_real_backend_validation_budget_and_inventory(configured_env, name):
     assert c.evaluation.seed == 312
     assert c.runtime.checkpoint_every == 100 * updates_per_rollout(c)
     assert c.runtime.output_dir.startswith(str(configured_env))
-    assert c.provenance["run_id"] == RUNS[name]
-    inventory = json.loads((ROOT / "docs/reproduction-inventory.json").read_text())
-    run = next(r for g in inventory["groups"] for r in g["runs"] if r["run_id"] == RUNS[name])
-    assert c.provenance["runtime_sha"] == run["runtime_commit"]
-    assert len(c.provenance["reference_sha"]) == 40
-    assert c.provenance["reference_location"]
-    assert c.provenance["historical_evaluation"] != c.provenance["evaluation_protocol"]
     assert c.provenance["kind"].startswith("corrected_eval")
 
 
-@pytest.mark.parametrize("name", RUNS)
+@pytest.mark.parametrize("name", PROFILES_EXPECTED)
 def test_frozen_schedule_loss_and_no_stale_inheritance(configured_env, name):
     c = profile(name)
     wan = c.task == "i2v"
@@ -157,7 +143,7 @@ def test_frozen_schedule_loss_and_no_stale_inheritance(configured_env, name):
             "loss": {"ratio_clip": clip, "advantage_clip": 5.0}, "advantage_epsilon": eps,
         }
     elif algorithm == "diffusionnft":
-        # 75778e76 NFT runtime and nft_objective.py normalized-x0 floor.
+        # NFT normalized-x0 stabilization floor.
         assert set(c.algorithm.options) == {"old_policy", "loss", "advantage_epsilon"}
         assert c.algorithm.options["advantage_epsilon"] == 1e-4
         assert c.algorithm.options["loss"] == {
@@ -168,7 +154,7 @@ def test_frozen_schedule_loss_and_no_stale_inheritance(configured_env, name):
             "maximum": 0.6,
         }
     elif algorithm == "refl":
-        # 14379aef final-gpu contract; NOT random-late or first-raw ReFL.
+        # ReFL differentiates only the final policy step.
         assert c.algorithm.options == {"reward_loss_scale": 1.0}
     else:
         assert c.algorithm.options["loss"] == ART_LOSS
@@ -250,6 +236,6 @@ def test_unsupported_fields_rejected_not_ignored(configured_env):
 def test_unbounded_run_horizon_not_fabricated(configured_env):
     c = profile("cover_hunyuan_fast_11_long")
     assert c.provenance["kind"] == "corrected_eval_bounded_longrun_reference"
-    assert c.provenance["paper_plotted_horizon"] is None
-    assert "not_unbounded_run_endpoint" in c.provenance["budget_basis"]
+    assert c.training.max_updates == 400
+    assert c.provenance["budget_basis"] == "400_successful_optimizer_updates_bounded_reference"
     assert c.provenance["unresolved"]

@@ -4,7 +4,7 @@ Select `model.name: flux` and `algorithm.name: diffusionnft` through the same
 image CLI. The [example](../configs/examples/flux_nft_pickscore.yaml) uses
 FLUX.1-dev, PickScore, LoRA and four updates. It is not a paper profile. The
 [full-budget GenEval config](../configs/paper/image/flux_geneval_nft_ema.yaml)
-uses P48/K24 and eight ranks, mapped to the archived `asge8y6v` runtime; see the
+uses P48/K24 and eight ranks; see the
 [paper profile guide](paper-image.md) for provisioning and remaining parity gaps.
 
 ## Commands

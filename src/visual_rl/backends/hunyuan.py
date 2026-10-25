@@ -33,6 +33,7 @@ from ..training.objectives import ARTObjective, prompt_disjoint_windows
 from ..training.resume import prepare_resume_history, validate_resume_request
 from ..training.rollout import collect_rollout
 from ..training.state import CostClock, Progress
+from ..training.timesteps import art_training_positions
 from ..training.update import accumulated_step
 from ..training.video_grpo import ALGORITHMS as VIDEO_GRPO
 from ..wandb_export import open_metrics
@@ -208,8 +209,9 @@ def _rollout_inputs(c, attempt, rank=0):
     rows = c.sampling.prompts_per_rollout * c.sampling.samples_per_prompt
     noise = torch.randn(_shape(c, rows), generator=generator,
                         dtype=torch.bfloat16 if c.training.precision == "bf16" else torch.float32)
-    if c.training.timestep_selection == "first":
-        return noise, torch.zeros((rows, 1), dtype=torch.long)
+    if c.training.timestep_selection != "configured":
+        selected = art_training_positions(c.training, (), seed=c.seed, attempt=attempt)
+        return noise, torch.tensor(selected, dtype=torch.long).repeat(rows, 1)
     pool = torch.tensor(c.sampling.options["train_timestep_pool"])
     selected = torch.stack([pool[torch.randperm(len(pool), generator=generator)[:c.sampling.options["train_timestep_count"]]] for _ in range(rows)])
     return noise, selected

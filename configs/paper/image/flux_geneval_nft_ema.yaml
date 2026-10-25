@@ -1,4 +1,4 @@
-# Native full-budget candidate mapped to the verified asge8y6v runtime.
+# Native full-budget GenEval training candidate.
 extends: ["../../examples/flux_nft_pickscore.yaml","../geneval-assets.yaml","../flux-model-assets.yaml"]
 name: paper-flux_geneval_nft_ema-candidate
 seed: 42
@@ -68,25 +68,11 @@ runtime:
   checkpoint_at_updates: [100, 250, 500, 800, 1000]
 provenance:
   kind: training_candidate_not_fullhistorical_reproduction
-  source_run: asge8y6v
-  source_url: https://wandb.ai/vanzl3386-chinese-university-of-hong-kong-shenzhen/flow-grpo-algo/runs/asge8y6v
-  runtime_commit: 98d76252de5f194df39a6441f33ddf7e2843e06d
-  runtime_source_status: source_verified_from_local_git_and_archived_wandb_config
-  source_config_snapshot_sha256: 44cc464e67e93655da5b0847570772cf5fea444470032102003576b85db94819
-  research_reference_commit: 3ca2a36f6b20c53a06813013234666d9c033a660
-  archived_model: black-forest-labs/FLUX.1-dev
-  archived_model_revision: main
-  source_world_size: 8
-  source_local_rows: 144
-  source_gradient_accumulation_steps: 24
-  source_updates_per_rollout: 1
   candidate_updates_per_rollout: 1
-  source_timestep_fraction: 0.99
-  source_eval_microbatch: 8
-  budget_basis: archived_nft_flux_max_successful_updates
+  budget_basis: 1000_successful_optimizer_updates
   cadence_basis: public_common_every50_optimizer_updates
   semantic_gaps:
-    - Prompt-major complete groups replace the historical mixed-rank sampler; row/noise order parity remains pending.
-    - The archived main model revision has no recovered asset/data hashes; release pins do not establish historical identity.
-    - Physical evaluation batching follows the release runner rather than historical batch eight; per-sample identities are preserved.
-    - The original run resumed a prior attempt; this candidate starts from base weights, without splicing historical curves.
+  - Prompt-major complete groups replace the historical mixed-rank sampler; row/noise order parity remains pending.
+  - The archived main model revision has no recovered asset/data hashes; release pins do not establish historical identity.
+  - Physical evaluation batching follows the release runner rather than historical batch eight; per-sample identities are preserved.
+  - The original run resumed a prior attempt; this candidate starts from base weights, without splicing historical curves.

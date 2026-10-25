@@ -21,7 +21,7 @@ development-status documents are listed separately.
 
 ## Algorithms
 
-Train only at the initial denoising position with [DiffusionART-Flash](art-flash.md).
+Train at a few high-noise positions with [DiffusionART-Flash](art-flash.md).
 
 Shared equations, source revisions, and adaptations:
 [algorithm contracts](algorithm-provenance.md).
@@ -45,7 +45,6 @@ Shared equations, source revisions, and adaptations:
 ## Reproduction
 
 - [Image recipes](paper-image.md) and [video recipes](paper-video.md)
-- [Run and source inventory](reproduction-inventory.json)
 - [Release scope and validation status](release-scope.md)
 
 ## Extend the Framework

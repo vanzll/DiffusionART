@@ -231,8 +231,8 @@ class Training:
     timestep_selection: str = "configured"
 
     def __post_init__(self):
-        if self.timestep_selection not in ("configured", "first"):
-            raise ConfigError("training.timestep_selection must be configured or first")
+        if self.timestep_selection not in ("configured", "first", "high_noise"):
+            raise ConfigError("training.timestep_selection must be configured, first or high_noise")
         _positive_int(self.max_updates, "training.max_updates")
         _positive_int(self.microbatch, "training.microbatch")
         for key in ("learning_rate", "grad_clip", "epsilon"):
@@ -405,7 +405,15 @@ class Experiment:
         if self.algorithm.name == "refl" and self.sampling.samples_per_prompt != 1:
             raise ConfigError("the supported ReFL recipe requires K=1")
         if self.training.timestep_selection != "configured" and self.algorithm.name != "diffusionart":
-            raise ConfigError("training.timestep_selection=first is supported only by DiffusionART (DiffusionART-Flash)")
+            raise ConfigError("training.timestep_selection is supported only by DiffusionART (DiffusionART-Flash)")
+        if self.training.timestep_selection == "high_noise" and self.sampling.steps < 4:
+            raise ConfigError("training.timestep_selection=high_noise requires at least four rollout steps")
+        if (self.training.timestep_selection == "high_noise" and self.model.name == "minimax_h3"
+                and self.sampling.steps < 6):
+            raise ConfigError("H3 high_noise requires at least six sigma boundaries for four nonfinal rollout positions")
+        if (self.training.timestep_selection == "high_noise" and self.model.name == "hunyuan_public"
+                and self.sampling.steps < 5):
+            raise ConfigError("Hunyuan high_noise requires at least five rollout steps for four nonfinal positions")
         if self.task == "t2i" and self.sampling.frames != 1:
             raise ConfigError("T2I requires sampling.frames=1")
         if any(step > self.training.max_updates for step in

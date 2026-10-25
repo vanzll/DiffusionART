@@ -7,48 +7,31 @@ interfaces in `configs/examples/`, pin available scientific settings, and use
 GPU execution, exact historical ordering and paper-number parity are not claimed.
 No new sampler, evaluator, objective, asset downloader or launcher is introduced.
 
-## Coverage And Provenance
+## Coverage
 
-The inventory is [reproduction-inventory.json](reproduction-inventory.json).
-Each resolved YAML records its exact run ID, recorded runtime SHA (including
-honest nulls), separately inspected reference SHA/path, evaluation distinction,
-budget basis and artifact policy. Reference paths are research Git paths, not
-public files promised to exist in this release. Read-only research reference:
-`flow_grpo_video_baseline_longrun_20260928` at
-`3ca2a36f6b20c53a06813013234666d9c033a660`; no remote run status was refreshed.
+All profiles use a bounded 400-update training budget. Scientific values,
+evaluation protocol and checkpoint cadence are recorded in the YAMLs.
 
-| YAML Stem | Historical Run | Runtime SHA | Budget / Reference |
-| --- | --- | --- | --- |
-| `hunyuan_art_721` | `gyvtocue` | `163d0696` (recorded, object unavailable) | 400 / `flowart_main721_val150.json` at `3ca2a36f` |
-| `hunyuan_fast_721` | `a419ds0n` | `64cadf05` | 400-step recipe; historical run stopped at 348 / `fastsde_main721.json` |
-| `hunyuan_dance_721` | `5ttd9ord` | `8aa9801d` | 400-step bounded recipe; historical long run stopped at 368 / `dancegrpo_main721.json` |
-| `hunyuan_fast_11` | `ontwcush` | `a2a3dad8` | 400 / `fastsde_vqmq11.json` |
-| `hunyuan_dance_11` | `1a9gbm4p` | `a2a3dad8` | 400 / `dancegrpo_vqmq11.json` |
-| `hunyuan_nft_ema_721` | `bjb9ed8b` | `75778e76` | 400 / `nft_slowema_eval8fps.json` |
-| `hunyuan_nft_onpolicy_721` | `y5vn56yr` | `75778e76` | 400 / `nft_noema_eval8fps.json` |
-| `hunyuan_scalar_vq_k8` | `1iwf5sj9` | `75778e76` | 400 / `flowart_scalar_vq_k8_eval8fps.json` |
-| `hunyuan_pairwise_vq_k2` | `x9mzbm4c` | `ccab6ad8` | 400 / `flowart_pairwise_vq_k2_eval8fps.json` |
-| `hunyuan_pairwise_vq_k4` | `sdi90cn1` | `ccab6ad8` | 400 / `flowart_pairwise_vq_k4_eval8fps.json` |
-| `hunyuan_pairwise_vq_k8` | `p6jdpon4` | `ccab6ad8` | 400 / `flowart_pairwise_vq_k8_eval8fps.json` |
-| `cover_hunyuan_art_11` | `4dnkgeto` | `8b2f8a8d` | 400 / `flowart_vqmq11_curves.json` |
-| `cover_hunyuan_nft_ema_11` | `njpjfulm` | `8b2f8a8d` | 400 / `nft_slowema_vqmq11_curves.json` |
-| `cover_hunyuan_fast_11_long` | `76zs2v12` | `45c9c44a` | Bounded 400 reference, long-run horizon unresolved |
-| `wan_art_11` | `08ca4146a532752c473f1f37` | unresolved | 400 / `flowart.json` at `3ca2a36f` |
-| `wan_fast_11` | `31223c0be629580537f55ae2` | `c56245ec` | 400 / `fastsde.json` |
-| `wan_dance_11` | `ef06ee7200e554ef1d5f4e5f` | `51269742` | 400 / `dancegrpo-u400.json` |
-| `wan_nft_ema_11` | `a6ce1ae3fe255baf889d5c03` | unresolved | 400 / `nft-slowema-recovery-u400.json` at `3ca2a36f` |
-| `hunyuan_refl_11` | `a0ba6dc83810b89403515067` | `14379aef` | 400 / `vqmq11-final-gpu.json` |
-| `wan_refl_11` | `16cc3f7450393e017fd6e1de` | unresolved | 400 / `refl-gpu.json` at `3ca2a36f` |
-
-Hunyuan reference JSONs live in `runners/t2v_formal_batch_v1/`, ReFL in
-`runners/t2v_refl32_v1/`, Wan in `runners/wan_i2v_distilled32_v1/`.
-Targeted `git show` checks covered the named runtime backends, ART loss terms,
-Fast `MAIN_PLAN` (not its legacy 4-of-9 default), Dance componentwise loss,
-NFT `old_policy_decay` and normalized-x0 objective, Wan algorithm dispatch,
-ReFL final-step selector, and the unbounded lifecycle-only opt-in.
-The incident index was read once. In particular, do not import promoted
-reference-MSE experiments into these KL0 profiles merely because an operational
-repair shares their lineage; a remote report is not scientific equivalence proof.
+- `hunyuan_art_721`
+- `hunyuan_fast_721`
+- `hunyuan_dance_721`
+- `hunyuan_fast_11`
+- `hunyuan_dance_11`
+- `hunyuan_nft_ema_721`
+- `hunyuan_nft_onpolicy_721`
+- `hunyuan_scalar_vq_k8`
+- `hunyuan_pairwise_vq_k2`
+- `hunyuan_pairwise_vq_k4`
+- `hunyuan_pairwise_vq_k8`
+- `cover_hunyuan_art_11`
+- `cover_hunyuan_nft_ema_11`
+- `cover_hunyuan_fast_11_long`
+- `wan_art_11`
+- `wan_fast_11`
+- `wan_dance_11`
+- `wan_nft_ema_11`
+- `hunyuan_refl_11`
+- `wan_refl_11`
 
 ## Scientific Settings
 
@@ -164,7 +147,7 @@ torchrun --nnodes=4 --nproc-per-node=8 --node-rank="$NODE_RANK" \
 ```
 
 Run the same command once per node with standard allocation rendezvous values;
-choose any table YAML. An eight-GPU single-node launch is also supported using
+choose any listed YAML. An eight-GPU single-node launch is also supported using
 `--standalone --nproc-per-node=8`, preserving global P32 but **not** historical
 rank-local ordering. All assets/output paths must be visible across ranks.
 Hunyuan defaults to rollout/update microbatches8/8; Wan uses8/4 and ReFL1/1.
@@ -184,20 +167,11 @@ No launch was performed for this change.
   Final MQ rescoring on matched32 retained clips is a separate historical
   lineage, not implemented or reproduced by these YAMLs. Even eval8 historical
   profiles remain labeled corrected-eval because cadence and retention differ.
-- The ART721 reference at `3ca2a36f` is a later150-prompt contract preserving
-  training science, not the `gyvtocue` runtime snapshot. Common evaluation cannot
-  label validation100/showcase50 subsets; do not mix their headline statistics.
-- The schema requires positive integer `max_updates`. `76zs2v12` used the
-  lifecycle-only unbounded opt-in at `45c9c44a`. Neither supplied inventory nor
-  inspected source gives its paper-plotted endpoint. The long YAML is explicitly
-  a runnable **400-update bounded reference**, not full long-run reproduction.
-  Set a verified plotted horizon before using it as the cover long-run profile;
-  no guessed2000/1000 horizon or invented `max_updates: null` is supplied.
-- `gyvtocue` runtime SHA is recorded but unavailable in the inspected local
-  object databases. Wan ART/NFT/ReFL runtime SHAs are null in the inventory;
-  reference code SHAs are not substituted as actual run SHAs. Recover these
-  before claiming exact-runtime provenance. Complete dataset/converted-asset
-  manifests and clean pretrained GPU acceptance remain outstanding.
+- Common evaluation cannot label validation/showcase subsets; do not mix their
+  headline statistics. Complete dataset and converted-asset manifests and clean
+  pretrained GPU acceptance remain outstanding.
+- The long YAML is a runnable **400-update bounded reference**. It does not
+  establish a long-run paper result or an unbounded training endpoint.
 - Generic prompt-stream seed42 differs from the historical sampler seed1237,
   and native retry/seed ownership differs. These are training-semantic recipes,
   not bitwise trajectory reproductions. No unsupported sampler flag is invented.
@@ -213,17 +187,20 @@ No launch was performed for this change.
 
 ## Local Verification
 
-`tests/test_paper_video_configs.py` validates all18 resolved profiles through
-`get_backend`, checks independent frozen scientific constants and inventory IDs,
+`tests/test_paper_video_configs.py` validates all20 resolved profiles through
+`get_backend`, checks independent frozen scientific constants,
 P/K ratios, binary-only pairwise behavior, no stale inherited algorithm/sampler
 fields, native reward preprocessing, zero-based NFT EMA and truthful horizon gaps.
 It uses synthetic environment paths and performs no asset loading or GPU work.
 
-Verification on 2026-09-30 against the dirty release worktree: **43 passed**
-in 7.17 seconds; Ruff reported **All checks passed**. This is CPU config/contract
-evidence, not pretrained execution or exact historical-runtime acceptance.
+These CPU config and contract checks do not establish pretrained execution
+or exact historical-runtime acceptance.
 
 ```bash
 .venv/bin/python -m pytest -q tests/test_paper_video_configs.py
 .venv/bin/ruff check tests/test_paper_video_configs.py
 ```
+
+Removing historical provenance changes the full configuration fingerprint.
+Resume existing checkpoints with their original configuration; the cleaned
+profiles do not bypass checkpoint identity validation.

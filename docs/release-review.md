@@ -17,8 +17,7 @@ The paper jointly optimizes GenEval, PickScore, CLIPScore and HPSv2.1 for 500
 plotted steps. The original snapshot had no HPS scorer or four-reward recipe.
 The author approved repairing this gap, without addressing the other findings.
 The release now includes the official HPSv2.1 adapter, pinned assets, seven
-four-reward configuration candidates and independently retrieved scientific
-evidence. See [the four-reward guide](multireward.md).
+four-reward configuration candidates and numerical contract tests. See [the four-reward guide](multireward.md).
 
 Reporting uses GenEval + PickScore logit/26 + CLIPScore logit/30 + HPS cosine.
 ART uses the equal-weight mean of individually group-normalized component
@@ -45,13 +44,9 @@ The baseline path follows the
 [Diffusers scheduler](https://github.com/huggingface/diffusers/blob/v0.35.1/src/diffusers/schedulers/scheduling_flow_match_euler_discrete.py).
 The effect on reward and which method benefits have not been measured.
 
-Follow-up: the historical SD3 ART runs `11pq0iy3`, `9c0zrzlw` and `mofumvbw`
-report runtime commit `b52a36dd62f7b733c3ee97c91cb0500bda69e632`. That commit's
-`scripts/train_sd3.py` uses the model's Diffusers scheduler through
-`sd3_pipeline_with_logprob`/`retrieve_timesteps`, without a custom sigma override,
-for both ten-step training and forty-step evaluation. The custom ART grid was a
-migration discrepancy, not established evidence of a historical paper confound.
-Exact historical source authentication for every baseline remains incomplete.
+The intended SD3 ART contract uses the model's Diffusers scheduler for both
+ten-step training and forty-step evaluation. The custom ART grid was a migration
+discrepancy. Exact historical runtime parity remains unverified.
 
 The author authorized aligning SD3 ART with its actual historical implementation.
 `_schedule` now uses `sd3_schedule` for every SD3 method, for training and eval.
@@ -179,12 +174,9 @@ Pairwise handling, learning rates, masks, seeds, sampler and update boundaries
 are unchanged. All paper profiles now evaluate every 50 optimizer updates;
 video remains 8 FPS / RM 4 FPS. This cadence is not historical evaluation parity.
 
-Evidence: `8b2f8a8d` Hunyuan ART runtime uses microbatches8/8 and
-`restore_anchor_mask=~active`; Fast721 `a419ds0n` at `64cadf05` and Dance721
-`5ttd9ord` at `8aa9801d` profiles/W&B config agree on microbatches8/8 and
-weights .7/.2/.1. Their observed endpoints348/368 are not relabeled400.
-The new configs specify the 400-update bounded recipe. Historical image
-microbatches remain unchanged, including FLUX NFT's actual runtime6/6.
+Hunyuan ART/Fast/Dance profiles use microbatches8/8. The supplied configs
+specify a bounded 400-update recipe. Image microbatches remain unchanged,
+including FLUX NFT's 6/6 rollout/update microbatches.
 
 Video scalar activity now includes restoration anchors, so both unsharded and
 distributed runners execute anchor-only windows instead of skipping them.
@@ -214,23 +206,6 @@ requires a separate source/patch handoff for reproduction.
 Validation: 22 W&B exporter tests passed, including real offline SDK exports,
 timeout handling and replay attribution; targeted Ruff checks passed. No GPU
 work or mutation of the active acceptance run was performed.
-
-The remote acceptance discussion and local bundle identify its running source
-as `1a02e397efe90299574b954aed758c9de524a0a9`. Its extra changes over `78364cb`
-are the Wan hook fix already integrated here, checkpoint-space preflight and
-optional resume verification. The latter two have CPU evidence but not full
-GPU save/resume acceptance; this change does not import them.
-
-At this audit, run `869917a2b848438194c761f89ab19e2e` had six updates (three
-rollouts), not six independent reward batches. Fixed-normalized weighted
-rewards were -0.35827, -0.05455, -0.16806; historical `gyvtocue` had -0.22724,
--0.09061, -0.26065 at the corresponding first three rollouts. Neither sequence
-increased monotonically. Public prompt shuffling uses seed 42 versus historical
-sampler seed 1237; rollout/update microbatch is 1 versus 8. LR, optimizer, reward
-weights, training FPS/RM FPS and mask settings agree. Eval video FPS differs
-(corrected public 8 versus historical 18), so historical evaluation is not an
-identical protocol. This establishes no reward-regression cause or performance
-parity; continue the fixed-setting run and compare later training/eval points.
 
 ### Wan Empty Hook Registry Fix (2026-10-14)
 

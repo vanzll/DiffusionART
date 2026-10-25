@@ -59,39 +59,16 @@ runtime:
   checkpoint_at_updates: [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]
 provenance:
   kind: training_candidate_not_fullhistorical_reproduction
-  source_run: ujnglsgl
-  source_url: https://wandb.ai/stableNFT-baselines/baselines/runs/ujnglsgl
-  runtime_commit: db5aecf8fbb6e002527ef8aff09e75a53ece4312
-  runtime_source_status: commit_recorded_source_unrecovered
-  release_base_commit: 6570fd2
-  research_reference_commit: c81b12bab6a7594f23a0398cb49b30442a5b0f27
-  evidence: docs/paper-multireward-evidence.json
-  source_world_size: 8
-  source_world_size_basis: canonical_8_rank_mapping_not_archived_runtime_proof
-  source_train_batch_size: 9
-  source_num_batches_per_epoch: 16
-  source_gradient_accumulation_steps: 16
-  source_updates_per_rollout: 1
   candidate_updates_per_rollout: 1
-  source_timestep_fraction: 0.99
-  source_sde_type: sde
-  source_logprob_type: gaussian
-  source_global_std: true
-  source_same_latent: false
-  source_resume_global_step: 0
-  source_multi_reward_advantage_enabled: true
   candidate_advantage_branch: scalar_sum_prompt_center_global_std
-  candidate_advantage_branch_basis: inspected_canonical_source_not_archived_runtime_certification
-  main_paper_plotted_steps: 500
-  source_max_optimizer_steps: 1000
   budget_basis: 1000_successful_optimizer_updates_not_500_plot_truncation
   cadence_basis: public_common_every50_optimizer_updates
   dataset_contract: GenEval_full_prompt_train_with_structured_metadata
   reporting_scalar: GenEval+PickScore_logit/26+CLIPScore_logit/30+HPSv2.1_cosine
   semantic_gaps:
-    - "Actual archived baseline runtime commit source unavailable; the inspected canonical reference is not execution proof for this run."
-    - "Public asset pins, prompt-major sampling, RNG and text/LoRA conventions are not certified historical parity."
-    - "Candidate starts from base model weights; historical W&B indexing and successful-update/FP16 overflow parity are not certified."
-    - "Evaluation EMA decay and logical-batch refresh are mapped from the canonical reference, not recovered runtime state."
-    - "GenEval worker, scorer bundle and full structured data remain user-bound per docs/geneval.md; shared assets prepare five model snapshots only."
-    - "Archived train.multi_reward_advantage.enabled=true is not used as execution proof: both inspected NFT trainers normalize the summed avg through PerPromptStatTracker; this candidate deliberately omits the joint option."
+  - Actual archived baseline runtime commit source unavailable; the inspected canonical reference is not execution proof for this run.
+  - Public asset pins, prompt-major sampling, RNG and text/LoRA conventions are not certified historical parity.
+  - Candidate starts from base model weights; historical W&B indexing and successful-update/FP16 overflow parity are not certified.
+  - Evaluation EMA decay and logical-batch refresh are mapped from the canonical reference, not recovered runtime state.
+  - GenEval worker, scorer bundle and full structured data remain user-bound per docs/geneval.md; shared assets prepare five model snapshots only.
+  - 'Archived train.multi_reward_advantage.enabled=true is not used as execution proof: both inspected NFT trainers normalize the summed avg through PerPromptStatTracker; this candidate deliberately omits the joint option.'

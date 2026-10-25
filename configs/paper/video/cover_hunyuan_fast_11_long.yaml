@@ -7,11 +7,5 @@ runtime:
   output_dir: ${PAPER_VIDEO_OUTPUT_ROOT}/cover-hunyuan-fast-11-long-reference
 provenance:
   kind: corrected_eval_bounded_longrun_reference
-  inventory_group: cover-t2v-vqmq11
-  run_id: 76zs2v12
-  runtime_sha: 45c9c44ad5f63f44c6361a947dfee931c653cbb2
-  reference_sha: 45c9c44ad5f63f44c6361a947dfee931c653cbb2
-  reference_location: flow_grpo_alg/video/fastsde_longrun.py
-  budget_basis: original_reference_400_updates_not_unbounded_run_endpoint
-  paper_plotted_horizon: null
-  unresolved: native_max_updates_requires_positive_integer_paper_plotted_horizon_not_in_inventory
+  budget_basis: 400_successful_optimizer_updates_bounded_reference
+  unresolved: bounded_reference_does_not_establish_long_run_result_parity
