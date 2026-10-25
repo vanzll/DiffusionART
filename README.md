@@ -137,7 +137,7 @@ for pairwise K = 2, 4, 8 and scalar K = 8, each trained for 400 updates.
 
 <a id="diffusionart-flash"></a>
 
-**DiffusionART-Flash** DiffusionART-Flash trains on high-noise timesteps. For video tasks, ~we recommend to randomly select 2 timestep transitions for noise level between 0.95 to 1 (very high-noise region) at training stage~. For our Hunyuan-Video experiment, we **randomly selects two of the first four
+**DiffusionART-Flash** DiffusionART-Flash trains on high-noise timesteps. For video tasks, **Our recommended recipe is to randomly select 2 timestep transitions for noise level between 0.95 to 1 (very high-noise region) at training stage**. For our Hunyuan-Video experiment, we **randomly selects two of the first four
 timesteps** for each rollout. It processes far fewer sample–timestep pairs during
 policy updates while achieving comparable performance to training across the
 full denoising schedule. Rollout stage still follows the complete trajectory to guarantee the sample quality. Results:
