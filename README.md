@@ -24,7 +24,7 @@
 
 ## News
 
-- ⚡ **[2026.10.25]** **[Diffusion-ART Flash](#diffusionart-flash) is supported.** Training only high-noise timesteps achieves comparable performance to full-schedule training with substantially less update time.
+- ⚡ **[2026.10.25]** **[Diffusion-ART-Flash](#diffusionart-flash) is supported.** Training only high-noise timesteps achieves comparable performance to all-timesteps training with substantially less training time cost.
 
 - 🎉 **[2026.10.22]** [MiniMax-H3](docs/minimax-h3.md) is now supported for **text-to-audio/video (omni)** training with **DiffusionART, DiffusionNFT and Flow-GRPO-Fast**, including LoRA and full-parameter recipes!
 
@@ -137,15 +137,14 @@ for pairwise K = 2, 4, 8 and scalar K = 8, each trained for 400 updates.
 
 <a id="diffusionart-flash"></a>
 
-**DiffusionART-Flash** trains on high-noise timesteps. Over a **16-step** denoising
-trajectory, our recommended recipe **randomly selects two of the first four
+**DiffusionART-Flash** DiffusionART-Flash trains on high-noise timesteps. For video tasks, ~we recommend to randomly select 2 timestep transitions for noise level between 0.95 to 1 (very high-noise region) at training stage~. For our Hunyuan-Video experiment, we **randomly selects two of the first four
 timesteps** for each rollout. It processes far fewer sample–timestep pairs during
 policy updates while achieving comparable performance to training across the
-full denoising schedule. Generation still follows the complete trajectory.
+full denoising schedule. Rollout stage still follows the complete trajectory to guarantee the sample quality. Results:
 
 <p align="center"><img src="assets/readme/art-flash-comparison.svg" width="900" alt="Original DiffusionART and DiffusionART-Flash: VQ and MQ versus training step"></p>
 
-<p align="center"><em>HunyuanVideo, VQ:MQ = 1:1. Raw training scores.</em></p>
+<p align="center"><em>HunyuanVideo, VQ:MQ = 1:1. Raw training scores. Training only two timesteps reduces the training time cost by 8x compared with training 16 timesteps.</em></p>
 
 Enable with `training.timestep_selection: high_noise`.
 See the [Flash guide and example configs](docs/art-flash.md).
