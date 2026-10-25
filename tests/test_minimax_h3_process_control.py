@@ -118,7 +118,9 @@ def test_only_exact_nonce_and_root_child_is_stopped(tmp_path):
     ([0, None, 0, 0], False, 1),
     ([0, 0, 0, 0], True, 1),
 ])
-def test_mpi_transport_zero_requires_every_node_receipt(tmp_path, node_exits, failure, expected):
+@pytest.mark.parametrize('exported_nonce', [False, True])
+def test_mpi_transport_zero_requires_every_node_receipt(
+        tmp_path, node_exits, failure, expected, exported_nonce):
     attempt = tmp_path / 'attempt'
     for node_rank, status in enumerate(node_exits):
         directory = attempt / f'nodes/{node_rank}'
@@ -128,7 +130,7 @@ def test_mpi_transport_zero_requires_every_node_receipt(tmp_path, node_exits, fa
     if failure:
         (attempt / 'failure.2').write_text('failed\n')
     mpi = tmp_path / 'transport.py'
-    mpi.write_text('raise SystemExit(0)\n')
+    mpi.write_text('import os\nassert "H3_ATTEMPT_NONCE" not in os.environ\n')
     original = Path(__file__).resolve().parents[1] / 'scripts/minimax_h3_mpi_attempt.sh'
     script = tmp_path / 'coordinator.sh'
     script.write_text(original.read_text().replace(
@@ -136,7 +138,8 @@ def test_mpi_transport_zero_requires_every_node_receipt(tmp_path, node_exits, fa
         '/usr/local/mpi/bin/mpirun', f'{shlex.quote(sys.executable)} {shlex.quote(str(mpi))}'))
     environment = tmp_path / 'launch.env'
     environment.write_text('\n'.join([
-        f'H3_ATTEMPT_DIR={shlex.quote(str(attempt))}', 'H3_ATTEMPT_NONCE=cpu-test',
+        f'H3_ATTEMPT_DIR={shlex.quote(str(attempt))}',
+        ('export ' if exported_nonce else '') + 'H3_ATTEMPT_NONCE=cpu-test',
         'H3_SSH_KNOWN_HOSTS=unused', 'H3_CHECKOUT=unused', 'H3_NNODES=4',
     ]) + '\n')
     result = subprocess.run(['bash', str(script), str(environment)], capture_output=True,

@@ -4,7 +4,9 @@ source "${1:?missing attempt environment}"
 mkdir -p "${H3_ATTEMPT_DIR}/logs"
 printf '%s MPI start %s\n' "$(date -u +%FT%TZ)" "${H3_ATTEMPT_NONCE}"
 status=0
-/usr/local/mpi/bin/mpirun --allow-run-as-root --hostfile "${H3_HOSTFILE:-/etc/mpi/hostfile}" \
+# Node owners reload the nonce from launch.env. Keep MPI/SSH infrastructure
+# outside the nonce-scoped training cleanup domain when launch.env exports it.
+env -u H3_ATTEMPT_NONCE /usr/local/mpi/bin/mpirun --allow-run-as-root --hostfile "${H3_HOSTFILE:-/etc/mpi/hostfile}" \
   --mca plm_rsh_args "-o StrictHostKeyChecking=yes -o UserKnownHostsFile=${H3_SSH_KNOWN_HOSTS}" \
   --mca orte_abort_on_non_zero_status 0 \
   -np "${H3_NNODES}" --map-by ppr:1:node --bind-to none \
