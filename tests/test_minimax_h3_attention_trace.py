@@ -25,7 +25,7 @@ def test_actual_operator_types_and_values_gradients_rng_preserved(tmp_path, monk
         calls.append(1)
         return original(*args, **kwargs)
     monkeypatch.setattr(functional, "scaled_dot_product_attention", counted)
-    observer = OneShotAttentionTrace(tmp_path, enabled=True, device_type="cpu")
+    observer = OneShotAttentionTrace(tmp_path, enabled=True, device_type="cpu", min_query_tokens=0)
     observer.install()
     with torch.autocast("cpu", dtype=torch.bfloat16):
         result = functional.scaled_dot_product_attention(actual, actual, actual)
@@ -61,6 +61,23 @@ def test_disabled_and_other_device_leave_original_execution(tmp_path, monkeypatc
     assert not list(tmp_path.iterdir())
 
 
+def test_trace_skips_short_refiner_and_captures_main_sequence(tmp_path, monkeypatch):
+    monkeypatch.setenv("H3_ATTEMPT_NONCE", "main-attention-audit")
+    monkeypatch.setenv("RANK", "0")
+    original = functional.scaled_dot_product_attention
+    observer = OneShotAttentionTrace(tmp_path, enabled=True, device_type="cpu", min_query_tokens=32)
+    observer.install()
+    small = torch.ones(1, 1, 16, 4)
+    functional.scaled_dot_product_attention(small, small, small)
+    assert not observer.used and not list(tmp_path.iterdir())
+    main = torch.ones(1, 1, 32, 4)
+    functional.scaled_dot_product_attention(main, main, main)
+    assert observer.used and functional.scaled_dot_product_attention is original
+    receipt = json.loads((tmp_path/"attention-traces/main-attention-audit/rank-00000-first-sdpa.json").read_text())
+    assert receipt["captured_query_shape"] == [1, 1, 32, 4]
+    assert receipt["min_query_tokens"] == 32
+
+
 @pytest.mark.parametrize("failure", ["start", "export", "operator", "nested", "unsafe_nonce"])
 def test_diagnostic_failure_never_replays_or_masks_operator(tmp_path, monkeypatch, failure):
     monkeypatch.setenv("H3_ATTEMPT_NONCE", "../unsafe" if failure == "unsafe_nonce" else "audit")
@@ -84,7 +101,7 @@ def test_diagnostic_failure_never_replays_or_masks_operator(tmp_path, monkeypatc
             raise RuntimeError("export failed")
     monkeypatch.setattr(functional, "scaled_dot_product_attention", original)
     monkeypatch.setattr(torch.profiler, "profile", lambda **kwargs: FakeProfiler())
-    observer = OneShotAttentionTrace(tmp_path, enabled=True, device_type="cpu")
+    observer = OneShotAttentionTrace(tmp_path, enabled=True, device_type="cpu", min_query_tokens=0)
     observer.install()
     inputs = torch.ones(1, 1, 2, 4)
     if failure == "operator":

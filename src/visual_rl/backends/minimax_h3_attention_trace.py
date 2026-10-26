@@ -17,10 +17,11 @@ from .minimax_h3_observability import event
 
 
 class OneShotAttentionTrace:
-    def __init__(self, root, *, enabled=False, device_type="cuda"):
+    def __init__(self, root, *, enabled=False, device_type="cuda", min_query_tokens=1024):
         self.root = Path(root)
         self.enabled = enabled
         self.device_type = device_type
+        self.min_query_tokens = min_query_tokens
         self.original = self.wrapper = None
         self.used = False
 
@@ -39,7 +40,8 @@ class OneShotAttentionTrace:
         def observe(*args, **kwargs):
             query = args[0] if args else kwargs.get("query")
             if (self.used or not isinstance(query, torch.Tensor)
-                    or query.device.type != self.device_type):
+                    or query.device.type != self.device_type or query.ndim < 2
+                    or query.shape[-2] < self.min_query_tokens):
                 return self.original(*args, **kwargs)
             self.used = True
             self.close()
@@ -82,6 +84,7 @@ class OneShotAttentionTrace:
                     status="one_native_sdpa_cpu_operator_trace", trace=str(trace),
                     attention_operators=operators, output_dtype=str(result.dtype),
                     device_type=self.device_type, cuda_activity_enabled=False,
+                    captured_query_shape=list(query.shape), min_query_tokens=self.min_query_tokens,
                     operation_replayed=False, host_capture_seconds=time.monotonic()-started,
                     scope="Dispatched operator/input types; no CUDA timing or exact kernel attribution")
                 path = directory / f"rank-{rank:05d}-first-sdpa.json"
