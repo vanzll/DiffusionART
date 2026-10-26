@@ -82,7 +82,10 @@ def reuse_eval0(request, atomic_json):
             if path.stat().st_size != asset['bytes']:
                 raise ValueError('Pretrained eval0 media size differs')
             with path.open('rb') as stream:
-                actual = hashlib.file_digest(stream, 'sha256').hexdigest()
+                checksum = hashlib.sha256()
+                for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+                    checksum.update(chunk)
+                actual = checksum.hexdigest()
             if actual != asset['sha256']:
                 raise ValueError('Pretrained eval0 media bytes differ')
             verified.append(asset)
