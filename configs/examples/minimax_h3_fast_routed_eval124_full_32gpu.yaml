@@ -1,0 +1,6 @@
+extends: minimax_h3_fast_routed_posttrain_full_32gpu.yaml
+name: minimax-h3-fast-routed-eval124-full-32gpu
+algorithm:
+  options:
+    post_training:
+      eval_frames: [124]

@@ -53,6 +53,7 @@ from .minimax_h3_observability import BatchTrace, event
 from .minimax_h3_posttraining import (
     duration_config,
     duration_frames,
+    evaluation_frames,
     evaluation_step_directory,
     fast_innovation_seed,
     rollout_config,
@@ -393,7 +394,7 @@ def evaluate(session, c, parts, dataset, step, root):
     if "duration_frames" not in (c.algorithm.options.get("post_training") or {}):
         return _evaluate_duration(session, c, parts, dataset, step, root)
     results = {}
-    for frames in duration_frames(c):
+    for frames in evaluation_frames(c):
         workload = duration_config(c, frames)
         complete = session.primary("AV duration evaluation receipt", lambda: _completed_duration_evaluation(
             workload, dataset, step, root))
@@ -481,7 +482,7 @@ def _completed_evaluation(c, dataset, step, root):
     if "duration_frames" not in (c.algorithm.options.get("post_training") or {}):
         return _completed_duration_evaluation(c, dataset, step, root)
     return all(_completed_duration_evaluation(duration_config(c, frames), dataset, step, root)
-               for frames in duration_frames(c))
+               for frames in evaluation_frames(c))
 
 
 def _completed_duration_evaluation(c, dataset, step, root):
@@ -644,6 +645,11 @@ def _run(session, c, prompts, resume, api, *, resume_rewind, evaluate_only):
                     "actual_output_dir": str(root.resolve()), "strategy": c.runtime.distributed,
                     "ordering": "global-prompt-stream/prompt-half-K-u2-v1", "pretrained_reference": reference is not None})
             session.primary("AV run identity", publish_run)
+            reused = os.environ.get("H3_PRETRAINED_EVAL0_SOURCE")
+            if reused:
+                from .minimax_h3_eval_reuse import reuse_pretrained_eval0
+                session.primary("AV proven pretrained eval0 import", lambda: reuse_pretrained_eval0(
+                    c, validation, root, reused))
         clock = CostClock(progress, gpu_count=world if session.device.type == "cuda" else 0)
         log = session.primary("AV metrics open", lambda: resources.enter_context(open_metrics(c, root)))
         if (resume and validation is not None and c.algorithm.options.get("post_training") is not None
