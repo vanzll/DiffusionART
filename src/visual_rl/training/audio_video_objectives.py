@@ -407,6 +407,130 @@ def prepare_fast_objective(cache, predict, shared_rewards, groups, device, *, gl
     return AVFastObjective(cache, predict, advantages, device, ratio_clip, advantage_clip)
 
 
+@dataclass
+class AVRoutedFastObjective(AVFastObjective):
+    """Independent CPS ratios and PPO clipping, then an equal-modal mean.
+
+    ``advantages`` and ``audio_advantages`` are the already normalized/routed
+    complete-group rewards. Do not apply another cross-group standard deviation.
+    """
+
+    audio_advantages: torch.Tensor | None = None
+    reference_predictions: tuple[AVState, ...] | None = None
+    reference_mse_beta: float = 0.
+
+    def __post_init__(self):
+        super().__post_init__()
+        count, slots = len(self.cache.endpoints), len(self.cache.selected)
+        if (self.audio_advantages is None or self.audio_advantages.shape != (count,)
+                or not torch.isfinite(self.audio_advantages).all()):
+            raise ValueError("routed Fast requires finite audio row advantages")
+        if not slots or self.cache.stochastic != self.cache.selected:
+            raise ValueError("routed Fast requires selected stochastic CPS positions")
+        for name in ("video", "audio"):
+            selected = getattr(self.cache, name + "_selected")
+            logps = getattr(self.cache, "old_" + name + "_log_probs")
+            if (not selected or tuple(sorted(set(selected))) != selected
+                    or any(type(step) is not int or step not in self.cache.selected for step in selected)
+                    or logps is None or logps.shape != (count, slots)
+                    or logps.requires_grad or not torch.isfinite(logps).all()):
+                raise ValueError("routed Fast requires detached per-modality CPS replay caches")
+            for slot, step in enumerate(self.cache.selected):
+                if step not in selected and bool((logps[:, slot] != 0).any()):
+                    raise ValueError("inactive modality log probabilities must be zero placeholders")
+        if self.cache.selected != tuple(sorted(set(self.cache.video_selected) | set(self.cache.audio_selected))):
+            raise ValueError("routed Fast caches must be the modality selection union")
+        beta = self.reference_mse_beta
+        if isinstance(beta, bool) or not isinstance(beta, (int, float)) or not math.isfinite(beta) or beta < 0:
+            raise ValueError("reference_mse_beta must be finite and nonnegative")
+        if (beta > 0) != (self.reference_predictions is not None):
+            raise ValueError("positive reference_mse_beta requires cached reference predictions and vice versa")
+        if self.reference_predictions is not None:
+            if not isinstance(self.reference_predictions, tuple) or len(self.reference_predictions) != slots:
+                raise ValueError("reference predictions must match selected cached positions")
+            for reference, source in zip(self.reference_predictions, self.cache.states):
+                validate_state(reference, like=source)
+                for name in ("video", "audio"):
+                    if getattr(reference, name).requires_grad:
+                        raise ValueError("reference predictions must be detached")
+                    mask, source_mask = getattr(reference, name + "_mask"), getattr(source, name + "_mask")
+                    if (mask is None) != (source_mask is None) or (mask is not None and not torch.equal(mask, source_mask)):
+                        raise ValueError("reference prediction feature masks differ from cached states")
+        # Validate scalar clipping options before the first training forward.
+        clipped_grpo_loss(torch.zeros(1), torch.zeros(1), torch.zeros(1),
+                          ratio_clip=self.ratio_clip, advantage_clip=self.advantage_clip)
+
+    @property
+    def has_guidance(self):
+        return bool((self.advantages != 0).any() or (self.audio_advantages != 0).any())
+
+    @property
+    def has_reference(self):
+        return self.reference_mse_beta > 0
+
+    def __call__(self, items):
+        rows, slots, steps = _indices(items, self.cache)
+        state = gather_slots(self.cache.states, rows, slots).to(self.device)
+        following = gather_slots(self.cache.next_states, rows, slots).to(self.device)
+        sv, sa = [schedule[steps].to(self.device) for schedule in (self.cache.video_sigmas, self.cache.audio_sigmas)]
+        prediction = self.predict(state, sv, sa, rows.to(self.device))
+        validate_state(prediction, like=state)
+        reference = (None if self.reference_predictions is None else
+                     gather_slots(self.reference_predictions, rows, slots).to(self.device))
+        losses, diagnostics = [], {}
+        for name, sigma, schedule, advantages in (
+                ("video", sv, self.cache.video_sigmas, self.advantages),
+                ("audio", sa, self.cache.audio_sigmas, self.audio_advantages)):
+            selected = getattr(self.cache, name + "_selected")
+            active = torch.tensor([int(step) in selected for step in steps], device=self.device)
+            current = getattr(prediction, name).float()
+            mask = getattr(state, name + "_mask")
+            # Keep a zero-gradient connection to both output heads even when a
+            # physical microbatch contains only one modality's selected slots.
+            # This preserves the FSDP backward participation of inactive heads.
+            policy = current.flatten(1)[:, 0] * 0.
+            ratio, clip_fraction = torch.zeros_like(sigma), torch.zeros_like(sigma)
+            if bool(active.any()):
+                replay = h3_cps_transition(getattr(state, name)[active], current[active], sigma[active],
+                    schedule[steps[active.cpu()] + 1].to(self.device),
+                    observed=getattr(following, name)[active], noise_level=self.cache.noise_level,
+                    mask=None if mask is None else mask[active])
+                old = getattr(self.cache, "old_" + name + "_log_probs")[rows[active.cpu()], slots[active.cpu()]]
+                terms = clipped_grpo_loss(replay.log_prob, old.to(self.device),
+                    advantages[rows[active.cpu()]].to(self.device), ratio_clip=self.ratio_clip,
+                    advantage_clip=self.advantage_clip)
+                policy[active], ratio[active], clip_fraction[active] = (
+                    terms["per_item_loss"], terms["ratio"], terms["clip_fraction"])
+            reference_mse = torch.zeros_like(sigma)
+            if reference is not None:
+                valid = feature_mask(current, mask)
+                difference = torch.where(valid, current - getattr(reference, name).detach(), 0.)
+                reference_mse = torch.where(active, feature_mean(difference.square(), mask), 0.)
+            loss = policy + self.reference_mse_beta * reference_mse
+            # The update owner averages union slots. Restore each branch's own
+            # sample*selected-position mean before combining modalities equally.
+            losses.append(loss * len(self.cache.selected) / len(selected))
+            diagnostics.update({f"av/{name}_selected": active.float(), f"av/{name}_loss": loss,
+                f"av/{name}_policy_loss": policy, f"av/{name}_ratio": ratio,
+                f"av/{name}_clip_fraction": clip_fraction})
+            if self.has_reference:
+                diagnostics[f"av/{name}_reference_mse"] = reference_mse
+        _record_diagnostics(self, items, diagnostics)
+        return .5 * losses[0] + .5 * losses[1]
+
+
+@torch.no_grad()
+def prepare_routed_fast_objective(cache, predict, video_rewards, audio_rewards, groups, device, *,
+                                  ratio_clip=1e-4, advantage_clip=5., reference_mse_beta=0.,
+                                  reference_predictions=None):
+    """Accept frozen per-scorer-normalized routes without renormalizing again."""
+    validate_groups(groups, len(cache.endpoints), even=True)
+    return AVRoutedFastObjective(cache, predict, video_rewards.detach().float().cpu().clone(), device,
+        ratio_clip=ratio_clip, advantage_clip=advantage_clip,
+        audio_advantages=audio_rewards.detach().float().cpu().clone(),
+        reference_mse_beta=reference_mse_beta, reference_predictions=reference_predictions)
+
+
 @torch.no_grad()
 def select_nft_fresh_times(video_sigmas: torch.Tensor, rows: int, *, positions: int | None = None,
                            generator: torch.Generator) -> torch.Tensor:

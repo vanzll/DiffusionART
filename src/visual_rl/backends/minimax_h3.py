@@ -54,9 +54,9 @@ def validate_config(c):
         validate_post_training(post, c.sampling.steps)
         if "duration_frames" in post and c.sampling.frames != post["duration_frames"][0]:
             raise ConfigError("H3 sampling.frames must match the first duration bucket")
-        if (c.algorithm.name != "diffusionart" or c.training.timestep_selection != "configured"
+        if (c.algorithm.name not in {"diffusionart", "flow_grpo_fast"} or c.training.timestep_selection != "configured"
                 or c.sampling.samples_per_prompt != 8):
-            raise ConfigError("H3 post-training requires ART, K8, explicit dual selection and six reward group std")
+            raise ConfigError("H3 post-training requires ART/routed Fast, K8, explicit dual selection and six reward group std")
     weights = {**SHARED_WEIGHTS, "imagebind": .5} if post is not None else SHARED_WEIGHTS
     if set(c.reward.weights) != set(weights) or dict(c.reward.weights) != weights:
         raise ConfigError("H3 shared reward weights must explicitly be 1/1.5/.5/1/1; DeSync counted once")
@@ -112,7 +112,14 @@ def validate_config(c):
         if options["advantage_epsilon"] != 1e-4 or options["fresh_time"] != "shared_video_grid":
             raise ConfigError("H3 NFT uses routed group-center/global-std+1e-4 and shared video-grid fresh sigma")
     else:
-        if options != {"loss": {"ratio_clip": 1e-4, "advantage_clip": 5.}, "advantage_epsilon": 1e-4}:
+        if post is not None:
+            if (set(options) != {"loss", "post_training", "ratio_mode"}
+                    or options["ratio_mode"] != "per_modality"
+                    or set(options["loss"]) != {"ratio_clip", "advantage_clip", "reference_mse_beta"}
+                    or options["loss"]["ratio_clip"] != 1e-4 or options["loss"]["advantage_clip"] != 5.):
+                raise ConfigError("H3 routed Fast requires explicit per-modality ratio/clip and reference MSE")
+            _finite(options["loss"]["reference_mse_beta"], "reference_mse_beta")
+        elif options != {"loss": {"ratio_clip": 1e-4, "advantage_clip": 5.}, "advantage_epsilon": 1e-4}:
             raise ConfigError("H3 Fast requires its CPS PPO clip1e-4/advclip5 and explicit advantage epsilon")
     if c.evaluation.enabled and (not c.evaluation.manifest or not c.evaluation.manifest_sha256):
         raise ConfigError("H3 evaluation requires an explicitly hashed manifest")

@@ -37,6 +37,14 @@ def evaluation_step_directory(c, step):
     return f"step-{step:09d}" + (f"-frames-{c.sampling.frames:03d}" if mixed else "")
 
 
+def fast_innovation_seed(seed, attempt, rank):
+    """Private CPS randomness must not advance matched initial-noise sampling."""
+    if any(type(value) is not int or value < 0 for value in (seed, rank)) or type(attempt) is not int or attempt < 1:
+        raise ConfigError("routed Fast innovations require seed, one-based attempt and rank")
+    digest = hashlib.sha256(f"h3/routed-fast/cps/v1:{seed}:{attempt}:{rank}".encode()).digest()
+    return int.from_bytes(digest[:8], "big") & ((1 << 63) - 1)
+
+
 def validate_post_training(options, boundaries):
     if (not isinstance(options, dict) or set(options) - (set(POST_TRAINING) | DURATION_OPTIONS)
             or not set(POST_TRAINING) <= set(options)

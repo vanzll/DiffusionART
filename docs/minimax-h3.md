@@ -583,6 +583,42 @@ of checkpoint retention.
 The five-scorer ART/NFT/Fast configurations share the new inference defaults;
 their reward and optimizer semantics are unchanged.
 
+### Matched routed Flow-GRPO Fast
+
+`configs/examples/minimax_h3_fast_routed_posttrain_full_32gpu.yaml` inherits
+the six-reward ART post-training recipe. Model, data, canvas, duration rotation,
+P32/K8, disjoint half-K U2, physical microbatches, optimizer, reference MSE,
+checkpoint retention and three-duration evaluation are identical. The explicit
+algorithm variant is `flow_grpo_fast` with `ratio_mode: per_modality`.
+
+It draws the **same** two video positions from the first15 and two audio
+positions from the first10 using the shared selection function and seed/attempt
+protocol. Each branch receives CPS noise only at its own selected positions;
+joint forwards still use the original paired states and sigmas. Extra CPS
+innovations use a private seed/attempt/rank RNG, leaving the matched initial
+noise generator unchanged. Unselected transitions retain native zero-noise CPS
+arithmetic. Evaluation remains the complete deterministic ODE grid.
+
+For each modality, replay the cached next state to obtain H3's native
+negative-valid-feature-MSE CPS surrogate, compute its ratio against that
+modality's cached rollout surrogate, and apply PPO clipping independently
+(`ratio_clip=1e-4`, `advantage_clip=5`). Use the already normalized and weighted
+six-reward route directly, without a second global or group std. Average each
+branch over its own two selected positions, then combine video/audio equally.
+Inactive positions contribute no branch loss. Add the same raw pretrained
+velocity MSE with coefficient0.001 independently of PPO clipping. This is a
+**routed high-noise Fast variant**; it retains CPS stochastic transitions and
+the clipped surrogate objective, rather than replacing them with ART's ODE
+rollout or covariance loss. The original shared-ratio, contiguous-window Fast
+recipes remain available unchanged.
+
+`av/video_ratio`, `av/audio_ratio` and their clip fractions distinguish the
+branches. Existing per-duration reward, reference-MSE, gradient, time and memory
+metrics also apply. PPO's initial scalar loss can be near zero for centered
+advantages; assess finite updates and component rewards rather than comparing
+its absolute loss value with ART's MSE loss. Real full32 memory/throughput
+acceptance is a separate runtime check.
+
 ### Bind assets and evaluation
 
 The new reward manifest extends the seven original asset entries with the

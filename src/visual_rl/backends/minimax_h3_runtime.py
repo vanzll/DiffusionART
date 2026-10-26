@@ -33,6 +33,7 @@ from ..training.audio_video_objectives import (
     prepare_art_objective,
     prepare_fast_objective,
     prepare_nft_objective,
+    prepare_routed_fast_objective,
     route_rewards,
     select_nft_fresh_times,
 )
@@ -53,6 +54,7 @@ from .minimax_h3_posttraining import (
     duration_config,
     duration_frames,
     evaluation_step_directory,
+    fast_innovation_seed,
     rollout_config,
     selected_positions,
 )
@@ -205,10 +207,19 @@ def collect(parts, c, predict, noise, sigmas, session, generator, *, rollout_ind
     elif not evaluation and c.algorithm.name == "diffusionart" and c.training.timestep_selection != "configured":
         options["selected"] = art_training_positions(c.training, (), seed=c.seed, attempt=rollout_index + 1)
     if not evaluation and c.algorithm.name == "flow_grpo_fast":
-        positions = select_fast_window(len(sigmas[0]) - 1, rollout_index=rollout_index,
-            seed=c.sampling.options["window_seed"], size=c.sampling.options["window_size"],
-            window_range=tuple(c.sampling.options["window_range"]))
-        options.update(selected=positions, stochastic=positions, innovations=_innovations(noise, positions, generator),
+        if c.algorithm.options.get("post_training") is not None:
+            positions = options["selected"]
+            # Initial noises retain the same generator stream as matched ART.
+            # Extra CPS innovations have private, reproducible per-rank seeds.
+            innovations_generator = torch.Generator().manual_seed(
+                fast_innovation_seed(c.seed, rollout_index + 1, session.identity.rank))
+            options["modality_stochastic"] = selections
+        else:
+            positions = select_fast_window(len(sigmas[0]) - 1, rollout_index=rollout_index,
+                seed=c.sampling.options["window_seed"], size=c.sampling.options["window_size"],
+                window_range=tuple(c.sampling.options["window_range"]))
+            innovations_generator = generator
+        options.update(selected=positions, stochastic=positions, innovations=_innovations(noise, positions, innovations_generator),
             noise_level=c.sampling.options["noise_level"], unselected_kind="cps_zero_noise")
     elif evaluation or c.algorithm.name == "diffusionnft":
         options["selected"] = ()
@@ -340,19 +351,23 @@ def _prepare_objective(c, parts, cache, predict, local_scores, population, group
     else:
         local = route_rewards(local_scores.components)
         global_routes = route_rewards(population.components)
+    reference_predictions = None
+    if reference is not None:
+        from .minimax_h3_reference import prepare_reference_predictions
+        _active_policy(parts, session)
+        # No live backward graph exists here. Complete all frozen-policy
+        # collective forwards, then restore current shards before U2.
+        with reference.use_reference(session):
+            reference_predictions = prepare_reference_predictions(
+                cache, predict, session.device, c.training.microbatch)
     if c.algorithm.name == "diffusionart":
-        reference_predictions = None
-        if reference is not None:
-            from .minimax_h3_reference import prepare_reference_predictions
-            _active_policy(parts, session)
-            # No live backward graph exists here. Complete all frozen-policy
-            # collective forwards, then restore current shards before U2.
-            with reference.use_reference(session):
-                reference_predictions = prepare_reference_predictions(
-                    cache, predict, session.device, c.training.microbatch)
         return session.local("AV ART complete-group objective", lambda: prepare_art_objective(cache, predict,
             local["video"], local["audio"], groups, session.device, covariance_options=c.algorithm.options["covariance"],
             loss_options=c.algorithm.options["loss"], reference_predictions=reference_predictions))
+    if c.algorithm.name == "flow_grpo_fast" and post is not None:
+        return session.local("AV routed Fast complete-group objective", lambda: prepare_routed_fast_objective(
+            cache, predict, local["video"], local["audio"], groups, session.device,
+            reference_predictions=reference_predictions, **c.algorithm.options["loss"]))
     if nft is not None:
         def prepare():
             times = select_nft_fresh_times(cache.video_sigmas, len(cache.endpoints), generator=generator)
