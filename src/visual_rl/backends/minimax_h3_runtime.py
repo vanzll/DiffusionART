@@ -749,7 +749,9 @@ def _run(session, c, prompts, resume, api, *, resume_rewind, evaluate_only):
             if checkpoint_due:
                 event("checkpoint_begin", optimizer_steps=step)
                 clock.tick()
-                save(root / "checkpoints", progress=progress, keep_last=c.runtime.checkpoint_keep, **checkpoint)
+                from .minimax_h3_checkpoint_admission import checkpoint_admission
+                with checkpoint_admission(session, root, step):
+                    save(root / "checkpoints", progress=progress, keep_last=c.runtime.checkpoint_keep, **checkpoint)
                 event("checkpoint_complete", optimizer_steps=step)
             if eval_due and post:
                 evaluate(session, c, parts, validation, step, root)
