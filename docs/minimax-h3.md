@@ -6,6 +6,40 @@ results. CPU tests and upstream runs do not establish real-weight GPU acceptance
 The first version excludes FL2VA, Ref2VA and sequence parallelism. It uses the
 guidance-distilled transformer without an unconditional CFG forward.
 
+## Shared inference protocol
+
+All H3 examples inherit [one inference profile](../configs/inference/minimax_h3.yaml):
+**1344×768, 124 frames at 24 fps, 50 sigma boundaries / 49 denoiser forwards**, video
+`shift=12` and audio `shift=3`. This matches the unaccelerated workload in the
+[reference inference recipe](https://recipes.vllm.ai/MiniMaxAI/MiniMax-H3), with the
+[native Diffusers schedule semantics](https://huggingface.co/docs/diffusers/main/en/api/pipelines/minimax_h3#two-schedulers).
+The released transformer is CFG-distilled: `guidance_scale=1` means one conditional
+forward, with no extra unconditional pass or acceleration LoRA.
+
+Rollout and evaluation use the same full grid and canvas. Evaluation leaves
+`sampling_steps`, `height` and `width` unset so it follows rollout settings,
+including explicit overrides; selecting sparse training positions does not
+shorten generation. ART and NFT generate deterministic ODE trajectories.
+FlowGRPO Fast retains its algorithm's three-position CPS stochastic window
+within its rollout; evaluation remains deterministic ODE. Its CPS rollout is
+therefore not claimed identical to reference inference. The configured Fast
+candidate window remains `[0,8)` within the new 49-transition trajectory; it is
+not silently expanded to the entire grid.
+
+Text uses the pinned checkpoint's tokenizer with `add_special_tokens=False`
+and the native `get_qwen3vl_prompt_embeds`, taking the unnormalized Qwen3-VL
+layer 50 hidden state. No chat template is added. Prompt expansion/Context-IR
+is external preprocessing and is not silently applied to the training data.
+Video/audio VAEs, latent normalization and 24 fps / 32 kHz stereo output are unchanged.
+
+The previous 384×256/10-boundary profile was a low-cost integration setting.
+The new 50-boundary/768p profile changes generation cost and activation memory;
+physical microbatches may need hardware-specific tuning. Keep P/K, optimizer
+windows and loss denominators fixed when tuning execution chunks. Existing
+runs retain their frozen configs; use those configs for checkpoint continuation,
+not these updated examples. Matching inference settings does not establish
+numerical equivalence of the complete real-weight pipeline by itself.
+
 ## Separate native environment
 
 The pinned Diffusers source requires **Python >=3.11**. Keep existing Python3.10
@@ -299,21 +333,21 @@ export H3_NPROC=8
 
 Two additional profiles inherit the same ART full scientific recipe. They keep
 P32/K8 (256 trajectories per rollout), complete-prompt covariance, two disjoint
-updates of 128 trajectories, and eight training positions per trajectory.
+updates of 128 trajectories, and 48 nonfinal training positions per trajectory.
 Only the name, output directory, physical microbatches and deployment notes
 differ. A microbatch is an execution chunk, not an additional optimizer update.
 
 | Profile | Launch topology | Rollout microbatch | Update microbatch |
 | --- | --- | --- | --- |
-| `minimax_h3_art_full_8gpu.yaml` | 1 node x 8 FSDP ranks | 4 | 2 |
-| `minimax_h3_art_full_32gpu.yaml` | 4 nodes x 8 FSDP ranks | 8 | 8 |
+| `minimax_h3_art_full_8gpu.yaml` | 1 node x 8 FSDP ranks | 1 | 1 |
+| `minimax_h3_art_full_32gpu.yaml` | 4 nodes x 8 FSDP ranks | 1 | 1 |
 
-These are starting values to tune on the actual hardware. The 32-GPU values
-match the physical microbatches of the prior Hunyuan FIRST1/FIRST2 experiments;
-they do not assert matching model, resolution or total training cost. The
-8-GPU profile deliberately permits smaller microbatches. YAML does not reserve
-or count GPUs: the launcher determines the world size. Both profiles use
-full-world FSDP (`shard_degree=world_size`, `replicate_degree=1`), with no TP/SP;
+These are conservative starting values for the 768p canvas, not measured
+maximum batches or memory-fit guarantees. Tune rollout and update microbatches
+upward independently on the actual hardware while retaining P32/K8/U2. Values
+previously measured on the 256p canvas do not establish 768p activation memory.
+YAML does not reserve or count GPUs: the launcher determines the world size.
+Both profiles use full-world FSDP (`shard_degree=world_size`, `replicate_degree=1`), with no TP/SP;
 32 ranks therefore communicate parameter shards across nodes. Extra FSDP ranks
 reduce model-state memory, not the activation memory of one physical batch.
 
@@ -473,14 +507,18 @@ records. The existing `track.md` holds actual evidence and remaining limits.
 `configs/examples/minimax_h3_art_posttrain_full_32gpu.yaml` is a full-parameter
 T2AV recipe with P32/K8, two disjoint half-K updates, BF16 computation and FP32
 FSDP master parameters. It uses the same fixed model, optimizer and native
-video-shift12/audio-shift3 schedule as the full32 example. Sampling remains
-10 sigma boundaries and nine actual denoising transitions, with CFG1.
+video-shift12/audio-shift3 schedule as the full32 example. Rollout and eval both
+use the shared 1344×768, 50-boundary/49-transition profile, with CFG1.
 
 Each rollout independently draws two video positions from `[0,1,2,3]` and two
 audio positions from `[0,1,2]`, without replacement. The pairs are chronological
-and shared across every rank, sample and both updates. A private seed/attempt/
-modality RNG leaves generation RNG untouched. Joint forwards replay the original
-paired video/audio states at the union of positions; each output contributes
+and shared across every rank, sample and both updates. The candidate indices
+remain fixed when the inference grid changes: at 50 boundaries, video positions
+0–3 have sigma 1.000000, 0.998267, 0.996466, 0.994595; audio positions 0–2 have
+sigma 1.000000, 0.993103, 0.986014. These are narrower high-noise regions than
+the previous 10-boundary recipe; the old sigma intervals are not preserved.
+A private seed/attempt/modality RNG leaves generation RNG untouched. Joint
+forwards replay the original paired video/audio states at the union of positions; each output contributes
 loss only when that modality selected the position. Each modality averages over
 its own two positions before the final equal-weight video/audio mean. The union
 can contain two to four positions; it is not a Cartesian product of independently
@@ -497,7 +535,8 @@ component's sample std (`correction=1`) plus `1e-4`, then route:
 Constant components give zero signal. Statistics are frozen before U2 splitting;
 evaluation uses single-sample original scorer values, never K8 normalization.
 Video/audio covariance, RMS, corrective mask and feature means remain separate.
-The original five-scorer ART/NFT/Fast configurations retain their existing behavior.
+The five-scorer ART/NFT/Fast configurations share the new inference defaults;
+their reward and optimizer semantics are unchanged.
 
 ### Bind assets and evaluation
 

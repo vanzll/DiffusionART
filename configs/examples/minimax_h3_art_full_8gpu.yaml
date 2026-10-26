@@ -1,12 +1,12 @@
-# One 8-GPU node. Conservative starting microbatches; tune on the actual GPUs.
+# One 8-GPU node. Start at physical batch one for native 768p activations.
 extends: minimax_h3_art_full.yaml
 name: minimax-h3-art-full-8gpu
 sampling:
-  microbatch: 4
+  microbatch: 1
 training:
-  microbatch: 2
+  microbatch: 1
 runtime:
   output_dir: outputs/minimax-h3-art-full-8gpu
 provenance:
   deployment: 1 node x 8 ranks, full-world FSDP shard degree 8, no SP/TP
-  microbatch_policy: starting rollout4/update2; tune independently without changing P32/K8/U2
+  microbatch_policy: native 768p starts rollout1/update1; tune upward without changing P32/K8/U2

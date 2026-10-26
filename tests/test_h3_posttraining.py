@@ -171,7 +171,7 @@ def test_public_recipe_contract_and_default_config_identity(tmp_path, monkeypatc
     validate_config(config)
     assert config.evaluation.every_rollouts == 50
     assert config.runtime.checkpoint_every == 50 and config.runtime.checkpoint_keep == 2
-    assert config.sampling.microbatch == config.training.microbatch == 8
+    assert config.sampling.microbatch == config.training.microbatch == 1
     assert len(config.reward.weights) == 6 and config.training.max_updates == 400
     legacy = load_config(root / 'configs/examples/minimax_h3_art_full_32gpu.yaml')
     validate_config(legacy)

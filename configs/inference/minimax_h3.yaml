@@ -1,0 +1,20 @@
+# Shared native H3 T2AV inference settings for rollout and evaluation.
+# Reference workload: https://recipes.vllm.ai/MiniMaxAI/MiniMax-H3
+# Native grid semantics: N sigma boundaries include zero; N-1 model forwards.
+sampling:
+  steps: 50
+  guidance_scale: 1.0
+  height: 768
+  width: 1344
+  frames: 124
+  fps: 24.0
+  options:
+    video_shift: 12.0
+    audio_shift: 3.0
+evaluation:
+  # Inherit the actual rollout grid and canvas, including explicit overrides.
+  sampling_steps: null
+  height: null
+  width: null
+  fps: 24.0
+  reward_fps: 24.0

@@ -1,12 +1,12 @@
-# Four 8-GPU nodes. Match the prior Hunyuan rollout/update microbatch of eight.
+# Four 8-GPU nodes. Start at physical batch one for native 768p activations.
 extends: minimax_h3_art_full.yaml
 name: minimax-h3-art-full-32gpu
 sampling:
-  microbatch: 8
+  microbatch: 1
 training:
-  microbatch: 8
+  microbatch: 1
 runtime:
   output_dir: outputs/minimax-h3-art-full-32gpu
 provenance:
   deployment: 4 nodes x 8 ranks, full-world FSDP shard degree 32, no SP/TP
-  microbatch_policy: starting rollout8/update8; tune independently without changing P32/K8/U2
+  microbatch_policy: native 768p starts rollout1/update1; tune upward without changing P32/K8/U2

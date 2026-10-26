@@ -1,4 +1,5 @@
-# Bounded software integration recipe; six-path pretrained GPU acceptance pending.
+# Native reference inference; optimizer budgets remain bounded integration defaults.
+extends: ../inference/minimax_h3.yaml
 name: minimax-h3-fast-full-integration
 task: t2av
 seed: 42
@@ -37,18 +38,10 @@ data:
   sha256: ${H3_TRAIN_SHA256}
   shuffle: true
 sampling:
-  steps: 10
   prompts_per_rollout: 32
   samples_per_prompt: 8
   microbatch: 1
-  guidance_scale: 1.0
-  height: 256
-  width: 384
-  frames: 124
-  fps: 24.0
   options:
-    video_shift: 12.0
-    audio_shift: 3.0
     noise_level: 0.8
     window_size: 3
     window_range:
@@ -64,8 +57,6 @@ training:
   weight_decay: 0.0001
 evaluation:
   every_updates: 0
-  fps: 24.0
-  reward_fps: 24.0
 runtime:
   output_dir: outputs/minimax-h3-fast-full
   device: cuda
@@ -75,6 +66,6 @@ runtime:
 provenance:
   kind: software_integration_acceptance_not_paper_result
   learning_rate: 1e-5 shared software acceptance choice; not upstream Fast LoRA 3e-4
-  sampling_grid: source default 10 boundaries = 9 transitions
+  sampling_grid: native reference inference, 50 sigma boundaries = 49 transitions
   nft_semantics: repository routed mirror/slow-EMA; not upstream original OmniNFT
     config

@@ -24,7 +24,6 @@ evaluation:
   manifest: ${H3_EVAL_MANIFEST}
   manifest_sha256: ${H3_EVAL_SHA256}
   seed: 42
-  sampling_steps: 10
   retain_all: true
 runtime:
   output_dir: ${H3_OUTPUT_DIR}

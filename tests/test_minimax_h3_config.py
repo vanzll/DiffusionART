@@ -33,7 +33,7 @@ def test_six_public_recipes_are_offline_valid(bindings, algo, mode):
     c = recipe(algo, mode)
     assert get_backend(c).name == 'minimax_h3'
     assert updates_per_rollout(c) == (1 if algo == 'nft' else 2)
-    assert c.sampling.steps - 1 == 9
+    assert c.sampling.steps - 1 == 49
     assert c.model.options['finetune']['mode'] == mode
     data, evaluation = load_datasets(c)
     assert evaluation is None
@@ -73,7 +73,7 @@ def test_geometry_uses_pinned_h3_vae_not_wan_rule(bindings):
         get_backend(recipe(overrides={'sampling':{'frames':121}}))
 
 
-@pytest.mark.parametrize('world,rollout,update', [(8, 4, 2), (32, 8, 8)])
+@pytest.mark.parametrize('world,rollout,update', [(8, 1, 1), (32, 1, 1)])
 def test_art_full_deployment_profiles_preserve_science_and_allow_microbatch_tuning(
         bindings, world, rollout, update):
     root = Path(__file__).resolve().parents[1]
