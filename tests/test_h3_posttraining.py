@@ -6,6 +6,7 @@ import json
 import random
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import torch
@@ -47,20 +48,47 @@ def setup(selected):
     return model, groups, objective
 
 
-def test_pairs_are_stateless_shared_and_do_not_advance_noise_rng():
+@pytest.mark.parametrize('video_pool,audio_pool', [(4, 3), (15, 10)])
+def test_pairs_are_stateless_shared_and_do_not_advance_noise_rng(video_pool, audio_pool):
     state = random.getstate()
     torch_state = torch.get_rng_state().clone()
-    draws = [selected_positions(42, step) for step in range(1, 21)]
-    assert draws == [selected_positions(42, step) for step in range(1, 21)]
+    pools = {'video_pool': video_pool, 'audio_pool': audio_pool}
+    draws = [selected_positions(42, step, **pools) for step in range(1, 21)]
+    assert draws == [selected_positions(42, step, **pools) for step in range(1, 21)]
     assert random.getstate() == state
     assert torch.equal(torch_state, torch.get_rng_state())
     assert len({d['video'] for d in draws}) > 1
     assert len({d['audio'] for d in draws}) > 1
     for draw in draws:
-        for name, pool in [('video', 4), ('audio', 3)]:
+        for name, pool in [('video', video_pool), ('audio', audio_pool)]:
             assert len(draw[name]) == 2
             assert tuple(sorted(set(draw[name]))) == draw[name]
             assert set(draw[name]) <= set(range(pool))
+    assert selected_positions(42, 1) == {'video': (1, 3), 'audio': (1, 2)}
+
+
+def test_runtime_uses_configured_pools_and_eval_preserves_complete_grid():
+    from visual_rl.backends.minimax_h3_posttraining import POST_TRAINING
+    from visual_rl.backends.minimax_h3_runtime import collect, sigma_schedules
+
+    post = {**POST_TRAINING, 'video_pool': 15, 'audio_pool': 10}
+    c = SimpleNamespace(seed=42, algorithm=SimpleNamespace(name='diffusionart',
+        options={'post_training': post}), sampling=SimpleNamespace(microbatch=2))
+    session = SimpleNamespace(distributed=True, device=torch.device('cpu'))
+    g = torch.Generator().manual_seed(42)
+    noise = AVState(torch.randn(2, 4, generator=g), torch.randn(2, 3, generator=g))
+    sigmas = sigma_schedules(50)
+    model = Policy()
+    cache = collect(None, c, model, noise, sigmas, session, g, rollout_index=3)
+    expected = selected_positions(42, 4, video_pool=15, audio_pool=10)
+    assert cache.video_selected == expected['video']
+    assert cache.audio_selected == expected['audio']
+    assert cache.selected == tuple(sorted(set(expected['video']) | set(expected['audio'])))
+    evaluation = collect(None, c, model, noise, sigmas, session, g,
+                         rollout_index=3, evaluation=True)
+    assert evaluation.selected == ()
+    torch.testing.assert_close(cache.endpoints.video, evaluation.endpoints.video, rtol=0, atol=0)
+    torch.testing.assert_close(cache.endpoints.audio, evaluation.endpoints.audio, rtol=0, atol=0)
 
 
 def test_six_rewards_normalize_complete_k8_before_routing():
@@ -173,14 +201,23 @@ def test_public_recipe_contract_and_default_config_identity(tmp_path, monkeypatc
     assert config.runtime.checkpoint_every == 50 and config.runtime.checkpoint_keep == 2
     assert config.sampling.microbatch == config.training.microbatch == 8
     assert len(config.reward.weights) == 6 and config.training.max_updates == 400
+    assert config.algorithm.options['post_training']['video_pool'] == 15
+    assert config.algorithm.options['post_training']['audio_pool'] == 10
     legacy = load_config(root / 'configs/examples/minimax_h3_art_full_32gpu.yaml')
     validate_config(legacy)
     assert 'every_rollouts' not in legacy.to_dict()['evaluation']
     assert legacy.fingerprint() == replace(legacy, evaluation=replace(legacy.evaluation, every_rollouts=0)).fingerprint()
-    bad = copy.deepcopy(config.to_dict())
-    bad['algorithm']['options']['post_training']['audio_pool'] = 4
-    with pytest.raises(ConfigError):
-        validate_config(load_config(root / 'configs/examples/minimax_h3_art_posttrain_full_32gpu.yaml', bad))
+    path = root / 'configs/examples/minimax_h3_art_posttrain_full_32gpu.yaml'
+    for invalid in (0, 1, 49, True):
+        bad = copy.deepcopy(config.to_dict())
+        bad['algorithm']['options']['post_training']['audio_pool'] = invalid
+        with pytest.raises(ConfigError, match='nonfinal'):
+            validate_config(load_config(path, bad))
+    with pytest.raises(ConfigError, match='nonfinal'):
+        validate_config(load_config(path, {'sampling': {'steps': 10}}))
+    # Frozen legacy configs retain their valid pools and unchanged selection sequence.
+    validate_config(load_config(path, {'sampling': {'steps': 10}, 'algorithm': {'options': {
+        'post_training': {'video_pool': 4, 'audio_pool': 3}}}}))
 
 
 def test_resume_repairs_final_eval_before_return_without_repeating_complete_eval(tmp_path, monkeypatch):

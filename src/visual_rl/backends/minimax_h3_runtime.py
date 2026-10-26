@@ -191,7 +191,9 @@ def collect(parts, c, predict, noise, sigmas, session, generator, *, rollout_ind
     _active_policy(parts, session)
     options = {}
     if not evaluation and c.algorithm.options.get("post_training") is not None:
-        selections = selected_positions(c.seed, rollout_index + 1)
+        post = c.algorithm.options["post_training"]
+        selections = selected_positions(c.seed, rollout_index + 1,
+            video_pool=post["video_pool"], audio_pool=post["audio_pool"])
         options.update(selected=tuple(sorted(set(selections["video"]) | set(selections["audio"]))),
                        modality_selected=selections)
     elif not evaluation and c.algorithm.name == "diffusionart" and c.training.timestep_selection != "configured":

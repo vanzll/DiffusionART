@@ -511,13 +511,14 @@ FSDP master parameters. It uses the same fixed model, optimizer and native
 video-shift12/audio-shift3 schedule as the full32 example. Rollout and eval both
 use the shared 1344×768, 50-boundary/49-transition profile, with CFG1.
 
-Each rollout independently draws two video positions from `[0,1,2,3]` and two
-audio positions from `[0,1,2]`, without replacement. The pairs are chronological
-and shared across every rank, sample and both updates. The candidate indices
-remain fixed when the inference grid changes: at 50 boundaries, video positions
-0–3 have sigma 1.000000, 0.998267, 0.996466, 0.994595; audio positions 0–2 have
-sigma 1.000000, 0.993103, 0.986014. These are narrower high-noise regions than
-the previous 10-boundary recipe; the old sigma intervals are not preserved.
+Each rollout independently draws two video positions from the first 15
+(`[0,14]`) and two audio positions from the first 10 (`[0,9]`), without replacement.
+The pairs are chronological and shared across every rank, sample and both
+updates. At 50 boundaries the video candidate pool covers sigma 0.967742–1;
+the audio pool covers sigma 0.930233–1. Candidate sizes come from
+`algorithm.options.post_training.video_pool` and `audio_pool`; they must contain
+at least two positions and exclude the final rollout transition. Frozen legacy
+configs declaring video4/audio3 retain their original selection sequence.
 A private seed/attempt/modality RNG leaves generation RNG untouched. Joint
 forwards replay the original paired video/audio states at the union of positions; each output contributes
 loss only when that modality selected the position. Each modality averages over

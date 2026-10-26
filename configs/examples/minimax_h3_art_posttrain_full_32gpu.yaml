@@ -3,8 +3,8 @@ name: minimax-h3-art-posttrain-full-32gpu
 algorithm:
   options:
     post_training:
-      video_pool: 4
-      audio_pool: 3
+      video_pool: 15
+      audio_pool: 10
       count: 2
       reward_normalization: prompt_group_std
       eval_gallery: true
@@ -32,4 +32,4 @@ runtime:
   log: wandb
   wandb:
     project: diffusionart-minimax-h3
-    name: minimax-h3-art-six-reward-v4a3-rand2-full32
+    name: minimax-h3-art-six-reward-v15a10-rand2-full32

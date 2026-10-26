@@ -49,11 +49,12 @@ def validate_config(c):
     if mo["conditioning_device"] != "cpu":
         raise ConfigError("first H3 integration keeps its 66.7GB conditioner on CPU")
     post = c.algorithm.options.get("post_training")
-    from .minimax_h3_posttraining import POST_TRAINING
-    if post is not None and (c.algorithm.name != "diffusionart" or post != POST_TRAINING
-                             or c.training.timestep_selection != "configured"
-                             or c.sampling.samples_per_prompt != 8 or c.sampling.steps < 6):
-        raise ConfigError("H3 post-training requires ART, K8, explicit dual selection and six reward group std")
+    from .minimax_h3_posttraining import validate_post_training
+    if post is not None:
+        validate_post_training(post, c.sampling.steps)
+        if (c.algorithm.name != "diffusionart" or c.training.timestep_selection != "configured"
+                or c.sampling.samples_per_prompt != 8):
+            raise ConfigError("H3 post-training requires ART, K8, explicit dual selection and six reward group std")
     weights = {**SHARED_WEIGHTS, "imagebind": .5} if post is not None else SHARED_WEIGHTS
     if set(c.reward.weights) != set(weights) or dict(c.reward.weights) != weights:
         raise ConfigError("H3 shared reward weights must explicitly be 1/1.5/.5/1/1; DeSync counted once")
