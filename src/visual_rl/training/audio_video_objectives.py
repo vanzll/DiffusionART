@@ -1,6 +1,7 @@
 """Routed AV ART/NFT and shared-ratio H3 Fast, with frozen complete groups."""
 from __future__ import annotations
 
+import math
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 
@@ -144,6 +145,7 @@ class AVARTObjective:
     options: dict = field(default_factory=dict)
     statistics: dict = field(default_factory=dict)
     diagnostics: dict = field(default_factory=dict)
+    reference_predictions: tuple[AVState, ...] | None = None
 
     @property
     def items(self):
@@ -153,6 +155,10 @@ class AVARTObjective:
     def has_guidance(self):
         return bool((self.video_magnitudes > 0).any() or (self.audio_magnitudes > 0).any())
 
+    @property
+    def has_reference(self):
+        return self.options.get("reference_mse_beta", 0.) > 0
+
     def __call__(self, items):
         rows, slots, steps = _indices(items, self.cache)
         state = gather_slots(self.cache.states, rows, slots).to(self.device)
@@ -160,6 +166,8 @@ class AVARTObjective:
         sv, sa = [schedule[steps].to(self.device) for schedule in (self.cache.video_sigmas, self.cache.audio_sigmas)]
         prediction = self.predict(state, sv, sa, rows.to(self.device))
         validate_state(prediction, like=state)
+        reference = (None if self.reference_predictions is None else
+                     gather_slots(self.reference_predictions, rows, slots).to(self.device))
         losses = []
         for name, sigma, schedule, magnitude in (("video", sv, self.cache.video_sigmas, self.video_magnitudes),
                                                 ("audio", sa, self.cache.audio_sigmas, self.audio_magnitudes)):
@@ -168,10 +176,12 @@ class AVARTObjective:
             x = getattr(state, name)
             dt = (schedule[steps + 1] - schedule[steps]).to(self.device)
             expanded = dt.reshape((-1,) + (1,) * (x.ndim - 1))
+            reference_options = ({} if reference is None else
+                                 {"reference_prediction": getattr(reference, name)})
             terms = _kernel_rows(art_loss, current, frozen, (x, getattr(state, name + "_mask")), sigma,
                 getattr(self.directions.select(rows), name).to(self.device), magnitude[rows].to(self.device),
                 state=x, ode_velocity_coefficient=dt, current_ode_mean=x + expanded * current,
-                old_ode_mean=x + expanded * frozen, **self.options)
+                old_ode_mean=x + expanded * frozen, **reference_options, **self.options)
             selected = getattr(self.cache, name + "_selected")
             active = torch.ones_like(sigma, dtype=torch.bool) if selected is None else torch.tensor(
                 [int(step) in selected for step in steps], device=sigma.device)
@@ -186,19 +196,39 @@ class AVARTObjective:
                     getattr(state, name + "_mask")).sqrt()}
             if selected is not None:
                 diagnostics[f"av/{name}_selected"] = active.float()
+            if self.has_reference:
+                diagnostics[f"av/{name}_reference_mse"] = torch.where(
+                    active, terms["per_item_reference_mse"], 0.)
             _record_diagnostics(self, items, diagnostics)
         return .5 * losses[0] + .5 * losses[1]
 
 
 @torch.no_grad()
 def prepare_art_objective(cache, predict, video_rewards, audio_rewards, groups, device, *,
-                          covariance_options=None, loss_options=None):
+                          covariance_options=None, loss_options=None, reference_predictions=None):
     inverse, group_count = validate_groups(groups, len(cache.endpoints), even=True)
     if not cache.selected or (len(cache.video_sigmas) - 2) in cache.selected:
         raise ValueError("ART must select positions and exclude the final transition")
     options = dict(loss_options or {})
-    if any(key.startswith("reference_") for key in options):
-        raise ValueError("AV objectives do not accept pretrained reference options")
+    if any(key.startswith("reference_") and key != "reference_mse_beta" for key in options):
+        raise ValueError("AV objectives accept only reference_mse_beta and explicit reference predictions")
+    beta = options.get("reference_mse_beta", 0.)
+    if isinstance(beta, bool) or not isinstance(beta, (int, float)) or not math.isfinite(beta) or beta < 0:
+        raise ValueError("reference_mse_beta must be finite and nonnegative")
+    if (beta > 0) != (reference_predictions is not None):
+        raise ValueError("positive reference_mse_beta requires cached reference predictions and vice versa")
+    if reference_predictions is not None:
+        if not isinstance(reference_predictions, tuple) or len(reference_predictions) != len(cache.selected):
+            raise ValueError("reference predictions must match selected cached positions")
+        for reference, source in zip(reference_predictions, cache.states):
+            validate_state(reference, like=source)
+            for name in ("video", "audio"):
+                if getattr(reference, name).requires_grad:
+                    raise ValueError("reference predictions must be detached")
+                mask = getattr(reference, name + "_mask")
+                source_mask = getattr(source, name + "_mask")
+                if (mask is None) != (source_mask is None) or (mask is not None and not torch.equal(mask, source_mask)):
+                    raise ValueError("reference prediction feature masks differ from cached states")
     directions, magnitudes, statistics = [], [], {}
     for name, rewards in (("video", video_rewards), ("audio", audio_rewards)):
         x = getattr(cache.endpoints, name).float().cpu()
@@ -223,7 +253,8 @@ def prepare_art_objective(cache, predict, video_rewards, audio_rewards, groups, 
         magnitudes.append(magnitude)
         statistics[name] = modality_stats
     direction_state = AVState(*directions, cache.endpoints.video_mask, cache.endpoints.audio_mask)
-    return AVARTObjective(cache, predict, direction_state, *magnitudes, device, options, statistics)
+    return AVARTObjective(cache, predict, direction_state, *magnitudes, device, options, statistics,
+                          reference_predictions=reference_predictions)
 
 
 @dataclass

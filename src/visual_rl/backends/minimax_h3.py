@@ -87,12 +87,14 @@ def validate_config(c):
         allowed = {"covariance", "loss", "exclude_final_step"} | ({"post_training"} if post is not None else set())
         if set(options) != allowed or options["exclude_final_step"] is not True:
             raise ConfigError("H3 ART requires covariance/loss and explicit final-transition exclusion")
-        if any(k.startswith("reference") for k in options["loss"]):
-            raise ConfigError("H3 integration has no pretrained reference regularizer")
+        beta = options["loss"].get("reference_mse_beta", 0.)
+        _finite(beta, "reference_mse_beta")
+        if any(k.startswith("reference") and k != "reference_mse_beta" for k in options["loss"]):
+            raise ConfigError("H3 reference regularization accepts only reference_mse_beta")
         import inspect
 
         from ..algorithms import art_loss, art_scalar_covariance
-        for kind, kernel, excluded in [("loss", art_loss, {"state", "ode_velocity_coefficient", "current_ode_mean", "old_ode_mean", "restore_anchor_mask", "reference_prediction", "reference_mse_beta"}),
+        for kind, kernel, excluded in [("loss", art_loss, {"state", "ode_velocity_coefficient", "current_ode_mean", "old_ode_mean", "restore_anchor_mask", "reference_prediction"}),
                                         ("covariance", art_scalar_covariance, {"latents", "rewards", "groups"})]:
             allowed_keys = {k for k, v in inspect.signature(kernel).parameters.items()
                             if v.kind == inspect.Parameter.KEYWORD_ONLY} - excluded
