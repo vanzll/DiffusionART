@@ -1,10 +1,10 @@
 """Bounded pipe RPC to a persistent, standard-library checkpoint I/O child."""
 import json
 import os
-from pathlib import Path
 import select
 import subprocess
 import time
+from pathlib import Path
 
 
 class CheckpointIO:

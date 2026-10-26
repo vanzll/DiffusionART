@@ -3,8 +3,8 @@ import hashlib
 import json
 import math
 import os
-from pathlib import Path
 import time
+from pathlib import Path
 
 
 def digest(value):

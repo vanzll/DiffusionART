@@ -1,14 +1,19 @@
 """Tiny-runtime boundary continuation; not actual H3 GPU evidence."""
-from dataclasses import replace
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 import torch
-
 from test_h3_mixed_reference_runtime import (
-    api, checkpoint, equal_nested, metric_frames, mixed_config, make_config_factory,
+    api,
+    checkpoint,
+    equal_nested,
+    make_config_factory,
+    metric_frames,
+    mixed_config,
 )
+
 from visual_rl.backends import minimax_h3_runtime as runtime
 from visual_rl.backends.minimax_h3_attempt_budget import AttemptBudget
 from visual_rl.backends.minimax_h3_posttraining import duration_frames, evaluation_frames

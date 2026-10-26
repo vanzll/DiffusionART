@@ -51,9 +51,8 @@ from .minimax_h3_execution import execution_policy
 from .minimax_h3_observability import BatchTrace, event
 from .minimax_h3_posttraining import (
     duration_config,
-    duration_frames,
-    evaluation_step_directory,
     evaluation_frames,
+    evaluation_step_directory,
     rollout_config,
     selected_positions,
 )

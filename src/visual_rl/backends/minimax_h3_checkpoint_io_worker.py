@@ -4,10 +4,11 @@ import hashlib
 import json
 import math
 import os
-from pathlib import Path
 import sys
 import tempfile
 import time
+from pathlib import Path
+
 
 def capacity_bytes(root, quota_paths):
     """Read quota counters before statvfs; include every configured ancestor."""

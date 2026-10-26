@@ -1,7 +1,7 @@
 """Operational optimizer boundary for one native attempt, never a new training budget."""
 import os
-from pathlib import Path
 import re
+from pathlib import Path
 
 from .minimax_h3_checkpoint_io import CheckpointIO
 

@@ -1,8 +1,8 @@
 import json
 import os
 import time
-from pathlib import Path
 from datetime import timedelta
+from pathlib import Path
 
 import pytest
 import torch
@@ -68,7 +68,8 @@ def test_insufficient_space_times_out_before_creating_writer_marker(tmp_path, mo
 
 def _worker(rank, directory, mode):
     from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
-    from visual_rl.training.fsdp_checkpoint import save_fsdp_checkpoint, load_fsdp_checkpoint
+
+    from visual_rl.training.fsdp_checkpoint import load_fsdp_checkpoint, save_fsdp_checkpoint
     from visual_rl.training.state import Progress
     root = Path(directory)
     torch.set_num_threads(1)
@@ -90,7 +91,8 @@ def _worker(rank, directory, mode):
             if mode == 'quota_failure':
                 request = admission.CheckpointIO.request
                 def probe(self, operation, **values):
-                    if rank and operation == 'quota':raise OSError('rank-local quota failure')
+                    if rank and operation == 'quota':
+                        raise OSError('rank-local quota failure')
                     return request(self, operation, **values)
                 admission.CheckpointIO.request = probe
             else:
