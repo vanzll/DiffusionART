@@ -665,6 +665,11 @@ def _run(session, c, prompts, resume, api, *, resume_rewind, evaluate_only):
         sigmas = sigma_schedules(c.sampling.steps, video_shift=c.sampling.options["video_shift"], audio_shift=c.sampling.options["audio_shift"])
         if validation is not None and resume is None:
             evaluate(session, c, parts, validation, 0, root)
+        if os.environ.get("H3_TRACE_ATTENTION_ONCE") == "1" and rank == 0:
+            from .minimax_h3_attention_trace import OneShotAttentionTrace
+            attention_trace = OneShotAttentionTrace(root, enabled=True)
+            attention_trace.install()
+            resources.callback(attention_trace.close)
         from .minimax_h3_attempt_budget import AttemptBudget
         budget = AttemptBudget(session, c, root, api.updates_per_rollout(c), progress.optimizer_steps)
         def publish_checkpoint():
