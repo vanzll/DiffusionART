@@ -56,15 +56,18 @@ def validate_media(media):
 class AudioVideoReward:
     """Sequential rowwise scoring, preserving prompt and modality identity."""
 
-    def __init__(self, models, *, device="cpu"):
+    def __init__(self, models, *, device="cpu", full_duration=False):
         if set(models) not in (set(COMPONENTS), set(SIX_COMPONENTS)):
             raise ValueError("supply exactly the five legacy AV scorers or all six scorers")
         self.components = SIX_COMPONENTS if "imagebind" in models else COMPONENTS
         self.models = dict(models)
         self.device = torch.device(device)
+        if type(full_duration) is not bool:
+            raise ValueError("full_duration must be boolean")
+        self.full_duration = full_duration
 
     @classmethod
-    def from_paths(cls, paths, *, device, expected_sha256=None):
+    def from_paths(cls, paths, *, device, expected_sha256=None, full_duration=False):
         required = {"video_align", "hpsv3", "audiobox", "clap", "desync",
                     "video_align_base", "desync_source"}
         if (set(paths) not in (required, required | {"imagebind", "imagebind_source"})
@@ -93,7 +96,7 @@ class AudioVideoReward:
             if "imagebind" in paths:
                 from ._native_av.imagebind import ImageBindModel
                 models["imagebind"] = ImageBindModel(paths["imagebind"], device, paths["imagebind_source"])
-            return cls(models, device=target_device)
+            return cls(models, device=target_device, full_duration=full_duration)
         except BaseException:
             for model in models.values():
                 model.close()
@@ -150,11 +153,26 @@ class AudioVideoReward:
                     ab = await audiobox.compute_score(extra_info=extra, reward_model=model,
                         axis_weights={"CE": 1., "CU": 1., "PC": -1., "PQ": 1.}, score_scale=.025)
                 with self._active("clap") as model:
-                    cl = await clap.compute_score(None, video, audio_prompts[i], extra,
-                        reward_model=model, score_scale=.5, score_offset=.5, score_min=0., score_max=1.)
+                    if self.full_duration:
+                        from .duration_windows import clap_window_seconds, score_windows
+                        cl = await score_windows(video, extra, clap_window_seconds(self.models["clap"]),
+                            lambda frames, info: clap.compute_score(None, frames, audio_prompts[i], info,
+                                reward_model=model, score_scale=.5, score_offset=.5, score_min=0., score_max=1.))
+                    else:
+                        cl = await clap.compute_score(None, video, audio_prompts[i], extra,
+                            reward_model=model, score_scale=.5, score_offset=.5, score_min=0., score_max=1.)
                 with self._active("desync") as model:
-                    ds = await desync.compute_score(solution_image=video, extra_info=extra,
-                        reward_model=model, fps=media.fps)
+                    if self.full_duration:
+                        from .duration_windows import score_windows
+                        # Derive the released scorer's fixed window, rather than
+                        # silently replacing it with the generation duration.
+                        window = desync._VIDEO_FRAMES / desync._TARGET_VIDEO_FPS
+                        ds = await score_windows(video, extra, window,
+                            lambda frames, info: desync.compute_score(solution_image=frames, extra_info=info,
+                                reward_model=model, fps=media.fps))
+                    else:
+                        ds = await desync.compute_score(solution_image=video, extra_info=extra,
+                            reward_model=model, fps=media.fps)
                 results = (va, hps, ab, cl, ds)
                 if "imagebind" in self.models:
                     from ._native_av import imagebind
