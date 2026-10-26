@@ -270,10 +270,12 @@ def test_resume_repairs_final_eval_before_return_without_repeating_complete_eval
     assert calls == [0, 2, 2]
 
 
-def test_completed_eval_audits_manifest_order_seeds_and_media(tmp_path):
+@pytest.mark.parametrize(('training_frames', 'eval_frames'), [(4, None), (8, 4)])
+def test_completed_eval_audits_manifest_order_seeds_and_media(tmp_path, training_frames, eval_frames):
     from types import SimpleNamespace
 
     from visual_rl.backends.minimax_h3_runtime import _completed_evaluation
+    from visual_rl.config import Component, Experiment, Reward, Runtime, Sampling, Training
     from visual_rl.evaluation import EvaluationManifest, SampleRecord
     from visual_rl.evaluation.audio_video_gallery import publish_av_gallery
     from visual_rl.rewards.scalar import weighted_score
@@ -295,10 +297,11 @@ def test_completed_eval_audits_manifest_order_seeds_and_media(tmp_path):
     (directory / 'manifest.json').write_text(manifest.to_json())
     (directory / 'summary.json').write_text('{"eval/optimizer_step":2}')
     publish_av_gallery(tmp_path, directory, records, 2)
-    config = SimpleNamespace(seed=42, evaluation=SimpleNamespace(seed=None),
-                             sampling=SimpleNamespace(frames=4, fps=24.),
-                             algorithm=SimpleNamespace(options={}),
-                             reward=SimpleNamespace(weights=dict.fromkeys(names, 1.)))
+    config = Experiment(name='eval-audit', task='t2av', seed=42,
+                        algorithm=Component('diffusionart'), model=Component('minimax_h3'),
+                        reward=Reward('fixture', dict.fromkeys(names, 1.)),
+                        sampling=Sampling(frames=training_frames, fps=24.), training=Training(),
+                        evaluation=Evaluation(frames=eval_frames), runtime=Runtime())
     dataset = SimpleNamespace(rows=rows)
     assert _completed_evaluation(config, dataset, 2, tmp_path)
     (directory / 'a.wav').unlink()
