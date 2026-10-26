@@ -130,6 +130,8 @@ class AVRollout:
     noise_level: float = .8
     video_selected: tuple[int, ...] | None = None
     audio_selected: tuple[int, ...] | None = None
+    old_video_log_probs: torch.Tensor | None = None
+    old_audio_log_probs: torch.Tensor | None = None
 
     @property
     def items(self):
@@ -150,13 +152,16 @@ def collect_av_rollout(predict: Callable, noise: AVState, video_sigmas: torch.Te
                        audio_sigmas: torch.Tensor, *, selected: Sequence[int] | None = None,
                        stochastic: Sequence[int] = (), innovations: Mapping[int, AVState] | None = None,
                        microbatch: int = 1, noise_level: float = .8, unselected_kind: str = "ode",
-                       device=None, modality_selected=None) -> AVRollout:
+                       device=None, modality_selected=None, modality_stochastic=None) -> AVRollout:
     """One joint forward/step with independent schedules; detached CPU caches.
 
     Caller activates NFT's old policy around collection. ART defaults to all
     transitions except the last. Fast supplies its selected stochastic window
     and uses cps_zero_noise for unselected transitions, including the last.
     Innovations are supplied upfront and independent of physical microbatching.
+    Explicit modality_stochastic selects independent noisy CPS positions and
+    requires the matching modality_selected replay union. Its inactive logp
+    entries are zero placeholders, not likelihoods of a noisy transition.
     """
     validate_state(noise)
     validate_schedules(video_sigmas, audio_sigmas)
@@ -181,6 +186,23 @@ def collect_av_rollout(predict: Callable, noise: AVState, video_sigmas: torch.Te
             raise ValueError("AV positions must be distinct valid transition indices")
     if stochastic and (not selected or not set(selected) <= set(stochastic)):
         raise ValueError("Fast replay positions must be stochastic")
+    noisy_by_modality = None
+    if modality_stochastic is not None:
+        if (not isinstance(modality_stochastic, Mapping)
+                or set(modality_stochastic) != {"video", "audio"}
+                or modality_selected is None):
+            raise ValueError("modality CPS requires explicit stochastic and replay positions for both modalities")
+        try:
+            noisy_by_modality = {name: tuple(modality_stochastic[name]) for name in ("video", "audio")}
+        except TypeError as error:
+            raise ValueError("modality CPS positions must be chronological integer sequences") from error
+        for positions in noisy_by_modality.values():
+            if (not positions or any(type(p) is not int or not 0 <= p < count - 1 for p in positions)
+                    or tuple(sorted(set(positions))) != positions):
+                raise ValueError("modality CPS positions must be chronological nonfinal integer transitions")
+        if (noisy_by_modality["video"] != video_selected or noisy_by_modality["audio"] != audio_selected
+                or stochastic != selected or unselected_kind != "cps_zero_noise"):
+            raise ValueError("modality CPS requires matching selected/stochastic unions and zero-noise unselected steps")
     innovations = {} if innovations is None else innovations
     if set(innovations) != set(stochastic):
         raise ValueError("supply exactly one frozen AV innovation per stochastic position")
@@ -198,6 +220,8 @@ def collect_av_rollout(predict: Callable, noise: AVState, video_sigmas: torch.Te
     states, velocities, following = [tuple(allocate() for _ in selected) for _ in range(3)]
     endpoints = allocate()
     logp = torch.empty((len(noise), len(selected)), dtype=torch.float32) if stochastic else None
+    modal_logp = ({name: torch.zeros_like(logp) for name in ("video", "audio")}
+                 if noisy_by_modality is not None else None)
     lookup = {step: slot for slot, step in enumerate(selected)}
     device = noise.video.device if device is None else torch.device(device)
     for start in range(0, len(noise), microbatch):
@@ -211,7 +235,8 @@ def collect_av_rollout(predict: Callable, noise: AVState, video_sigmas: torch.Te
             transitions = []
             for name, sigma, schedule in (("video", sv, video_sigmas), ("audio", sa, audio_sigmas)):
                 value, prediction = getattr(state, name), getattr(velocity, name)
-                if step in stochastic:
+                noisy = step in (stochastic if noisy_by_modality is None else noisy_by_modality[name])
+                if noisy:
                     result = h3_cps_transition(value, prediction, sigma, schedule[step + 1],
                         noise_level=noise_level, innovation=getattr(innovations[step].select(rows), name).to(value),
                         mask=getattr(state, name + "_mask"))
@@ -226,10 +251,19 @@ def collect_av_rollout(predict: Callable, noise: AVState, video_sigmas: torch.Te
                     for name in ("video", "audio"):
                         getattr(storage[slot], name)[rows.cpu()] = getattr(value, name).float().cpu()
                 if logp is not None:
-                    logp[rows.cpu(), slot] = (.5 * transitions[0].log_prob + .5 * transitions[1].log_prob).cpu()
+                    if modal_logp is None:
+                        logp[rows.cpu(), slot] = (.5 * transitions[0].log_prob + .5 * transitions[1].log_prob).cpu()
+                    else:
+                        for name, transition in zip(("video", "audio"), transitions):
+                            if step in noisy_by_modality[name]:
+                                modal_logp[name][rows.cpu(), slot] = transition.log_prob.cpu()
+                        logp[rows.cpu(), slot] = (.5 * modal_logp["video"][rows.cpu(), slot]
+                                                  + .5 * modal_logp["audio"][rows.cpu(), slot])
             state = next_state
         endpoints.video[rows.cpu()] = state.video.float().cpu()
         endpoints.audio[rows.cpu()] = state.audio.float().cpu()
     return AVRollout(endpoints, selected, video_sigmas.detach().float().cpu().clone(),
         audio_sigmas.detach().float().cpu().clone(), states, velocities, following, logp, stochastic, noise_level,
-        video_selected, audio_selected)
+        video_selected, audio_selected,
+        None if modal_logp is None else modal_logp["video"],
+        None if modal_logp is None else modal_logp["audio"])
