@@ -292,6 +292,7 @@ class Evaluation:
     sampling_steps: int | None = None
     height: int | None = None
     width: int | None = None
+    frames: int | None = None
     seed: int | None = None
     at_updates: tuple[int, ...] = ()
     shift: float | None = None
@@ -315,7 +316,7 @@ class Evaluation:
             raise ConfigError("evaluation.manifest_sha256 must be a SHA256")
         if self.sampling_steps is not None:
             _positive_int(self.sampling_steps, "evaluation.sampling_steps")
-        for key in ("height", "width"):
+        for key in ("height", "width", "frames"):
             if getattr(self, key) is not None:
                 _positive_int(getattr(self, key), f"evaluation.{key}")
         if self.seed is not None:

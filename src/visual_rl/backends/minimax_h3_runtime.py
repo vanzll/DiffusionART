@@ -53,6 +53,7 @@ from .minimax_h3_posttraining import (
     duration_config,
     duration_frames,
     evaluation_step_directory,
+    evaluation_frames,
     rollout_config,
     selected_positions,
 )
@@ -376,9 +377,10 @@ def _prepare_objective(c, parts, cache, predict, local_scores, population, group
 def evaluate(session, c, parts, dataset, step, root):
     """Evaluate each duration independently, preserving prompt/seed identities."""
     if "duration_frames" not in (c.algorithm.options.get("post_training") or {}):
-        return _evaluate_duration(session, c, parts, dataset, step, root)
+        workload = duration_config(c, evaluation_frames(c)[0])
+        return _evaluate_duration(session, workload, parts, dataset, step, root)
     results = {}
-    for frames in duration_frames(c):
+    for frames in evaluation_frames(c):
         workload = duration_config(c, frames)
         complete = session.primary("AV duration evaluation receipt", lambda: _completed_duration_evaluation(
             workload, dataset, step, root))
@@ -464,9 +466,9 @@ def _evaluate_duration(session, c, parts, dataset, step, root):
 
 def _completed_evaluation(c, dataset, step, root):
     if "duration_frames" not in (c.algorithm.options.get("post_training") or {}):
-        return _completed_duration_evaluation(c, dataset, step, root)
+        return _completed_duration_evaluation(duration_config(c, evaluation_frames(c)[0]), dataset, step, root)
     return all(_completed_duration_evaluation(duration_config(c, frames), dataset, step, root)
-               for frames in duration_frames(c))
+               for frames in evaluation_frames(c))
 
 
 def _completed_duration_evaluation(c, dataset, step, root):
@@ -643,7 +645,34 @@ def _run(session, c, prompts, resume, api, *, resume_rewind, evaluate_only):
                 evaluate(session, c, parts, validation, progress.optimizer_steps, root)
         sigmas = sigma_schedules(c.sampling.steps, video_shift=c.sampling.options["video_shift"], audio_shift=c.sampling.options["audio_shift"])
         if validation is not None and resume is None:
-            evaluate(session, c, parts, validation, 0, root)
+            source = os.environ.get("H3_EVAL0_SOURCE")
+            session.agree({"H3_eval0_source": source})
+            if source:
+                def reuse():
+                    from .minimax_h3_checkpoint_io import CheckpointIO
+                    io = CheckpointIO(timeout=120)
+                    try:
+                        return io.request('eval0_reuse', root=str(root), source=source,
+                            config=c.to_dict(), expected_assets=asset_identity.state_dict()['assets'])
+                    finally:
+                        io.close()
+                session.primary("H3 identified pretrained eval0 reuse", reuse)
+                event("evaluation_reused", optimizer_steps=0, prompts=len(validation.rows), source=source)
+            else:
+                evaluate(session, c, parts, validation, 0, root)
+        from .minimax_h3_attempt_budget import AttemptBudget
+        budget = AttemptBudget(session, c, root, api.updates_per_rollout(c), progress.optimizer_steps)
+
+        def publish_checkpoint():
+            event("checkpoint_begin", optimizer_steps=progress.optimizer_steps)
+            clock.tick()
+            from .minimax_h3_checkpoint_admission import checkpoint_admission
+            with checkpoint_admission(session, root, progress.optimizer_steps):
+                receipt = save(root / "checkpoints", progress=progress,
+                               keep_last=c.runtime.checkpoint_keep, **checkpoint)
+            event("checkpoint_complete", optimizer_steps=progress.optimizer_steps)
+            return receipt
+
         while progress.optimizer_steps < c.training.max_updates:
             model.train()
             if session.device.type == "cuda":
@@ -740,22 +769,23 @@ def _run(session, c, prompts, resume, api, *, resume_rewind, evaluate_only):
                     log.flush()
                 session.primary("AV metrics publication", publish_metrics)
             step = progress.optimizer_steps
-            checkpoint_due = actual and c.runtime.checkpoint_due(step, c.training.max_updates)
+            boundary_due = bool(actual and budget.should_yield(progress))
+            checkpoint_due = actual and c.runtime.checkpoint_due(step, c.training.max_updates) and not boundary_due
             eval_due = actual and validation is not None and c.evaluation.due(
                 step, c.training.max_updates, completed_rollouts=progress.completed_rollouts)
             post = c.algorithm.options.get("post_training") is not None
             if eval_due and not post:
                 evaluate(session, c, parts, validation, step, root)
             if checkpoint_due:
-                event("checkpoint_begin", optimizer_steps=step)
-                clock.tick()
-                from .minimax_h3_checkpoint_admission import checkpoint_admission
-                with checkpoint_admission(session, root, step):
-                    save(root / "checkpoints", progress=progress, keep_last=c.runtime.checkpoint_keep, **checkpoint)
-                event("checkpoint_complete", optimizer_steps=step)
+                publish_checkpoint()
             if eval_due and post:
                 evaluate(session, c, parts, validation, step, root)
             _publish_cost(session, c, root, clock)
+            if boundary_due:
+                receipt = publish_checkpoint()
+                result = _publish_cost(session, c, root, clock)
+                session.primary("H3 checkpoint boundary handoff", lambda: budget.publish(progress, receipt))
+                return result
         final = _publish_cost(session, c, root, clock)
         session.primary("AV completion", lambda: _atomic_json(root / "status.json", {"status": "completed",
             "kind": "minimax_h3_native_development", "config_sha256": c.fingerprint(), **final}))

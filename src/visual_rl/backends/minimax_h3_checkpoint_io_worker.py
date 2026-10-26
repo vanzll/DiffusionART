@@ -1,5 +1,6 @@
 """Standard-library-only persistent checkpoint I/O worker; owns its lock FD."""
 import fcntl
+import hashlib
 import json
 import math
 import os
@@ -90,6 +91,33 @@ class Worker:
 
     def dispatch(self, request):
         operation = request['operation']
+        if operation == 'eval0_reuse':
+            import importlib.util
+            spec = importlib.util.spec_from_file_location('h3_eval_reuse',
+                Path(__file__).with_name('minimax_h3_eval_reuse.py'))
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module.reuse_eval0(request, atomic_json)
+        if operation == 'boundary':
+            root = Path(request['root']).resolve()
+            receipt = Path(request['checkpoint']).resolve()
+            if not receipt.is_relative_to(root / 'checkpoints'):
+                raise ValueError('H3 handoff checkpoint escaped its output')
+            record = json.loads(receipt.read_text())
+            step = request['progress']['optimizer_steps']
+            saved_step = record.get('counts', {}).get('optimizer_steps', record.get('optimizer_step'))
+            if saved_step != step or record['config_sha256'] != request['config_sha256']:
+                raise ValueError('H3 boundary checkpoint identity differs')
+            if 'ranks' in record and len(record['ranks']) != request['world_size']:
+                raise ValueError('H3 boundary checkpoint topology differs')
+            destination = root / 'attempt-boundaries' / (request['nonce'] + '.json')
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            atomic_json(destination, dict(status='checkpoint_boundary_yield', attempt=request['nonce'],
+                checkpoint=str(receipt), checkpoint_sha256=hashlib.sha256(receipt.read_bytes()).hexdigest(),
+                config_sha256=request['config_sha256'], progress=request['progress'],
+                target_optimizer_updates=request['target_optimizer_updates'],
+                remaining_optimizer_updates=request['target_optimizer_updates'] - step, unix=time.time()))
+            return True
         if operation == 'init':
             # Every resolve/stat/read is deliberately inside this child.
             self.root = Path(request['root']).resolve()
