@@ -665,6 +665,18 @@ def _run(session, c, prompts, resume, api, *, resume_rewind, evaluate_only):
         sigmas = sigma_schedules(c.sampling.steps, video_shift=c.sampling.options["video_shift"], audio_shift=c.sampling.options["audio_shift"])
         if validation is not None and resume is None:
             evaluate(session, c, parts, validation, 0, root)
+        from .minimax_h3_attempt_budget import AttemptBudget
+        budget = AttemptBudget(session, c, root, api.updates_per_rollout(c), progress.optimizer_steps)
+        def publish_checkpoint():
+            event("checkpoint_begin", optimizer_steps=progress.optimizer_steps)
+            clock.tick()
+            from .minimax_h3_checkpoint_admission import checkpoint_admission
+            with checkpoint_admission(session, root, progress.optimizer_steps):
+                receipt = save(root / "checkpoints", progress=progress,
+                    keep_last=c.runtime.checkpoint_keep, **checkpoint)
+            event("checkpoint_complete", optimizer_steps=progress.optimizer_steps)
+            return receipt
+
         while progress.optimizer_steps < c.training.max_updates:
             model.train()
             if session.device.type == "cuda":
@@ -761,22 +773,23 @@ def _run(session, c, prompts, resume, api, *, resume_rewind, evaluate_only):
                     log.flush()
                 session.primary("AV metrics publication", publish_metrics)
             step = progress.optimizer_steps
-            checkpoint_due = actual and c.runtime.checkpoint_due(step, c.training.max_updates)
+            boundary_due = bool(actual and budget.should_yield(progress))
+            checkpoint_due = actual and c.runtime.checkpoint_due(step, c.training.max_updates) and not boundary_due
             eval_due = actual and validation is not None and c.evaluation.due(
                 step, c.training.max_updates, completed_rollouts=progress.completed_rollouts)
             post = c.algorithm.options.get("post_training") is not None
             if eval_due and not post:
                 evaluate(session, c, parts, validation, step, root)
             if checkpoint_due:
-                event("checkpoint_begin", optimizer_steps=step)
-                clock.tick()
-                from .minimax_h3_checkpoint_admission import checkpoint_admission
-                with checkpoint_admission(session, root, step):
-                    save(root / "checkpoints", progress=progress, keep_last=c.runtime.checkpoint_keep, **checkpoint)
-                event("checkpoint_complete", optimizer_steps=step)
+                publish_checkpoint()
             if eval_due and post:
                 evaluate(session, c, parts, validation, step, root)
             _publish_cost(session, c, root, clock)
+            if boundary_due:
+                receipt = publish_checkpoint()
+                result = _publish_cost(session, c, root, clock)
+                session.primary("H3 checkpoint boundary handoff", lambda: budget.publish(progress, receipt))
+                return result
         final = _publish_cost(session, c, root, clock)
         session.primary("AV completion", lambda: _atomic_json(root / "status.json", {"status": "completed",
             "kind": "minimax_h3_native_development", "config_sha256": c.fingerprint(), **final}))
