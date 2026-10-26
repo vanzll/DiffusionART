@@ -202,8 +202,10 @@ def test_untrusted_registry_disables_cleanup(tmp_path, writer, problem):
 
 
 @pytest.mark.parametrize("kind", ["ddp", "fsdp-local"])
-@pytest.mark.parametrize("unsafe", ["topology", "extra", "corrupt", "symlink", "incomplete"])
-def test_distributed_snapshot_safety_without_native_collectives(tmp_path, kind, unsafe):
+@pytest.mark.parametrize("unsafe", ["valid", "topology", "extra", "corrupt", "same_size_corrupt",
+                                    "symlink", "incomplete"])
+@pytest.mark.parametrize("hash_workers", [1, 8])
+def test_distributed_snapshot_safety_without_native_collectives(tmp_path, kind, unsafe, hash_workers):
     from visual_rl.training.distributed_checkpoint import _write
 
     def publish(token, topology, keep=1):
@@ -227,7 +229,7 @@ def test_distributed_snapshot_safety_without_native_collectives(tmp_path, kind, 
         checkpoint._atomic_json(tmp_path / "latest.json", {"manifest": f"{directory.name}/manifest.json"})
         retention.retain_checkpoints(tmp_path, receipt, keep_last=keep,
                                     identity={"kind": kind, "config_sha256": "a" * 64,
-                                              "topology": topology})
+                                              "topology": topology}, hash_workers=hash_workers)
         return receipt
 
     first = publish("1", {"world_size": 2, "members": [2, 3] if unsafe == "topology" else [0, 1]})
@@ -235,6 +237,11 @@ def test_distributed_snapshot_safety_without_native_collectives(tmp_path, kind, 
         (first.parent / "foreign.txt").write_text("not owned")
     elif unsafe == "corrupt":
         (first.parent / "rank-00001.pt").write_bytes(b"bad")
+    elif unsafe == "same_size_corrupt":
+        target = first.parent / "rank-00001.pt"
+        data = bytearray(target.read_bytes())
+        data[0] ^= 1
+        target.write_bytes(data)
     elif unsafe == "symlink":
         target = first.parent / "rank-00001.pt"
         outside = tmp_path / "outside.pt"
@@ -243,9 +250,43 @@ def test_distributed_snapshot_safety_without_native_collectives(tmp_path, kind, 
         target.symlink_to(outside)
     elif unsafe == "incomplete":
         (first.parent / "rank-00001.pt").unlink()
-    with pytest.warns(RuntimeWarning) if unsafe != "topology" else nullcontext():
+    with pytest.warns(RuntimeWarning) if unsafe not in {"topology", "valid"} else nullcontext():
         current = publish("2", {"world_size": 2, "members": [0, 1]})
-    assert first.exists() and current.exists()
+    assert first.exists() is (unsafe != "valid")
+    assert current.exists()
+
+
+def test_distributed_shard_hash_checks_overlap(tmp_path, monkeypatch):
+    from threading import Barrier
+
+    from visual_rl.training.distributed_checkpoint import _write
+
+    directory = tmp_path / ("step-000000001-" + "a" * 32)
+    directory.mkdir()
+    ranks = []
+    for rank in range(2):
+        record = _write(directory / f"rank-{rank:05d}.pt", {"rank": rank})
+        checkpoint._atomic_json(directory / f"rank-{rank:05d}.record.json", record)
+        ranks.append(record)
+    topology = {"world_size": 2}
+    receipt = directory / "manifest.json"
+    checkpoint._atomic_json(receipt, {"schema_version": 1, "kind": "fsdp-local",
+        "config_sha256": "a" * 64, "counts": {"optimizer_steps": 1},
+        "ranks": ranks, "layout": topology})
+    entry = {"receipt": f"{directory.name}/manifest.json", "sha256": checkpoint._digest(receipt),
+             "identity": {"kind": "fsdp-local", "config_sha256": "a" * 64, "topology": topology}}
+    barrier = Barrier(2)
+    original = retention._checked_file
+
+    def checked_together(path, record):
+        barrier.wait(timeout=3)
+        return original(path, record)
+
+    monkeypatch.setattr(retention, "_checked_file", checked_together)
+    actual, files = retention._snapshot(tmp_path, entry, hash_workers=2)
+    assert actual == receipt
+    assert len(files) == 5
+    assert all(path.exists() for path in files)
 
 
 def test_worker_is_single_bounded_daemon_and_coalesces_metadata(monkeypatch):

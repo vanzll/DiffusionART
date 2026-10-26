@@ -13,7 +13,9 @@ import re
 import stat
 import threading
 import warnings
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+from functools import partial
 from pathlib import Path
 
 _STEM = re.compile(r"step-[0-9]{9,}-[0-9a-f]{32}\Z")
@@ -113,7 +115,7 @@ def _checked_file(path, record):
         raise ValueError("retention payload integrity differs")
 
 
-def _snapshot(root, entry):
+def _snapshot(root, entry, *, hash_workers=1):
     """Return only exact owned files, after validating the entire snapshot."""
     from .checkpoint import _digest
 
@@ -158,14 +160,21 @@ def _snapshot(root, entry):
     pairs = [(f"rank-{rank:05d}", value) for rank, value in enumerate(record["ranks"])]
     if kind == "ddp":
         pairs.append(("shared", record["shared"]))
-    files = [receipt]
-    for prefix, value in pairs:
+    def checked_pair(pair):
+        prefix, value = pair
         payload = receipt.parent / (prefix + ".pt")
         metadata = receipt.parent / (prefix + ".record.json")
         _checked_file(payload, value)
         if _json(metadata) != value:
             raise ValueError("retention rank receipt differs")
-        files.extend([payload, metadata])
+        return payload, metadata
+
+    if hash_workers == 1:
+        verified = [checked_pair(pair) for pair in pairs]
+    else:
+        with ThreadPoolExecutor(max_workers=min(hash_workers, len(pairs))) as pool:
+            verified = list(pool.map(checked_pair, pairs))
+    files = [receipt, *(path for pair in verified for path in pair)]
     if {p.name for p in receipt.parent.iterdir()} != {p.name for p in files}:
         raise ValueError("retention directory contains unowned artifacts")
     return receipt, files
@@ -198,7 +207,7 @@ def _retention_lock(root):
         os.close(fd)
 
 
-def retain_checkpoints(root, receipt, *, identity, keep_last):
+def retain_checkpoints(root, receipt, *, identity, keep_last, hash_workers=1):
     """Advisory cleanup under a nonblocking per-root, cross-process flock.
 
     Both synchronous callers and the daemon participate. Busy roots are skipped;
@@ -207,14 +216,20 @@ def retain_checkpoints(root, receipt, *, identity, keep_last):
     if keep_last is None:
         return
     try:
+        if type(hash_workers) is not int or not 1 <= hash_workers <= 8:
+            raise ValueError("retention hash_workers must be an integer from 1 through 8")
         root = _safe_path(Path(root).absolute())
         with _retention_lock(root):
-            _retain_locked(root, receipt, identity=identity, keep_last=keep_last)
+            if hash_workers == 1:
+                _retain_locked(root, receipt, identity=identity, keep_last=keep_last)
+            else:
+                _retain_locked(root, receipt, identity=identity, keep_last=keep_last,
+                               hash_workers=hash_workers)
     except Exception as exc:
         _warn(exc)
 
 
-def _retain_locked(root, receipt, *, identity, keep_last):
+def _retain_locked(root, receipt, *, identity, keep_last, hash_workers=1):
     """Run only after successful latest publication; all errors are nonfatal.
 
     Newest means publication order, not largest step (a resumed run can rewind).
@@ -224,6 +239,8 @@ def _retain_locked(root, receipt, *, identity, keep_last):
         return
     try:
         from .checkpoint import _atomic_json, _digest
+
+        snapshot = _snapshot if hash_workers == 1 else partial(_snapshot, hash_workers=hash_workers)
 
         root = _safe_path(Path(root).absolute())
         receipt = _safe_path(Path(receipt).absolute())
@@ -243,7 +260,7 @@ def _retain_locked(root, receipt, *, identity, keep_last):
         if latest_name != current:
             raise ValueError("current checkpoint is not published latest")
         entry = {"receipt": current, "sha256": _digest(receipt), "identity": identity}
-        _snapshot(root, entry)
+        snapshot(root, entry)
         entries = [item for item in entries if item["receipt"] != current] + [entry]
         state = {"schema_version": 1, "root": str(root), "entries": entries}
         _atomic_json(registry, state)
@@ -252,7 +269,7 @@ def _retain_locked(root, receipt, *, identity, keep_last):
             if item["identity"] != identity:
                 continue
             try:
-                candidate, files = _snapshot(root, item)
+                candidate, files = snapshot(root, item)
                 eligible.append((item, candidate, files))
             except Exception as exc:
                 _warn(exc)
@@ -262,7 +279,7 @@ def _retain_locked(root, receipt, *, identity, keep_last):
                 continue
             try:
                 # Revalidate immediately before exact-file unlink; never recurse.
-                candidate, files = _snapshot(root, item)
+                candidate, files = snapshot(root, item)
                 # Hashing can be slow while training publishes a newer latest.
                 latest = _json(root / "latest.json")
                 if item["receipt"] in {current, latest.get("receipt"), latest.get("manifest")}:
