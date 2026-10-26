@@ -73,7 +73,7 @@ def test_geometry_uses_pinned_h3_vae_not_wan_rule(bindings):
         get_backend(recipe(overrides={'sampling':{'frames':121}}))
 
 
-@pytest.mark.parametrize('world,rollout,update', [(8, 1, 1), (32, 1, 1)])
+@pytest.mark.parametrize('world,rollout,update', [(8, 4, 2), (32, 8, 8)])
 def test_art_full_deployment_profiles_preserve_science_and_allow_microbatch_tuning(
         bindings, world, rollout, update):
     root = Path(__file__).resolve().parents[1]

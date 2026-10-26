@@ -339,13 +339,14 @@ differ. A microbatch is an execution chunk, not an additional optimizer update.
 
 | Profile | Launch topology | Rollout microbatch | Update microbatch |
 | --- | --- | --- | --- |
-| `minimax_h3_art_full_8gpu.yaml` | 1 node x 8 FSDP ranks | 1 | 1 |
-| `minimax_h3_art_full_32gpu.yaml` | 4 nodes x 8 FSDP ranks | 1 | 1 |
+| `minimax_h3_art_full_8gpu.yaml` | 1 node x 8 FSDP ranks | 4 | 2 |
+| `minimax_h3_art_full_32gpu.yaml` | 4 nodes x 8 FSDP ranks | 8 | 8 |
 
-These are conservative starting values for the 768p canvas, not measured
-maximum batches or memory-fit guarantees. Tune rollout and update microbatches
-upward independently on the actual hardware while retaining P32/K8/U2. Values
-previously measured on the 256p canvas do not establish 768p activation memory.
+These retain the established deployment microbatches. Changing the inference
+canvas or grid does not automatically reset them. Previous 256p acceptance does
+not establish 768p activation memory: tune rollout and update microbatches only
+from actual memory measurements or OOM evidence, retaining P32/K8/U2. The recipe
+does not silently reduce physical batches to one.
 YAML does not reserve or count GPUs: the launcher determines the world size.
 Both profiles use full-world FSDP (`shard_degree=world_size`, `replicate_degree=1`), with no TP/SP;
 32 ranks therefore communicate parameter shards across nodes. Extra FSDP ranks
