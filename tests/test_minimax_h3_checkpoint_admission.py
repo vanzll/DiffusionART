@@ -1,5 +1,6 @@
 import json
 import os
+import time
 from pathlib import Path
 from datetime import timedelta
 
@@ -8,9 +9,8 @@ import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
 
-from visual_rl.backends.minimax_h3_checkpoint_admission import (
-    _try_lock, capacity_bytes, checkpoint_admission,
-)
+from visual_rl.backends.minimax_h3_checkpoint_admission import checkpoint_admission
+from visual_rl.backends.minimax_h3_checkpoint_io_worker import _try_lock, capacity_bytes
 from visual_rl.training.distributed import DistributedSession, RankInfo
 
 
@@ -85,15 +85,27 @@ def _worker(rank, directory, mode):
                 with checkpoint_admission(session, root, 2):
                     raise AssertionError('mismatched configuration entered write')
             return
-        if mode == 'quota_failure':
+        if mode in ('quota_failure', 'quota_block'):
             import visual_rl.backends.minimax_h3_checkpoint_admission as admission
-            def probe(*args):
-                if rank:raise OSError('rank-local quota failure')
-                return 100
-            admission.capacity_bytes = probe
+            if mode == 'quota_failure':
+                request = admission.CheckpointIO.request
+                def probe(self, operation, **values):
+                    if rank and operation == 'quota':raise OSError('rank-local quota failure')
+                    return request(self, operation, **values)
+                admission.CheckpointIO.request = probe
+            else:
+                client = admission.CheckpointIO
+                admission.CheckpointIO = lambda: client(
+                    helper=root / 'block-quota.py' if rank else None, timeout=.5)
+            started = time.monotonic()
             with pytest.raises(RuntimeError, match='fresh quota failed'):
                 with checkpoint_admission(session, root, 2):
                     raise AssertionError('quota failure entered write')
+            if mode == 'quota_block':
+                elapsed = time.monotonic() - started
+                assert .4 <= elapsed < 5
+                (root / f'quota-block-rank-{rank}.json').write_text(json.dumps(
+                    dict(rank=rank, bounded_failure=True, seconds=elapsed, body_entered=False)))
             return
         model = FSDP(torch.nn.Linear(4, 4), device_id=torch.device('cpu'))
         optimizer = torch.optim.AdamW(model.parameters(), lr=.001)
@@ -121,7 +133,73 @@ def _worker(rank, directory, mode):
         dist.destroy_process_group()
 
 
-@pytest.mark.parametrize('mode', ['fsdp_roundtrip', 'env_mismatch', 'quota_failure'])
+@pytest.mark.parametrize('mode', ['fsdp_roundtrip', 'env_mismatch', 'quota_failure', 'quota_block'])
 def test_real_two_rank_collective_order_and_error_propagation(tmp_path, mode):
     options(tmp_path)
+    if mode == 'quota_block':
+        blocker(tmp_path / 'block-quota.py', 'statvfs')
     mp.spawn(_worker, args=(str(tmp_path), mode), nprocs=2, join=True)
+    if mode == 'quota_block':
+        assert all(json.loads((tmp_path / f'quota-block-rank-{rank}.json').read_text())[
+                   'bounded_failure'] for rank in range(2))
+
+
+def blocker(path, operation):
+    from visual_rl.backends import minimax_h3_checkpoint_io_worker as worker
+    injections = {
+        'resolve': "m.Path.resolve=lambda *a,**k: time.sleep(30)",
+        'statvfs': "m.os.statvfs=lambda *a,**k: time.sleep(30)",
+        'fsync': "m.os.fsync=lambda *a,**k: time.sleep(30)",
+        'marker': "old=m.Path.read_text\nm.Path.read_text=lambda p,*a,**k: time.sleep(30) if str(p).endswith('.state.json') else old(p,*a,**k)",
+        'open': "old=m.os.open\nm.os.open=lambda p,*a,**k: time.sleep(30) if str(p).endswith('writer.lock') else old(p,*a,**k)",
+    }
+    path.write_text("import importlib.util,time\n"
+        f"s=importlib.util.spec_from_file_location('io_worker',{worker.__file__!r})\n"
+        "m=importlib.util.module_from_spec(s);s.loader.exec_module(m)\n"
+        + injections[operation] + "\nm.main()\n")
+
+
+@pytest.mark.parametrize('operation', ['resolve', 'open', 'marker', 'fsync'])
+def test_actual_blocking_fs_call_is_bounded_outside_training_main(tmp_path, monkeypatch, operation):
+    import visual_rl.backends.minimax_h3_checkpoint_admission as admission
+    config = options(tmp_path)
+    (tmp_path / 'writer.lock.state.json').write_text('{"status":"committed"}')
+    script = tmp_path / 'blocked.py'
+    blocker(script, operation)
+    client = admission.CheckpointIO
+    monkeypatch.setattr(admission, 'CheckpointIO', lambda: client(helper=script, timeout=.5))
+    monkeypatch.setenv('H3_CHECKPOINT_ADMISSION_CONFIG', str(config))
+    session = DistributedSession(RankInfo(), torch.device('cpu'), False)
+    started = time.monotonic()
+    with pytest.raises(TimeoutError, match='I/O helper .* timed out'):
+        with checkpoint_admission(session, tmp_path, 2):
+            pytest.fail('blocked metadata IO must not enter the native save')
+    assert .4 <= time.monotonic() - started < 4
+
+
+def test_persistent_worker_holds_lock_through_body_and_commit(tmp_path, monkeypatch):
+    from visual_rl.backends.minimax_h3_checkpoint_io import CheckpointIO
+    config = options(tmp_path)
+    monkeypatch.setenv('H3_CHECKPOINT_ADMISSION_CONFIG', str(config))
+    session = DistributedSession(RankInfo(), torch.device('cpu'), False)
+    contender = CheckpointIO()
+    try:
+        contender.request('init', config=str(config), root=str(tmp_path), parent={'pid': os.getpid()})
+        with checkpoint_admission(session, tmp_path, 2):
+            marker = json.loads((tmp_path / 'writer.lock.state.json').read_text())
+            owner = marker['lock_owner']['pid']
+            assert owner != os.getpid()
+            os.kill(owner, 0)
+            assert contender.request('acquire') is False
+            directory = tmp_path / 'checkpoints/step-2'
+            directory.mkdir(parents=True)
+            (directory / 'manifest.json').write_text(json.dumps(dict(
+                counts={'optimizer_steps': 2}, ranks=[{'bytes': 1}])))
+            (directory.parent / 'latest.json').write_text('{"manifest":"step-2/manifest.json"}')
+            assert contender.request('acquire') is False
+        marker = json.loads((tmp_path / 'writer.lock.state.json').read_text())
+        assert marker['status'] == 'committed' and marker['lock_owner']['pid'] == owner
+        assert contender.request('acquire') is True
+        contender.request('release')
+    finally:
+        contender.close()
