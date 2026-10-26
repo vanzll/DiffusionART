@@ -296,6 +296,8 @@ def test_completed_eval_audits_manifest_order_seeds_and_media(tmp_path):
     (directory / 'summary.json').write_text('{"eval/optimizer_step":2}')
     publish_av_gallery(tmp_path, directory, records, 2)
     config = SimpleNamespace(seed=42, evaluation=SimpleNamespace(seed=None),
+                             sampling=SimpleNamespace(frames=4, fps=24.),
+                             algorithm=SimpleNamespace(options={}),
                              reward=SimpleNamespace(weights=dict.fromkeys(names, 1.)))
     dataset = SimpleNamespace(rows=rows)
     assert _completed_evaluation(config, dataset, 2, tmp_path)

@@ -225,7 +225,7 @@ def export(root, destination, *, follow_fd=None, source_record=None):
             for path, payload in media_reader.read():
                 try:
                     run.log({"eval/optimizer_step": payload["optimizer_step"],
-                             "eval/audio_video": _media_table(wandb, root, payload)})
+                             payload.get("metric_namespace", "eval") + "/audio_video": _media_table(wandb, root, payload)})
                     record["media_records"] = record.get("media_records", 0) + 1
                 except Exception as exc:
                     media_reader.failed(path, exc)

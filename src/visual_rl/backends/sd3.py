@@ -557,7 +557,7 @@ def evaluate(c, parts, dataset, step, root, *, indices=None, directory=None, pub
     return _publish_evaluation(c, dataset, step, root, directory, samples)
 
 
-def _publish_evaluation(c, dataset, step, root, directory, samples):
+def _publish_evaluation(c, dataset, step, root, directory, samples, *, metric_prefix="eval"):
     manifest = EvaluationManifest(
         optimizer_step=step,
         expected_sample_ids=tuple(r.sample_id for r in dataset.rows),
@@ -569,15 +569,15 @@ def _publish_evaluation(c, dataset, step, root, directory, samples):
         raise RuntimeError("evaluation artifacts incomplete")
     summary = {
         "eval/optimizer_step": step,
-        "eval/samples": len(samples),
-        "eval/reward": sum(s.scores.weighted for s in samples) / len(samples),
+        f"{metric_prefix}/samples": len(samples),
+        f"{metric_prefix}/reward": sum(s.scores.weighted for s in samples) / len(samples),
         "manifest": str((directory / "manifest.json").resolve()),
     }
     for space in ("raw", "fixed_normalized"):
         values = getattr(samples[0].scores, space)
         if values is not None:
             for key in values:
-                summary[f"eval/reward/{space}/{key}"] = sum(
+                summary[f"{metric_prefix}/reward/{space}/{key}"] = sum(
                     getattr(sample.scores, space)[key] for sample in samples
                 ) / len(samples)
     if samples[0].scores.diagnostics is not None:
@@ -585,8 +585,11 @@ def _publish_evaluation(c, dataset, step, root, directory, samples):
 
         diagnostics = {key: torch.tensor([s.scores.diagnostics[key] for s in samples])
                        for key in samples[0].scores.diagnostics}
-        summary.update({f"eval/diagnostics/{k}": v
+        summary.update({f"{metric_prefix}/diagnostics/{k}": v
                         for k, v in summarize_diagnostics(diagnostics).items()})
+    if metric_prefix != "eval":
+        summary.update({f"{metric_prefix}/frames": samples[0].framecount,
+                        f"{metric_prefix}/duration_seconds": samples[0].framecount / samples[0].fps})
     _atomic_json(directory / "summary.json", summary)
     _atomic_json(root / "evaluation/latest.json", {
         "optimizer_step": step,

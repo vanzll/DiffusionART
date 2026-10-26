@@ -8,6 +8,10 @@ algorithm:
       count: 2
       reward_normalization: prompt_group_std
       eval_gallery: true
+      duration_frames: [124, 243, 345]
+      full_duration_rewards: true
+    loss:
+      reference_mse_beta: 0.001
 reward:
   weights:
     video_align: 1.0
@@ -32,4 +36,4 @@ runtime:
   log: wandb
   wandb:
     project: diffusionart-minimax-h3
-    name: minimax-h3-art-six-reward-v15a10-rand2-full32
+    name: minimax-h3-art-six-reward-v15a10-mixed-duration-refmse1e-3-full32

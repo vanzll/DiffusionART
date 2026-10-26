@@ -15,6 +15,8 @@ All H3 examples inherit [one inference profile](../configs/inference/minimax_h3.
 [native Diffusers schedule semantics](https://huggingface.co/docs/diffusers/main/en/api/pipelines/minimax_h3#two-schedulers).
 The released transformer is CFG-distilled: `guidance_scale=1` means one conditional
 forward, with no extra unconditional pass or acceleration LoRA.
+The six-reward post-training recipe overrides the base frame count with the
+three-duration rotation described below; other examples retain 124 frames.
 
 Rollout and evaluation use the same full grid and canvas. Evaluation leaves
 `sampling_steps`, `height` and `width` unset so it follows rollout settings,
@@ -511,6 +513,17 @@ FSDP master parameters. It uses the same fixed model, optimizer and native
 video-shift12/audio-shift3 schedule as the full32 example. Rollout and eval both
 use the shared 1344×768, 50-boundary/49-transition profile, with CFG1.
 
+The default post-training recipe rotates **124, 243 and 345 frames** across
+completed rollouts (24 FPS: approximately 5.17, 10.13 and 14.38 seconds).
+All ranks and every sample of a prompt group use the same duration in a
+rollout. The rotation resumes from the completed-rollout counter without
+consuming generation RNG. These are equal rollout counts, not equal GPU time
+or video-token budgets. The pinned native pipeline aligns frames to `17n+5`
+and rejects aligned durations above 15 seconds; its longest accepted length
+is therefore 345 frames. Declare the ordered buckets through
+`algorithm.options.post_training.duration_frames`. Configurations without
+this option retain their fixed length.
+
 Each rollout independently draws two video positions from the first 15
 (`[0,14]`) and two audio positions from the first 10 (`[0,9]`), without replacement.
 The pairs are chronological and shared across every rank, sample and both
@@ -537,6 +550,36 @@ component's sample std (`correction=1`) plus `1e-4`, then route:
 Constant components give zero signal. Statistics are frozen before U2 splitting;
 evaluation uses single-sample original scorer values, never K8 normalization.
 Video/audio covariance, RMS, corrective mask and feature means remain separate.
+The default recipe also adds `algorithm.options.loss.reference_mse_beta: 0.001`.
+This is a pretrained-reference **velocity MSE regularizer**, rather than an
+exact probabilistic KL: compare current and frozen initial predictions on the
+same cached states, paired sigmas and text conditioning. Average valid features
+and each modality's two selected positions, then combine video/audio equally.
+The term is not sigma weighted or suppressed by the ART corrective mask.
+Frozen initial parameters are kept as rank-local CPU shards, briefly swapped
+in to cache no-grad reference predictions before any current-policy backward
+graph is built. Checkpoints include this immutable reference independently of
+current parameters; resumed training must not redefine it as the resumed model.
+This adds reference forwards, CPU storage and checkpoint size. Legacy recipes
+without the explicit coefficient load or forward no reference.
+
+`full_duration_rewards: true` accompanies the duration buckets. DeSync uses
+overlapping native 8-second windows spanning the whole clip; CLAP obtains its
+window limit from the loaded processor and uses the same coverage policy.
+Average native transformed window scores and raw diagnostics instead of summing
+them. Short clips retain their original scorer path. AudioBox's existing
+duration-weighted windows and the other scorers' full-span sampling are retained.
+
+Evaluation runs at step 0, every 50 completed rollouts, and the final update,
+using the same 32 held-out prompts and seed identities at **each** duration
+(96 AV clips per evaluation). Curves and audible media tables are separate:
+`eval/frames124/*`, `eval/frames243/*`, and `eval/frames345/*`. Each duration has
+its own manifest, summary and HTML gallery. Resume audits all three receipts
+and repairs missing buckets independently. Compare post-training improvements
+against the step-0 baseline within each duration. Save full training state every
+50 optimizer updates, retaining two checkpoints; evaluation media is independent
+of checkpoint retention.
+
 The five-scorer ART/NFT/Fast configurations share the new inference defaults;
 their reward and optimizer semantics are unchanged.
 

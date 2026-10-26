@@ -52,8 +52,11 @@ def test_reject_silent_semantics_changes(bindings, overrides):
         get_backend(recipe(overrides=overrides))
 
 
-def test_art_no_reference_or_forward_override(bindings):
-    for option in ['reference_mse_beta','reference_prediction','state','restore_anchor_mask']:
+def test_art_reference_is_explicit_and_forward_overrides_are_rejected(bindings):
+    default = recipe('art')
+    assert 'reference_mse_beta' not in default.algorithm.options['loss']
+    get_backend(recipe('art', overrides={'algorithm': {'options': {'loss': {'reference_mse_beta': .001}}}}))
+    for option in ['reference_prediction','state','restore_anchor_mask']:
         with pytest.raises(ConfigError):
             get_backend(recipe('art', overrides={'algorithm':{'options':{'loss':{option:1.}}}}))
 

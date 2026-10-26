@@ -52,6 +52,8 @@ def validate_config(c):
     from .minimax_h3_posttraining import validate_post_training
     if post is not None:
         validate_post_training(post, c.sampling.steps)
+        if "duration_frames" in post and c.sampling.frames != post["duration_frames"][0]:
+            raise ConfigError("H3 sampling.frames must match the first duration bucket")
         if (c.algorithm.name != "diffusionart" or c.training.timestep_selection != "configured"
                 or c.sampling.samples_per_prompt != 8):
             raise ConfigError("H3 post-training requires ART, K8, explicit dual selection and six reward group std")
@@ -189,7 +191,9 @@ def load_reward(c, device):
     expected_six = "imagebind" in c.reward.weights
     if expected_six != ("imagebind" in paths):
         raise ConfigError("H3 reward asset manifest must match the configured five/six scorer set")
-    reward = AudioVideoReward.from_paths(paths, device=device, expected_sha256=record["sha256"])
+    duration_options = ({"full_duration": True}
+                        if c.algorithm.options.get("post_training", {}).get("full_duration_rewards", False) else {})
+    reward = AudioVideoReward.from_paths(paths, device=device, expected_sha256=record["sha256"], **duration_options)
     reward.asset_identity = {"manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
                              "paths": paths, "sha256": record["sha256"],
                              "provenance": record["provenance"]}

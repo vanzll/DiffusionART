@@ -1,7 +1,7 @@
 """Native opt-in H3 training, staged residency and exact rollout-boundary resume.
 
 This backend owns execution; scientific objectives stay in training.audio_video.
-No pretrained reference is loaded, forwarded, or included in checkpoints.
+The explicit post-training recipe can retain a frozen pretrained shard shadow.
 """
 from __future__ import annotations
 
@@ -49,7 +49,13 @@ from ..wandb_export import open_metrics
 from . import minimax_h3 as backend
 from .minimax_h3_execution import execution_policy
 from .minimax_h3_observability import BatchTrace, event
-from .minimax_h3_posttraining import selected_positions
+from .minimax_h3_posttraining import (
+    duration_config,
+    duration_frames,
+    evaluation_step_directory,
+    rollout_config,
+    selected_positions,
+)
 from .sd3 import _check_run_identity, _publish_evaluation, _restore_cost
 
 
@@ -325,7 +331,8 @@ def _publish_cost(session, c, root, clock):
     return progress
 
 
-def _prepare_objective(c, parts, cache, predict, local_scores, population, groups, session, generator, nft):
+def _prepare_objective(c, parts, cache, predict, local_scores, population, groups, session, generator, nft,
+                       reference=None):
     post = c.algorithm.options.get("post_training")
     if post is not None:
         local = route_rewards(local_scores.components, groups=groups, weights=c.reward.weights, prompt_group_std=True)
@@ -334,9 +341,18 @@ def _prepare_objective(c, parts, cache, predict, local_scores, population, group
         local = route_rewards(local_scores.components)
         global_routes = route_rewards(population.components)
     if c.algorithm.name == "diffusionart":
+        reference_predictions = None
+        if reference is not None:
+            from .minimax_h3_reference import prepare_reference_predictions
+            _active_policy(parts, session)
+            # No live backward graph exists here. Complete all frozen-policy
+            # collective forwards, then restore current shards before U2.
+            with reference.use_reference(session):
+                reference_predictions = prepare_reference_predictions(
+                    cache, predict, session.device, c.training.microbatch)
         return session.local("AV ART complete-group objective", lambda: prepare_art_objective(cache, predict,
             local["video"], local["audio"], groups, session.device, covariance_options=c.algorithm.options["covariance"],
-            loss_options=c.algorithm.options["loss"]))
+            loss_options=c.algorithm.options["loss"], reference_predictions=reference_predictions))
     if nft is not None:
         def prepare():
             times = select_nft_fresh_times(cache.video_sigmas, len(cache.endpoints), generator=generator)
@@ -358,6 +374,23 @@ def _prepare_objective(c, parts, cache, predict, local_scores, population, group
 
 
 def evaluate(session, c, parts, dataset, step, root):
+    """Evaluate each duration independently, preserving prompt/seed identities."""
+    if "duration_frames" not in (c.algorithm.options.get("post_training") or {}):
+        return _evaluate_duration(session, c, parts, dataset, step, root)
+    results = {}
+    for frames in duration_frames(c):
+        workload = duration_config(c, frames)
+        complete = session.primary("AV duration evaluation receipt", lambda: _completed_duration_evaluation(
+            workload, dataset, step, root))
+        flag = torch.tensor(int(bool(complete)), dtype=torch.int32, device=session.device)
+        if session.distributed:
+            dist.broadcast(flag, src=0)
+        if not bool(flag.item()):
+            results[frames] = _evaluate_duration(session, workload, parts, dataset, step, root)
+    return results
+
+
+def _evaluate_duration(session, c, parts, dataset, step, root):
     """Equal FSDP forward counts, including dummy rows on final empty shards."""
     model = parts.adapter.trainable_module
     event("evaluation_begin", optimizer_steps=step, prompts=len(dataset.rows))
@@ -366,7 +399,7 @@ def evaluate(session, c, parts, dataset, step, root):
                          dtype=torch.uint8, device=session.device)
     if session.distributed:
         dist.broadcast(token, src=0)
-    directory = root / "evaluation" / f"step-{step:09d}" / bytes(token.cpu().tolist()).hex()
+    directory = root / "evaluation" / evaluation_step_directory(c, step) / bytes(token.cpu().tolist()).hex()
     session.primary("AV evaluation directory", lambda: directory.mkdir(parents=True))
     rank, world = session.identity.rank, session.identity.world_size
     records, indices = [], []
@@ -412,11 +445,13 @@ def evaluate(session, c, parts, dataset, step, root):
                     raise ValueError("AV evaluation prompt identity differs")
                 ordered[index] = sample
         samples = [ordered[i] for i in range(len(dataset.rows))]
-        result = _publish_evaluation(c, dataset, step, root, directory, samples)
+        mixed = "duration_frames" in (c.algorithm.options.get("post_training") or {})
+        namespace = f"eval/frames{c.sampling.frames}" if mixed else "eval"
+        result = _publish_evaluation(c, dataset, step, root, directory, samples, metric_prefix=namespace)
         if c.algorithm.options.get("post_training", {}).get("eval_gallery", False):
             from ..evaluation.audio_video_gallery import publish_av_gallery
             try:
-                result.update(publish_av_gallery(root, directory, samples, step))
+                result.update(publish_av_gallery(root, directory, samples, step, metric_namespace=namespace))
             except Exception as exc:
                 warnings.warn(f"H3 gallery publication failed ({type(exc).__name__}); canonical eval is saved",
                               RuntimeWarning)
@@ -428,12 +463,19 @@ def evaluate(session, c, parts, dataset, step, root):
 
 
 def _completed_evaluation(c, dataset, step, root):
+    if "duration_frames" not in (c.algorithm.options.get("post_training") or {}):
+        return _completed_duration_evaluation(c, dataset, step, root)
+    return all(_completed_duration_evaluation(duration_config(c, frames), dataset, step, root)
+               for frames in duration_frames(c))
+
+
+def _completed_duration_evaluation(c, dataset, step, root):
     """Recognize a complete boundary publication before resuming past its eval."""
     from ..evaluation import EvaluationManifest, audit_manifest
     from ..evaluation.audio_video_gallery import read_media_manifest
     expected = tuple(row.sample_id for row in dataset.rows)
     base_seed = c.seed if c.evaluation.seed is None else c.evaluation.seed
-    for directory in sorted((root / "evaluation" / f"step-{step:09d}").glob("*")):
+    for directory in sorted((root / "evaluation" / evaluation_step_directory(c, step)).glob("*")):
         try:
             path = directory / "manifest.json"
             if path.stat().st_size > 4 * 1024 * 1024:
@@ -448,6 +490,8 @@ def _completed_evaluation(c, dataset, step, root):
                 continue
             if any(samples[row.sample_id].prompt != row.text
                    or samples[row.sample_id].seed != base_seed + index
+                   or samples[row.sample_id].framecount != c.sampling.frames
+                   or samples[row.sample_id].fps != c.sampling.fps
                    or set(samples[row.sample_id].scores.raw) != set(c.reward.weights)
                    for index, row in enumerate(dataset.rows)):
                 continue
@@ -541,7 +585,12 @@ def _run(session, c, prompts, resume, api, *, resume_rewind, evaluate_only):
         generator = torch.Generator().manual_seed((c.seed + 10_007 * rank) % (2**63 - 1))
         stream = PromptStream(data, seed=c.seed, shuffle=c.data.shuffle)
         nft = session.local("AV NFT old shadow", lambda: AVNFTState(model)) if c.algorithm.name == "diffusionnft" else None
+        reference = None
+        if c.algorithm.options.get("loss", {}).get("reference_mse_beta", 0) > 0:
+            from .minimax_h3_reference import ReferenceState
+            reference = session.local("AV immutable pretrained reference", lambda: ReferenceState(model))
         stateful = {"h3_asset_identity": asset_identity, "prompts": stream,
+                    **(reference.stateful() if reference is not None else {}),
                     **(nft.stateful() if nft is not None else {})}
         checkpoint = dict(model=model, optimizer=optimizer, config_sha256=c.fingerprint(), stateful=stateful,
                           generators={"av_sampling": generator})
@@ -578,7 +627,7 @@ def _run(session, c, prompts, resume, api, *, resume_rewind, evaluate_only):
                     "parameters": inventory, "asset_manifest": asset_identity.state_dict()["assets"], "device": str(session.device),
                     "data_sha256": data.sha256, "dp_world_size": world, "local_prompts": prompts, "samples_per_prompt": k,
                     "actual_output_dir": str(root.resolve()), "strategy": c.runtime.distributed,
-                    "ordering": "global-prompt-stream/prompt-half-K-u2-v1", "pretrained_reference": False})
+                    "ordering": "global-prompt-stream/prompt-half-K-u2-v1", "pretrained_reference": reference is not None})
             session.primary("AV run identity", publish_run)
         clock = CostClock(progress, gpu_count=world if session.device.type == "cuda" else 0)
         log = session.primary("AV metrics open", lambda: resources.enter_context(open_metrics(c, root)))
@@ -601,11 +650,14 @@ def _run(session, c, prompts, resume, api, *, resume_rewind, evaluate_only):
                 torch.cuda.reset_peak_memory_stats(session.device)
             with clock.training_phase():
                 progress.attempts += 1
+                workload = rollout_config(c, progress.completed_rollouts)
+                session.agree({"rollout_frames": workload.sampling.frames,
+                               "completed_rollouts": progress.completed_rollouts})
                 phase = time.monotonic()
                 def prepare():
                     rows = stream.take(c.sampling.prompts_per_rollout, rank=rank, world_size=world)
                     predict = prediction_callback(parts, rows, k, session)
-                    noise = _noise(parts, c, prompts * k, generator)
+                    noise = _noise(parts, workload, prompts * k, generator)
                     return rows, predict, noise
                 rows, predict, noise = session.local("AV rollout conditioning", prepare)
                 event("conditioning_complete", rollout_attempt=progress.attempts, optimizer_steps=progress.optimizer_steps)
@@ -620,7 +672,8 @@ def _run(session, c, prompts, resume, api, *, resume_rewind, evaluate_only):
                 _, scores = session.local("AV decode and five rewards", lambda: score_endpoints(parts, cache.endpoints, rows, k, session))
                 population = global_scores(session, scores)
                 groups = torch.arange(prompts).repeat_interleave(k)
-                objective = _prepare_objective(c, parts, cache, predict, scores, population, groups, session, generator, nft)
+                objective = _prepare_objective(c, parts, cache, predict, scores, population, groups, session, generator, nft,
+                                               reference=reference)
                 if os.environ.get("H3_INPUT_AUDIT") == "1":
                     from .minimax_h3_input_audit import audit_inputs
                     session.local("H3 pre-update input audit", lambda: audit_inputs(
@@ -668,10 +721,20 @@ def _run(session, c, prompts, resume, api, *, resume_rewind, evaluate_only):
                 trace.close()
                 metrics.update(_metrics(population))
                 metrics.update(sigma_metrics)
+                metrics.update({"av/rollout_frames": workload.sampling.frames,
+                                "av/rollout_duration_seconds": workload.sampling.frames / workload.sampling.fps})
+                if reference is not None:
+                    metrics["train/reference_mse"] = .5 * (metrics["av/video_reference_mse"] + metrics["av/audio_reference_mse"])
+                    metrics["train/reference_mse_weighted"] = c.algorithm.options["loss"]["reference_mse_beta"] * metrics["train/reference_mse"]
                 metrics.update({"time/rollout_seconds": rollout_seconds, "time/decode_reward_prepare_seconds": reward_seconds,
                     "time/update_seconds": update_seconds, "av/transitions": len(sigmas[0]) - 1,
                     "av/training_positions": (len(objective.video_sigmas) / len(cache.endpoints) if nft is not None else len(cache.selected))})
                 metrics.update(_cost(session, clock))
+                if "duration_frames" in (c.algorithm.options.get("post_training") or {}):
+                    metrics.update({f"train/frames{workload.sampling.frames}/{key.removeprefix('train/')}": value
+                                    for key, value in tuple(metrics.items())
+                                    if key.startswith(("train/reward/", "train/diagnostics/", "train/reference_mse"))
+                                    or key in ("train/loss", "train/grad_norm/before_clip")})
                 def publish_metrics():
                     log.write(json.dumps(metrics, sort_keys=True, allow_nan=False) + "\n")
                     log.flush()

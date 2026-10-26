@@ -8,6 +8,7 @@ import html
 import json
 import math
 import os
+import re
 import stat
 from pathlib import Path
 from urllib.parse import quote
@@ -34,6 +35,8 @@ def _validate_payload(payload, root, *, verify_assets=True):
     if (not isinstance(payload, dict) or payload.get("schema") != MEDIA_SCHEMA
             or payload.get("wandb_media") is not True):
         raise ValueError("not an opted-in AV gallery manifest")
+    if not re.fullmatch(r"eval(?:/frames[0-9]{1,4})?", payload.get("metric_namespace", "eval")):
+        raise ValueError("invalid AV gallery metric namespace")
     step, columns, samples = (payload.get(key) for key in
                               ("optimizer_step", "reward_columns", "samples"))
     if type(step) is not int or not 0 <= step <= 2**53 - 1:
@@ -103,7 +106,7 @@ def _publish(path, text):
     temporary.replace(path)
 
 
-def publish_av_gallery(root, directory, samples, step):
+def publish_av_gallery(root, directory, samples, step, *, metric_namespace="eval"):
     """Publish gallery.html then wandb-media.json; caller handles optional errors.
 
     ``samples`` are the same verified SampleRecord objects as manifest.json.
@@ -138,6 +141,8 @@ def publish_av_gallery(root, directory, samples, step):
                      "audio_master": bounded_asset(wav_path) if wav.exists() else None})
     payload = {"schema": MEDIA_SCHEMA, "wandb_media": True, "optimizer_step": step,
                "reward_columns": sorted(samples[0].scores.raw), "samples": rows}
+    if metric_namespace != "eval":
+        payload["metric_namespace"] = metric_namespace
     encoded = json.dumps(payload, allow_nan=False, ensure_ascii=True, sort_keys=True) + "\n"
     if len(encoded.encode("utf-8")) > MAX_MANIFEST_BYTES:
         raise ValueError("gallery manifest exceeds bound")

@@ -92,7 +92,7 @@ def run_av_updates(model, optimizer, objective, groups, *, algorithm: str, micro
     # advantage-zero mirror still restores current toward EMA-old; Fast owns
     # its promised U2 even when centered rewards are zero. Reward inactivity
     # is therefore not a valid generic optimizer-skip predicate.
-    if algorithm == "art" and not _has_global_guidance(model, objective.has_guidance):
+    if algorithm == "art" and not _has_global_guidance(model, objective.has_guidance or getattr(objective, "has_reference", False)):
         return {"train/optimizer_steps_per_rollout": 0., "train/rollout_skipped_zero_signal": 1.}
     objective.diagnostics.clear()
     objective._diagnostic_items = {}
