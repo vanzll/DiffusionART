@@ -1,0 +1,9 @@
+# Same P32/K8/U2/B8 recipe; two CP workers cooperate on every DP prompt group.
+extends: minimax_h3_art_posttrain_full_32gpu.yaml
+name: minimax-h3-art-posttrain-full-64gpu-cp2
+model:
+  options:
+    context_parallel_size: 2
+provenance:
+  deployment: 8 nodes x 8 GPUs, logical DP32 x CP2, physical-world full FSDP
+  gradient_semantics: CP sequence gathers use SUM backward; physical FSDP averaging cancels duplicate complete losses

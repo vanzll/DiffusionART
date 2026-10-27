@@ -49,7 +49,9 @@ from ..training.timesteps import art_training_positions
 from ..wandb_export import open_metrics
 from . import minimax_h3 as backend
 from .minimax_h3_execution import execution_policy
+from .minimax_h3_failure_fence import native_failure_fence
 from .minimax_h3_observability import BatchTrace, event
+from .minimax_h3_parallel import H3Parallel, enable_context_parallel
 from .minimax_h3_posttraining import (
     duration_config,
     duration_frames,
@@ -293,7 +295,7 @@ def save_media(media, target, *, ffmpeg="ffmpeg", ffprobe="ffprobe", timeout=120
     return target
 
 
-def global_scores(session, scores):
+def global_scores(session, scores, parallel=None):
     """Gather transformed per-scorer scalars; normalize after complete groups."""
     session.agree({"components": sorted(scores.components), "diagnostics": sorted(scores.diagnostics),
                    "shapes": {k: list(v.shape) for k, v in scores.components.items()}})
@@ -301,8 +303,10 @@ def global_scores(session, scores):
         value = value.detach().float().to(session.device).contiguous()
         if not session.distributed:
             return value.cpu()
-        received = [torch.empty_like(value) for _ in range(session.identity.world_size)]
-        dist.all_gather(received, value)
+        world = session.identity.world_size if parallel is None else parallel.dp_world
+        group = None if parallel is None else parallel.dp_group
+        received = [torch.empty_like(value) for _ in range(world)]
+        dist.all_gather(received, value, group=group)
         return torch.cat(received).cpu()
     return AVScores({key: gather(value) for key, value in sorted(scores.components.items())},
                     {key: gather(value) for key, value in sorted(scores.diagnostics.items())})
@@ -390,6 +394,8 @@ def _prepare_objective(c, parts, cache, predict, local_scores, population, group
 
 def evaluate(session, c, parts, dataset, step, root):
     """Evaluate each duration independently, preserving prompt/seed identities."""
+    if c.model.options.get("context_parallel_size", 1) > 1:
+        raise ConfigError("H3 CP2 evaluation ownership is not implemented; train-only execution is supported")
     if "duration_frames" not in (c.algorithm.options.get("post_training") or {}):
         return _evaluate_duration(session, c, parts, dataset, step, root)
     results = {}
@@ -528,19 +534,24 @@ def run(c, *, resume=None, resume_rewind=False, evaluate_only=False, backend_api
     c, resume = prepare_resume_config(c, resume)
     api.validate_config(c)
     identity = launch_identity(c.runtime.distributed)
-    prompts = identity.local_prompt_count(c.sampling.prompts_per_rollout)
+    parallel = H3Parallel.from_config(c, identity)
+    prompts = parallel.local_prompt_count(c.sampling.prompts_per_rollout)
     if c.runtime.distributed == "fsdp" and identity.world_size < 2:
         raise ConfigError("H3 full-shard checkpoint/shadow requires two or more ranks")
     timeout = float(os.environ.get("VISUAL_RL_COLLECTIVE_TIMEOUT_SECONDS", "300"))
-    with distributed_session(c.runtime.distributed, device=c.runtime.device, timeout_seconds=timeout) as session:
+    with distributed_session(c.runtime.distributed, device=c.runtime.device, timeout_seconds=timeout) as session, native_failure_fence():
         session.require_same_digest(c.fingerprint())
         session.agree({"resume": None if resume is None else str(Path(resume).absolute()),
                        "rewind": resume_rewind, "evaluate_only": evaluate_only})
-        return _run(session, c, prompts, resume, api, resume_rewind=resume_rewind, evaluate_only=evaluate_only)
+        return _run(session, c, prompts, resume, api, resume_rewind=resume_rewind,
+                    evaluate_only=evaluate_only, parallel=parallel)
 
 
-def _run(session, c, prompts, resume, api, *, resume_rewind, evaluate_only):
-    rank, world = session.identity.rank, session.identity.world_size
+def _run(session, c, prompts, resume, api, *, resume_rewind, evaluate_only, parallel=None):
+    world = session.identity.world_size
+    parallel = (H3Parallel.from_config(c, session.identity) if parallel is None else parallel).initialize()
+    if parallel.degree > 1:
+        event("h3_parallel_layout", **parallel.identity(), dp_rank=parallel.dp_rank, cp_rank=parallel.cp_rank)
     k = c.sampling.samples_per_prompt
     root = Path(c.runtime.output_dir)
     data, validation = session.local("AV hashed datasets", lambda: api.load_datasets(c))
@@ -574,6 +585,7 @@ def _run(session, c, prompts, resume, api, *, resume_rewind, evaluate_only):
                     raise ConfigError("H3 model/reward asset identity differs from original run")
             session.local("AV resume asset identity", check_assets)
         model = parts.adapter.trainable_module
+        enable_context_parallel(model, parallel)
         # Loading on CPU is an explicit backend contract, before FSDP/optimizer.
         if any(p.device.type != "cpu" for p in model.parameters()):
             raise ConfigError("H3 components must load policy on CPU before runtime placement")
@@ -595,10 +607,10 @@ def _run(session, c, prompts, resume, api, *, resume_rewind, evaluate_only):
         parts.adapter.set_trainable_module(model)
         optimizer = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=c.training.learning_rate,
             betas=c.training.betas, eps=c.training.epsilon, weight_decay=c.training.weight_decay)
-        torch.manual_seed(c.seed + rank)
-        random.seed(c.seed + rank)
-        np.random.seed((c.seed + rank) % 2**32)
-        generator = torch.Generator().manual_seed((c.seed + 10_007 * rank) % (2**63 - 1))
+        torch.manual_seed(c.seed + parallel.dp_rank)
+        random.seed(c.seed + parallel.dp_rank)
+        np.random.seed((c.seed + parallel.dp_rank) % 2**32)
+        generator = torch.Generator().manual_seed((c.seed + 10_007 * parallel.dp_rank) % (2**63 - 1))
         stream = PromptStream(data, seed=c.seed, shuffle=c.data.shuffle)
         nft = session.local("AV NFT old shadow", lambda: AVNFTState(model)) if c.algorithm.name == "diffusionnft" else None
         reference = None
@@ -641,7 +653,9 @@ def _run(session, c, prompts, resume, api, *, resume_rewind, evaluate_only):
                 _atomic_json(root / "resolved-config.json", c.to_dict())
                 _atomic_json(root / "run.json", {"kind": "minimax_h3_native_development", "config_sha256": c.fingerprint(),
                     "parameters": inventory, "asset_manifest": asset_identity.state_dict()["assets"], "device": str(session.device),
-                    "data_sha256": data.sha256, "dp_world_size": world, "local_prompts": prompts, "samples_per_prompt": k,
+                    "data_sha256": data.sha256, "dp_world_size": parallel.dp_world,
+                    **({"execution_parallelism": parallel.identity()} if parallel.degree > 1 else {}),
+                    "local_prompts": prompts, "samples_per_prompt": k,
                     "actual_output_dir": str(root.resolve()), "strategy": c.runtime.distributed,
                     "ordering": "global-prompt-stream/prompt-half-K-u2-v1", "pretrained_reference": reference is not None})
             session.primary("AV run identity", publish_run)
@@ -671,7 +685,8 @@ def _run(session, c, prompts, resume, api, *, resume_rewind, evaluate_only):
                                "completed_rollouts": progress.completed_rollouts})
                 phase = time.monotonic()
                 def prepare():
-                    rows = stream.take(c.sampling.prompts_per_rollout, rank=rank, world_size=world)
+                    rows = stream.take(c.sampling.prompts_per_rollout,
+                                       rank=parallel.dp_rank, world_size=parallel.dp_world)
                     predict = prediction_callback(parts, rows, k, session)
                     noise = _noise(parts, workload, prompts * k, generator)
                     return rows, predict, noise
@@ -685,8 +700,19 @@ def _run(session, c, prompts, resume, api, *, resume_rewind, evaluate_only):
                 rollout_seconds = time.monotonic() - phase
                 event("rollout_complete", optimizer_steps=progress.optimizer_steps, seconds=rollout_seconds)
                 phase = time.monotonic()
-                _, scores = session.local("AV decode and five rewards", lambda: score_endpoints(parts, cache.endpoints, rows, k, session))
-                population = global_scores(session, scores)
+                if parallel.degree == 1:
+                    _, scores = session.local("AV decode and five rewards", lambda: score_endpoints(parts, cache.endpoints, rows, k, session))
+                    population = global_scores(session, scores)
+                else:
+                    # Exactly DP32 leaders score the unique P32*K8 trajectories.
+                    # Coordinate failures globally before the CP object broadcast.
+                    scored = session.local("H3 CP leader decode and rewards", lambda:
+                        score_endpoints(parts, cache.endpoints, rows, k, session) if parallel.cp_rank == 0 else None)
+                    payload = [scored[1] if scored is not None else None]
+                    dist.broadcast_object_list(payload, src=parallel.dp_rank * parallel.degree,
+                                               group=parallel.cp_group, device=session.device)
+                    scores = payload[0]
+                    population = global_scores(session, scores, parallel)
                 groups = torch.arange(prompts).repeat_interleave(k)
                 objective = _prepare_objective(c, parts, cache, predict, scores, population, groups, session, generator, nft,
                                                reference=reference)

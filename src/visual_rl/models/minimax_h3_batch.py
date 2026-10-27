@@ -38,6 +38,12 @@ class MiniMaxH3BatchedAttnProcessor(native.MiniMaxH3AttnProcessor):
         query, key = attn.norm_q(query), attn.norm_k(key)
         if rotary_emb is not None:
             query, key = (_rotary(x, *rotary_emb) for x in (query, key))
+        parallel = getattr(self, "_h3_context_parallel", None)
+        if parallel is not None:
+            if attention_mask is None:
+                raise ValueError("H3 CP attention requires the complete packed key mask")
+            full_length = attention_mask.shape[-1]
+            key, value = (parallel.gather(x, full_length) for x in (key, value))
         result = dispatch_attention_fn(
             query, key, value, attn_mask=attention_mask, dropout_p=0.0,
             is_causal=False, backend=self._attention_backend, parallel_config=self._parallel_config,
@@ -87,9 +93,12 @@ class MiniMaxH3Transformer3DModel(native.MiniMaxH3Transformer3DModel):
                 text_indices, attention_kwargs=None, return_dict=True):
         options = dict(attention_kwargs or {})
         text_mask = options.pop("h3_text_mask", None)
+        parallel = getattr(self, "_h3_context_parallel", None)
         if options:
             raise ValueError(f"Unsupported H3 attention options: {sorted(options)}")
         if text_mask is None:
+            if parallel is not None:
+                raise ValueError("H3 CP requires explicit batched conditioning and layout")
             # Retain the public native ABI for direct singleton/reference callers.
             return super().forward(
                 hidden_states, audio_hidden_states, encoder_hidden_states, timestep,
@@ -119,6 +128,13 @@ class MiniMaxH3Transformer3DModel(native.MiniMaxH3Transformer3DModel):
         attention_mask = valid[:, None, None, :]
         temb = self.time_embedder(self.time_proj(timestep).to(get_parameter_dtype(self.time_embedder)))
         adaln_indices = timestep_indices * native.MINIMAX_H3_MODALITY_NUM + token_tags[None]
+        if parallel is not None:
+            # Build modality packing and global key validity first. Shard every
+            # row-indexed quantity together, preserving its original coordinates.
+            packed = parallel.split(packed, length)
+            adaln_indices = parallel.split(adaln_indices, length)
+            timestep_indices = parallel.split(timestep_indices, length)
+            rotary_emb = tuple(parallel.split(value, length) for value in rotary_emb)
         for block in self.transformer_blocks:
             if torch.is_grad_enabled() and self.gradient_checkpointing:
                 packed = self._gradient_checkpointing_func(
@@ -126,8 +142,10 @@ class MiniMaxH3Transformer3DModel(native.MiniMaxH3Transformer3DModel):
             else:
                 packed = block(packed, temb, adaln_indices, rotary_emb, attention_mask)
         packed = self.norm_out(packed, temb, timestep_indices).to(get_parameter_dtype(self.proj_out))
-        video = self.proj_out(packed).index_select(1, video_indices)
-        audio = self.audio_proj_out(packed).index_select(1, audio_indices)
+        video, audio = self.proj_out(packed), self.audio_proj_out(packed)
+        if parallel is not None:
+            video, audio = (parallel.gather(value, length) for value in (video, audio))
+        video, audio = video.index_select(1, video_indices), audio.index_select(1, audio_indices)
         if not return_dict:
             return video, audio
         return native.MiniMaxH3TransformerOutput(sample=video, audio_sample=audio)

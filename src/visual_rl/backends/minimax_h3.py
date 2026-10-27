@@ -35,8 +35,15 @@ def validate_config(c):
     if c.model.revision != MODEL_REVISION:
         raise ConfigError("this H3 ABI is validated only against the pinned model revision")
     mo = c.model.options
-    if set(mo) != {"finetune", "gradient_checkpointing", "local_files_only", "ffmpeg", "ffprobe", "conditioning_device"}:
+    required_model_options = {"finetune", "gradient_checkpointing", "local_files_only", "ffmpeg", "ffprobe", "conditioning_device"}
+    if set(mo) not in (required_model_options, required_model_options | {"context_parallel_size"}):
         raise ConfigError("H3 model options require finetune, checkpointing, offline flag, ffmpeg/ffprobe")
+    degree = mo.get("context_parallel_size", 1)
+    if type(degree) is not int or degree not in (1, 2):
+        raise ConfigError("H3 context_parallel_size must be 1 or 2")
+    if degree == 2 and (c.runtime.distributed != "fsdp" or c.algorithm.name != "diffusionart"
+                        or mo["finetune"]["mode"] != "full"):
+        raise ConfigError("H3 CP2 requires full ART and FSDP")
     from ..models.finetune import FineTuneConfig
     try:
         FineTuneConfig(**mo["finetune"])
