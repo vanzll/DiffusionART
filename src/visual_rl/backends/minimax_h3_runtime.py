@@ -43,7 +43,7 @@ from ..training.checkpoint import _atomic_json, load_checkpoint, save_checkpoint
 from ..training.distributed import distributed_session, launch_identity
 from ..training.fsdp_checkpoint import load_fsdp_checkpoint, save_fsdp_checkpoint
 from ..training.image_contracts import tf32_policy
-from ..training.resume import prepare_resume_history, validate_resume_request
+from ..training.resume import prepare_resume_config, prepare_resume_history, validate_resume_request
 from ..training.state import CostClock, Progress
 from ..training.timesteps import art_training_positions
 from ..wandb_export import open_metrics
@@ -525,6 +525,7 @@ def run(c, *, resume=None, resume_rewind=False, evaluate_only=False, backend_api
           cublas_workspace_config=os.environ["CUBLAS_WORKSPACE_CONFIG"])
     api = backend if backend_api is None else backend_api
     validate_resume_request(resume, resume_rewind, evaluate_only)
+    c, resume = prepare_resume_config(c, resume)
     api.validate_config(c)
     identity = launch_identity(c.runtime.distributed)
     prompts = identity.local_prompt_count(c.sampling.prompts_per_rollout)

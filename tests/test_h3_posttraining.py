@@ -195,7 +195,7 @@ def test_public_recipe_contract_and_default_config_identity(tmp_path, monkeypatc
     monkeypatch.setenv('H3_TRAIN_SHA256', hashlib.sha256(train.read_bytes()).hexdigest())
     monkeypatch.setenv('H3_EVAL_SHA256', 'a' * 64)
     root = Path(__file__).resolve().parents[1]
-    config = load_config(root / 'configs/examples/minimax_h3_art_posttrain_full_32gpu.yaml')
+    config = load_config(root / 'configs/examples/minimax_h3_art_posttrain_multiduration_32gpu.yaml')
     validate_config(config)
     assert config.evaluation.every_rollouts == 50
     assert config.runtime.checkpoint_every == 50 and config.runtime.checkpoint_keep == 2
@@ -207,7 +207,7 @@ def test_public_recipe_contract_and_default_config_identity(tmp_path, monkeypatc
     validate_config(legacy)
     assert 'every_rollouts' not in legacy.to_dict()['evaluation']
     assert legacy.fingerprint() == replace(legacy, evaluation=replace(legacy.evaluation, every_rollouts=0)).fingerprint()
-    path = root / 'configs/examples/minimax_h3_art_posttrain_full_32gpu.yaml'
+    path = root / 'configs/examples/minimax_h3_art_posttrain_multiduration_32gpu.yaml'
     for invalid in (0, 1, 49, True):
         bad = copy.deepcopy(config.to_dict())
         bad['algorithm']['options']['post_training']['audio_pool'] = invalid

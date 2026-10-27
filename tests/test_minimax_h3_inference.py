@@ -12,7 +12,9 @@ from visual_rl.training.audio_video_rollout import collect_av_rollout
 from visual_rl.training.audio_video_types import AVState
 
 ROOT = Path(__file__).resolve().parents[1]
-RECIPES = sorted((ROOT / 'configs/examples').glob('minimax_h3_*.yaml'))
+# The explicit 480p train-only protocol has its own runtime/offline-eval tests.
+RECIPES = sorted(path for path in (ROOT / 'configs/examples').glob('minimax_h3_*.yaml')
+                 if path.name != 'minimax_h3_art_posttrain_full_32gpu.yaml')
 
 
 @pytest.mark.parametrize('path', RECIPES, ids=lambda path: path.stem)
@@ -36,7 +38,7 @@ def test_public_recipes_share_rollout_and_eval_inference(path, monkeypatch):
     assert (tuned.evaluation.width or tuned.sampling.width) == 960
 
 
-@pytest.mark.parametrize('boundaries', [10, 50])
+@pytest.mark.parametrize('boundaries', [10, 11, 50])
 def test_complete_ode_trajectory_matches_native_paired_schedulers(boundaries):
     from diffusers import MiniMaxH3Scheduler
 

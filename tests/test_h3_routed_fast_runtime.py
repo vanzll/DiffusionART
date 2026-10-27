@@ -39,7 +39,7 @@ def test_matched_recipe_changes_only_algorithm_and_run_labels(tmp_path, monkeypa
         monkeypatch.setenv(key, str(tmp_path / key))
     monkeypatch.setenv("H3_EVAL_SHA256", "a" * 64)
     root = Path(__file__).resolve().parents[1] / "configs/examples"
-    art = load_config(root / "minimax_h3_art_posttrain_full_32gpu.yaml")
+    art = load_config(root / "minimax_h3_art_posttrain_multiduration_32gpu.yaml")
     fast = load_config(root / "minimax_h3_fast_routed_posttrain_full_32gpu.yaml")
     backend.validate_config(fast)
     for name in ("model", "reward", "data", "sampling", "training", "evaluation", "seed"):

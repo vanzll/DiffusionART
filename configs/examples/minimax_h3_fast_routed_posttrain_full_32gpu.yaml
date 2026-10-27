@@ -1,5 +1,5 @@
 # Match the six-reward ART recipe; change only the explicit algorithm variant.
-extends: minimax_h3_art_posttrain_full_32gpu.yaml
+extends: minimax_h3_art_posttrain_multiduration_32gpu.yaml
 name: minimax-h3-fast-routed-posttrain-full-32gpu
 algorithm:
   name: flow_grpo_fast

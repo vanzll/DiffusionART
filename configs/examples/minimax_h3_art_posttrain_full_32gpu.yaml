@@ -1,17 +1,24 @@
+# 480p / ten actual Euler transitions / fixed five-second training only.
 extends: minimax_h3_art_full_32gpu.yaml
 name: minimax-h3-art-posttrain-full-32gpu
 algorithm:
   options:
     post_training:
-      video_pool: 15
-      audio_pool: 10
+      video_pool: 4
+      audio_pool: 3
       count: 2
       reward_normalization: prompt_group_std
       eval_gallery: true
-      duration_frames: [124, 243, 345]
+      duration_frames: [124]
       full_duration_rewards: true
     loss:
       reference_mse_beta: 0.001
+sampling:
+  # Native scheduler counts boundaries including zero: 11 points = 10 forwards.
+  steps: 11
+  height: 480
+  width: 864
+  frames: 124
 reward:
   weights:
     video_align: 1.0
@@ -23,10 +30,17 @@ reward:
 training:
   max_updates: 400
 evaluation:
+  # Disabled at startup, all intermediate boundaries, resume and completion.
   every_updates: 0
-  every_rollouts: 50
+  every_rollouts: 0
+  at_updates: []
+  # Bind the later offline protocol now so enabling only its cadence preserves
+  # the checkpoint resume signature. No evaluation dataset is loaded in training.
   manifest: ${H3_EVAL_MANIFEST}
   manifest_sha256: ${H3_EVAL_SHA256}
+  sampling_steps: 50
+  height: 768
+  width: 1344
   seed: 42
   retain_all: true
 runtime:
@@ -36,4 +50,4 @@ runtime:
   log: wandb
   wandb:
     project: diffusionart-minimax-h3
-    name: minimax-h3-art-six-reward-v15a10-mixed-duration-refmse1e-3-full32
+    name: minimax-h3-art-six-reward-480p-10steps-v4a3-124frames-refmse1e-3-trainonly-full32

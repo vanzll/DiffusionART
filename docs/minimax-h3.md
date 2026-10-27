@@ -8,17 +8,19 @@ guidance-distilled transformer without an unconditional CFG forward.
 
 ## Shared inference protocol
 
-All H3 examples inherit [one inference profile](../configs/inference/minimax_h3.yaml):
+Base H3 examples inherit [one inference profile](../configs/inference/minimax_h3.yaml):
 **1344×768, 124 frames at 24 fps, 50 sigma boundaries / 49 denoiser forwards**, video
 `shift=12` and audio `shift=3`. This matches the unaccelerated workload in the
 [reference inference recipe](https://recipes.vllm.ai/MiniMaxAI/MiniMax-H3), with the
 [native Diffusers schedule semantics](https://huggingface.co/docs/diffusers/main/en/api/pipelines/minimax_h3#two-schedulers).
 The released transformer is CFG-distilled: `guidance_scale=1` means one conditional
 forward, with no extra unconditional pass or acceleration LoRA.
-The six-reward post-training recipe overrides the base frame count with the
-three-duration rotation described below; other examples retain 124 frames.
+The current six-reward ART post-training recipe explicitly overrides rollout to
+864×480, 124 frames and 11 boundaries / **10 actual denoiser forwards**, with
+training-time evaluation disabled. The archived multi-duration recipe retains
+the 768p protocol. See the post-training recipes below.
 
-Rollout and evaluation use the same full grid and canvas. Evaluation leaves
+In the base profiles, rollout and evaluation use the same full grid and canvas. Evaluation leaves
 `sampling_steps`, `height` and `width` unset so it follows rollout settings,
 including explicit overrides; selecting sparse training positions does not
 shorten generation. ART and NFT generate deterministic ODE trajectories.
@@ -505,15 +507,89 @@ continuation and distributed rank progress. Keep healthy experiments running.
 CPU oracles, ready assets and launch commands do not replace these runtime
 records. The existing `track.md` holds actual evidence and remaining limits.
 
-## Six-reward ART post-training on 32 GPUs
+## 480p, ten-step ART post-training on 32 GPUs
 
-`configs/examples/minimax_h3_art_posttrain_full_32gpu.yaml` is a full-parameter
+`configs/examples/minimax_h3_art_posttrain_full_32gpu.yaml` is the current
+training-only full-parameter recipe. It uses **864×480, 124 frames at 24 fps**
+(about 5.17 seconds), guidance scale 1, native Euler integration and the original
+video/audio shifts 12/3. The native scheduler takes **11 sigma boundaries**,
+including zero, for **10 actual transformer forwards**; `steps: 10` would instead
+execute nine transitions. No acceleration LoRA or extra CFG branch is added.
+
+Rollout and update microbatches remain **8**. P32/K8 means 256 trajectories per
+rollout. Compute each reward's statistics over its complete K8 group, then split
+every prompt's samples into disjoint K4+K4 windows: two global optimizer steps,
+128 trajectories per step. This is not two epochs over the same 256 trajectories.
+The budget is 400 optimizer updates, normally 200 completed rollouts. AdamW
+uses learning rate 1e-5, betas 0.9/0.999, epsilon 1e-8, weight decay 1e-4 and
+maximum gradient norm 1. BF16 compute, FP32 FSDP masters and activation
+checkpointing remain unchanged.
+
+For each rollout, independently sample two video positions from the first four
+and two audio positions from the first three, without replacement. Their sigma
+candidates are video **[1, 0.990826, 0.979592, 0.965517]** and audio
+**[1, 0.964286, 0.923077]**. Replay the union of original paired states and sigmas;
+each modality contributes only at its own two positions. Average each modality
+over those two positions and combine the modality losses with equal weight.
+Keep the six-reward routes, complete-K8 sample-std normalization, corrective
+masks and frozen pretrained velocity MSE coefficient **1e-3** described below.
+`duration_frames: [124]` fixes the duration; there is no long-video rotation.
+
+All evaluation cadence fields are disabled: no initial, periodic, resumed or
+final evaluation is generated. Rollout decoding and six-reward scoring are still
+required for training. Save a complete model/Adam/RNG/prompt-cursor/reference
+checkpoint every **50 optimizer updates** and at completion; retain the latest
+**two successfully published** snapshots. Allow room for a third snapshot while
+it is being written; do not delete the last recoverable checkpoint to admit a
+new write. These are full training checkpoints, not standalone HF exports.
+
+The disabled evaluation fields bind the future offline protocol in advance:
+1344×768, 124 frames, 50 boundaries / 49 forwards, and the fixed held-out manifest.
+They generate no evaluation during training. Bind `H3_EVAL_MANIFEST` and its hash
+as shown below, but leave every cadence at zero/empty. Later, on the same FSDP
+topology and using the original output directory and data/asset bindings, create
+an inherited evaluation config that changes **only** `evaluation.at_updates`:
+
+```yaml
+extends: /absolute/path/configs/examples/minimax_h3_art_posttrain_full_32gpu.yaml
+evaluation:
+  at_updates: [2]
+```
+
+This enables the eval loader; `--eval-only` evaluates the selected checkpoint
+regardless of that cadence value and does not start training.
+
+```bash
+.venv-h3-cu128/bin/python -m visual_rl.train \
+  --config /absolute/path/offline-eval.yaml --resume latest --eval-only \
+  --nproc-per-node 8 --nnodes 4 --node-rank "$H3_NODE_RANK" \
+  --master-addr "$H3_MASTER_ADDR" --master-port "$H3_MASTER_PORT" \
+  --preparation-run-id "$H3_PREPARATION_RUN_ID"
+```
+
+Use the existing fenced site launcher for the real multi-node command. Evaluate
+a quiescent checkpoint under exclusive run ownership; do not race an active
+trainer or change training cadence when returning to training. The backend
+checks the training resume signature and retains the checkpoint's identity;
+changing evaluation cadence does not bypass model/data/optimizer validation.
+Offline evaluation does not call `optimizer.step` or rewrite checkpoint state.
+
+The 32-GPU profile is full-world FSDP32, SP1/TP1. More FSDP ranks do not split a
+sample's activation memory. The current complete-local-prompt-group runtime
+requires P to be divisible by the data-parallel world size: **P32 cannot simply
+be launched as 64 independent FSDP data ranks**. A 64-card fallback requires a
+validated model/context-parallel layout that preserves P32/K8, U2, physical
+microbatch 8 and loss denominators. It is not an automatic YAML override.
+
+## Archived 768p multi-duration ART recipe
+
+`configs/examples/minimax_h3_art_posttrain_multiduration_32gpu.yaml` is the archived full-parameter
 T2AV recipe with P32/K8, two disjoint half-K updates, BF16 computation and FP32
 FSDP master parameters. It uses the same fixed model, optimizer and native
 video-shift12/audio-shift3 schedule as the full32 example. Rollout and eval both
 use the shared 1344×768, 50-boundary/49-transition profile, with CFG1.
 
-The default post-training recipe rotates **124, 243 and 345 frames** across
+The archived post-training recipe rotates **124, 243 and 345 frames** across
 completed rollouts (24 FPS: approximately 5.17, 10.13 and 14.38 seconds).
 All ranks and every sample of a prompt group use the same duration in a
 rollout. The rotation resumes from the completed-rollout counter without
@@ -586,7 +662,7 @@ their reward and optimizer semantics are unchanged.
 ### Matched routed Flow-GRPO Fast
 
 `configs/examples/minimax_h3_fast_routed_posttrain_full_32gpu.yaml` inherits
-the six-reward ART post-training recipe. Model, data, canvas, duration rotation,
+the archived 768p multi-duration ART recipe. Model, data, canvas, duration rotation,
 P32/K8, disjoint half-K U2, physical microbatches, optimizer, reference MSE,
 checkpoint retention and three-duration evaluation are identical. The explicit
 algorithm variant is `flow_grpo_fast` with `ratio_mode: per_modality`.
@@ -659,8 +735,9 @@ export H3_OUTPUT_DIR=/absolute/persistent/path/fresh-h3-posttraining-run
 ### Evaluation, checkpoints and AV playback
 
 The recipe trains for400 optimizer updates (normally200 completed rollouts).
-Evaluation runs before training, every **50 completed rollouts** and at the final
-update. `evaluation.every_rollouts=50` is a rollout counter, not W&B's internal
+In the archived multi-duration recipe, evaluation runs before training, every
+**50 completed rollouts** and at the final update. The current 480p training-only
+recipe disables all of these events. `evaluation.every_rollouts=50` is a rollout counter, not W&B's internal
 row number or an update count; failed/zero-signal skipped attempts do not advance
 it. Evaluation always runs the complete sampling schedule, independent of sparse
 training positions. It uses current policy weights, fixed prompt seeds and raw
