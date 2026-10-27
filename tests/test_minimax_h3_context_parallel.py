@@ -2,11 +2,13 @@
 
 import copy
 import os
+import random
 import time
 from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 import torch
 import torch.distributed as dist
@@ -73,6 +75,11 @@ def _worker(rank, directory):
             torch.testing.assert_close(actual.video, expected.video, rtol=2e-5, atol=2e-6)
             torch.testing.assert_close(actual.audio, expected.audio, rtol=2e-5, atol=2e-6)
             frozen.append(expected)
+        # Leader-only frozen media/reward work may consume process RNG. Policy
+        # dropout is zero; its sampling generator remains independently owned.
+        torch.manual_seed(700 + rank)
+        random.seed(800 + rank)
+        np.random.seed(900 + rank)
         physical = []
         hook = native.register_forward_pre_hook(
             lambda module, args, kwargs: physical.append(kwargs["hidden_states"].shape[0]), with_kwargs=True)
