@@ -4,10 +4,11 @@ import hashlib
 import json
 import math
 import os
-from pathlib import Path
 import sys
 import tempfile
 import time
+from pathlib import Path
+
 
 def capacity_bytes(root, quota_paths):
     """Read quota counters before statvfs; include every configured ancestor."""
@@ -91,6 +92,22 @@ class Worker:
 
     def dispatch(self, request):
         operation = request['operation']
+        if operation == 'runtime_failure':
+            root = Path(request['root']).resolve()
+            attempt = Path(request['attempt']).resolve()
+            nonce = request['nonce']
+            if (root != Path(os.environ['H3_ACCEPTANCE_ROOT']).resolve()
+                    or attempt != Path(os.environ['H3_ATTEMPT_DIR']).resolve()
+                    or nonce != os.environ['H3_ATTEMPT_NONCE']
+                    or attempt.parent != root / 'attempts' or attempt.name != nonce):
+                raise ValueError('Runtime failure escaped its native attempt')
+            record = request['record']
+            rank = int(os.environ['RANK'])
+            if record['pid'] != os.getppid() or record['rank'] != rank or record['attempt'] != nonce:
+                raise ValueError('Runtime failure reporter identity differs')
+            destination = attempt / f'failure.runtime-rank-{rank:05d}'
+            atomic_json(destination, record)
+            return str(destination)
         if operation == 'boundary':
             root = Path(request['root']).resolve()
             receipt = Path(request['checkpoint']).resolve()

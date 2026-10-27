@@ -49,7 +49,16 @@ class _CleanupWorker:
                 job, self._pending = self._pending, None
                 self._busy = True
             try:
-                retain_checkpoints(job["root"], job["receipt"], identity=job["identity"],
+                identity = job["identity"]
+                if identity is None:
+                    manifest = _json(Path(job["receipt"]))
+                    if (manifest.get("kind") != "fsdp-local"
+                            or manifest.get("config_sha256") != job["expected_config_sha256"]
+                            or manifest.get("layout", {}).get("world_size") != job["expected_world_size"]):
+                        raise ValueError("resumed retention identity differs")
+                    identity = {"kind": "fsdp-local", "config_sha256": manifest["config_sha256"],
+                                "topology": manifest["layout"]}
+                retain_checkpoints(job["root"], job["receipt"], identity=identity,
                                    keep_last=job["keep_last"])
             except Exception as exc:
                 _warn(exc)
@@ -84,6 +93,30 @@ def enqueue_retention(root, receipt, *, identity, keep_last):
 def validate_keep_last(keep_last):
     if keep_last is not None and (type(keep_last) is not int or keep_last <= 0):
         raise ValueError("keep_last must be None or a positive integer")
+
+
+def enqueue_resumed_retention(root, receipt, *, expected_config_sha256, expected_world_size, keep_last):
+    """Recover an interrupted cleanup after a successful native FSDP load.
+
+    Only an absolute manifest in this output's checkpoint root is eligible.
+    All filesystem/identity/payload checks remain on the existing single daemon;
+    its conservative latest/registration/integrity/deletion policy is unchanged.
+    A submitted job is not evidence that registration or cleanup has completed.
+    """
+    root, receipt = Path(root), Path(receipt)
+    if (keep_last is None or not root.is_absolute() or not receipt.is_absolute()
+            or receipt.name != "manifest.json" or receipt.parent.parent != root):
+        return False
+    validate_keep_last(keep_last)
+    job = {"root": str(root), "receipt": str(receipt), "identity": None,
+           "expected_config_sha256": expected_config_sha256,
+           "expected_world_size": expected_world_size, "keep_last": keep_last}
+    try:
+        _WORKER.enqueue(json.loads(json.dumps(job, allow_nan=False)))
+        return True
+    except Exception as exc:
+        _warn(exc)
+        return False
 
 
 def _safe_path(path):
