@@ -1,6 +1,7 @@
 """Real CPU FSDP4/DP2xCP2 against replicated full-sequence DDP4 Adam."""
 
 import copy
+import os
 import time
 from datetime import timedelta
 from pathlib import Path
@@ -18,13 +19,18 @@ def _worker(rank, directory):
     from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
     from torch.nn.parallel import DistributedDataParallel as DDP
 
+    from visual_rl.backends.minimax_h3_checkpoint_audit import audit_restored_checkpoint
     from visual_rl.backends.minimax_h3_parallel import H3Parallel, enable_context_parallel
+    from visual_rl.backends.minimax_h3_reference import ReferenceState
     from visual_rl.backends.minimax_h3_runtime import global_scores, wrap_policy
+    from visual_rl.data import Prompt, PromptDataset, PromptStream
     from visual_rl.models.minimax_h3 import MiniMaxH3Adapter, MiniMaxH3Conditioning
     from visual_rl.rewards.audio_video import AVScores
     from visual_rl.training.audio_video import prompt_disjoint_windows
     from visual_rl.training.audio_video_types import AVState
     from visual_rl.training.distributed import DistributedSession, RankInfo
+    from visual_rl.training.fsdp_checkpoint import load_fsdp_checkpoint, save_fsdp_checkpoint
+    from visual_rl.training.state import Progress
     from visual_rl.training.update import accumulated_step
 
     torch.set_num_threads(1)
@@ -44,6 +50,7 @@ def _worker(rank, directory):
         config = SimpleNamespace(model=SimpleNamespace(options={
             "finetune": {"mode": "full"}, "gradient_checkpointing": True}))
         model = wrap_policy(native, config, torch.device("cpu"))
+        frozen_reference = ReferenceState(model)
         baseline = DDP(reference)
         adapter.set_trainable_module(model)
         oracle.set_trainable_module(baseline)
@@ -114,19 +121,70 @@ def _worker(rank, directory):
         values = torch.arange(8).float() + 10 * parallel.dp_rank
         scores = global_scores(session, AVScores({"test": values}, {}), parallel)
         torch.testing.assert_close(scores.components["test"], torch.cat((torch.arange(8), torch.arange(8) + 10)).float())
+        # Exercise the production local-shard save/load and exact restore auditor.
+        # This uses actual CP2 groups and the immutable initial-policy shadow.
+        stream = PromptStream(PromptDataset(tuple(Prompt(str(i), f"prompt {i}") for i in range(12)),
+                                            "a" * 64), seed=42, shuffle=True)
+        stream.take(2, rank=parallel.dp_rank, world_size=parallel.dp_world)
+        stateful = {"prompts": stream, **frozen_reference.stateful()}
+        generators = {"av_sampling": generator}
+        progress = Progress(attempts=1, completed_rollouts=1, optimizer_steps=2,
+                            elapsed_seconds=10., training_seconds=8.)
+        arguments = dict(model=model, optimizer=optimizer, config_sha256="c" * 64,
+                         stateful=stateful, generators=generators)
+        receipt = save_fsdp_checkpoint(Path(directory) / "checkpoints", progress=progress, **arguments)
+        with torch.no_grad():
+            for parameter in model.parameters():
+                parameter.zero_()
+            for values in optimizer.state.values():
+                for value in values.values():
+                    if isinstance(value, torch.Tensor):
+                        value.fill_(-7)
+        changed_reference = frozen_reference.state_dict()
+        for tensor in changed_reference["parameters"]["parameters"].values():
+            tensor.zero_()
+        frozen_reference.load_state_dict(changed_reference)
+        stream.take(2, rank=parallel.dp_rank, world_size=parallel.dp_world)
+        generator.manual_seed(999)
+        torch.manual_seed(888)
+        restored = load_fsdp_checkpoint(receipt, **arguments)
+        assert restored == progress
+        os.environ["H3_ATTEMPT_NONCE"] = "cpu-cp2-recovery-test"
+        audit_restored_checkpoint(session, receipt, model, optimizer, stateful, generators,
+                                  restored, Path(directory))
+        with frozen_reference.use_reference(session):
+            prediction = adapter.predict_velocity(state, sv[0], sa[0], conditioning)
+        torch.testing.assert_close(prediction.video, frozen[0].video, rtol=2e-5, atol=2e-6)
+        torch.testing.assert_close(prediction.audio, frozen[0].audio, rtol=2e-5, atol=2e-6)
+        # Continue one real B8+4 Adam update after restore against uninterrupted DDP.
+        items = next(iter(prompt_disjoint_windows(torch.zeros(8, dtype=torch.long), 3)))
+        actual = accumulated_step(model, optimizer, items, objective(adapter), microbatch=8,
+                                  denominator=12, max_grad_norm=.01)
+        expected = accumulated_step(baseline, expected_optimizer, items, objective(oracle), microbatch=8,
+                                    denominator=12, max_grad_norm=.01)
+        assert actual["train/loss"] == pytest.approx(expected["train/loss"], rel=3e-4, abs=2e-7)
+        with FSDP.state_dict_type(model, StateDictType.FULL_STATE_DICT,
+                                  FullStateDictConfig(offload_to_cpu=False, rank0_only=False)):
+            after = model.state_dict()
+            adam = FSDP.optim_state_dict(model, optimizer)["state"]
+        for name, expected_tensor in reference.state_dict().items():
+            torch.testing.assert_close(after[name], expected_tensor, rtol=3e-5, atol=3e-6)
+        for name, values in adam.items():
+            for key, value in values.items():
+                torch.testing.assert_close(value, expected_optimizer.state[named[name]][key], rtol=3e-4, atol=3e-7)
         (Path(directory) / f"rank-{rank}.ok").write_text("B8 DP2xCP2 output/gradient/clip/Adam/U2/population oracle passed")
     finally:
         dist.destroy_process_group()
 
 
-def test_cp2_b8_odd_padding_modal_sigmas_gradients_adam_u2_and_unique_population(tmp_path):
+def test_cp2_production_checkpoint_restore_reference_rng_cursor_adam_and_continue(tmp_path):
     pytest.importorskip("diffusers.models.transformers.transformer_minimax_h3")
     context = mp.spawn(_worker, args=(str(tmp_path),), nprocs=4, join=False)
-    deadline = time.monotonic() + 180
+    deadline = time.monotonic() + 210
     try:
         while not context.join(timeout=1):
             if time.monotonic() > deadline:
-                pytest.fail("H3 CP2 CPU oracle exceeded180s")
+                pytest.fail("H3 CP2 CPU oracle exceeded210s")
     finally:
         for process in context.processes:
             if process.is_alive():
