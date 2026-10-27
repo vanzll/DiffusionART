@@ -14,7 +14,8 @@ from visual_rl.training.audio_video_types import AVState
 ROOT = Path(__file__).resolve().parents[1]
 # The explicit 480p train-only protocol has its own runtime/offline-eval tests.
 RECIPES = sorted(path for path in (ROOT / 'configs/examples').glob('minimax_h3_*.yaml')
-                 if path.name != 'minimax_h3_art_posttrain_full_32gpu.yaml')
+                 if path.name not in {'minimax_h3_art_posttrain_full_32gpu.yaml',
+                                      'minimax_h3_art_posttrain_full_64gpu_cp2.yaml'})
 
 
 @pytest.mark.parametrize('path', RECIPES, ids=lambda path: path.stem)

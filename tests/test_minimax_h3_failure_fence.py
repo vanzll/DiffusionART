@@ -38,6 +38,8 @@ def test_report_child_wait_is_bounded(monkeypatch):
         def kill(self):
             actions.append("kill")
     monkeypatch.setenv("H3_ATTEMPT_NONCE", "test")
+    # Supply process identity without depending on Linux /proc on the test host.
+    monkeypatch.setattr(fence.Path, "read_text", lambda path: "123 (python) " + " ".join(["0"] * 20))
     monkeypatch.setattr(fence.subprocess, "Popen", lambda *args, **kwargs: Child())
     fence.report_failure("RuntimeError", timeout=.05)
     assert actions == [.05, "kill"]

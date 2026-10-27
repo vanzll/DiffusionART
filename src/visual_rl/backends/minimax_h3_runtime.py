@@ -530,6 +530,8 @@ def run(c, *, resume=None, resume_rewind=False, evaluate_only=False, backend_api
     event("execution_policy", deterministic_algorithms=torch.are_deterministic_algorithms_enabled(),
           cublas_workspace_config=os.environ["CUBLAS_WORKSPACE_CONFIG"])
     api = backend if backend_api is None else backend_api
+    if evaluate_only and c.model.options.get("context_parallel_size", 1) > 1:
+        raise ConfigError("H3 CP2 supports training only; evaluation ownership is not implemented")
     validate_resume_request(resume, resume_rewind, evaluate_only)
     c, resume = prepare_resume_config(c, resume)
     api.validate_config(c)

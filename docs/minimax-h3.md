@@ -507,10 +507,16 @@ continuation and distributed rank progress. Keep healthy experiments running.
 CPU oracles, ready assets and launch commands do not replace these runtime
 records. The existing `track.md` holds actual evidence and remaining limits.
 
-## 480p, ten-step ART post-training on 32 GPUs
+## 480p, ten-step ART post-training on 32 or 64 GPUs
 
-`configs/examples/minimax_h3_art_posttrain_full_32gpu.yaml` is the current
-training-only full-parameter recipe. It uses **864×480, 124 frames at 24 fps**
+The current training-only full-parameter recipe has two execution profiles:
+
+| Profile | Physical GPUs | Logical data replicas | Context parallelism | Rollout / update microbatch |
+|---|---:|---:|---:|---:|
+| [`minimax_h3_art_posttrain_full_32gpu.yaml`](../configs/examples/minimax_h3_art_posttrain_full_32gpu.yaml) | 32 | 32 | 1 | 8 / 8 |
+| [`minimax_h3_art_posttrain_full_64gpu_cp2.yaml`](../configs/examples/minimax_h3_art_posttrain_full_64gpu_cp2.yaml) | 64 | 32 | 2 | 8 / 8 |
+
+Both use **864×480, 124 frames at 24 fps**
 (about 5.17 seconds), guidance scale 1, native Euler integration and the original
 video/audio shifts 12/3. The native scheduler takes **11 sigma boundaries**,
 including zero, for **10 actual transformer forwards**; `steps: 10` would instead
@@ -546,7 +552,8 @@ new write. These are full training checkpoints, not standalone HF exports.
 The disabled evaluation fields bind the future offline protocol in advance:
 1344×768, 124 frames, 50 boundaries / 49 forwards, and the fixed held-out manifest.
 They generate no evaluation during training. Bind `H3_EVAL_MANIFEST` and its hash
-as shown below, but leave every cadence at zero/empty. Later, on the same FSDP
+as shown below, but leave every cadence at zero/empty. For the **32-GPU CP1
+profile**, later, on the same FSDP
 topology and using the original output directory and data/asset bindings, create
 an inherited evaluation config that changes **only** `evaluation.at_updates`:
 
@@ -574,12 +581,50 @@ checks the training resume signature and retains the checkpoint's identity;
 changing evaluation cadence does not bypass model/data/optimizer validation.
 Offline evaluation does not call `optimizer.step` or rewrite checkpoint state.
 
-The 32-GPU profile is full-world FSDP32, SP1/TP1. More FSDP ranks do not split a
-sample's activation memory. The current complete-local-prompt-group runtime
-requires P to be divisible by the data-parallel world size: **P32 cannot simply
-be launched as 64 independent FSDP data ranks**. A 64-card fallback requires a
-validated model/context-parallel layout that preserves P32/K8, U2, physical
-microbatch 8 and loss denominators. It is not an automatic YAML override.
+### 64-GPU context-parallel profile
+
+The 32-GPU profile uses full-world FSDP32, CP1/TP1. More FSDP ranks alone do not
+split a sample's activation memory. The 64-GPU profile uses physical-world
+**FSDP64 with logical DP32 × CP2**: adjacent rank pairs `(0,1)`, `(2,3)`, …
+cooperate on the same prompt group. Each pair executes a physical transformer
+batch of up to eight trajectories, splitting its packed sequence across two GPUs.
+Microbatch 8 is per cooperating pair, not eight independent trajectories per
+physical GPU. Rank pairs should be placed within the same node.
+
+Each CP worker keeps its query-token shard and gathers complete keys/values
+for global attention. RoPE coordinates and packed modality/time indices retain
+their original positions. CP peers share prompt ownership, trajectory noise
+and timestep selection; only their leader decodes and scores the unique
+trajectories. Reward population gathering uses the 32 logical replicas, so CP
+does not double-count samples or reward statistics. The complete modality
+losses use SUM-backward sequence gathers followed by the physical-world FSDP
+average, preserving the original gradient scale and loss denominators.
+
+Use this profile when the 32-GPU B8 backward exceeds available memory. It keeps
+P32/K8, the two disjoint K4 updates, six reward routes, reference MSE, optimizer,
+checkpoint cadence and disabled evaluation unchanged. **P32 cannot be launched
+as 64 independent data replicas**; changing only the node count on the CP1 YAML
+is rejected.
+
+After the asset/environment bindings above, execute the following once on each
+of eight nodes with `H3_NODE_RANK=0,1,…,7`, through the same fenced site launcher:
+
+```bash
+.venv-h3-cu128/bin/python -m visual_rl.train \
+  --config configs/examples/minimax_h3_art_posttrain_full_64gpu_cp2.yaml \
+  --nproc-per-node 8 --nnodes 8 --node-rank "$H3_NODE_RANK" \
+  --master-addr "$H3_MASTER_ADDR" --master-port "$H3_MASTER_PORT" \
+  --preparation-run-id "$H3_PREPARATION_RUN_ID"
+```
+
+The supplied MPI helpers use the same configuration via
+`H3_ACCEPTANCE_CONFIG` and `H3_NNODES=8`; no second launcher or GPU-lease wrapper
+is needed. The CP2 implementation currently supports **full-parameter ART
+training only**. Resume uses the same physical64/DP32/CP2 topology and restores
+model, Adam, reference, RNG and prompt cursor. CP2 evaluation and cross-topology
+checkpoint conversion are not implemented: enabling evaluation is rejected
+before loading assets. The CP1 offline-evaluation instructions above apply to
+CP1 checkpoints, not to a CP2 checkpoint by changing its YAML.
 
 ## Archived 768p multi-duration ART recipe
 

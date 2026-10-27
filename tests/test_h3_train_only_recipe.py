@@ -5,13 +5,14 @@ import json
 from dataclasses import replace
 from pathlib import Path
 
+import pytest
 import torch
 from test_h3_mixed_reference_runtime import api, mixed_config
 from test_minimax_h3_runtime import config_factory as make_config_factory
 
 from visual_rl.backends import minimax_h3 as backend
 from visual_rl.backends import minimax_h3_runtime as runtime
-from visual_rl.config import load_config, resume_signature
+from visual_rl.config import ConfigError, load_config, resume_signature
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -46,6 +47,29 @@ def test_public_train_only_protocol_and_offline_resume_signature(tmp_path, monke
     assert resume_signature(c.to_dict()) == resume_signature(offline.to_dict())
     changed = replace(offline, sampling=replace(offline.sampling, width=832))
     assert resume_signature(c.to_dict()) != resume_signature(changed.to_dict())
+
+
+def test_public_cp2_recipe_preserves_training_contract_and_rejects_eval(tmp_path, monkeypatch):
+    # Compare every scientific setting, including P/K and the optimizer windows.
+    test_public_train_only_protocol_and_offline_resume_signature(tmp_path, monkeypatch)
+    full32 = load_config(ROOT / 'configs/examples/minimax_h3_art_posttrain_full_32gpu.yaml')
+    cp2 = load_config(ROOT / 'configs/examples/minimax_h3_art_posttrain_full_64gpu_cp2.yaml')
+    backend.validate_config(cp2)
+    assert cp2.model.options['context_parallel_size'] == 2
+    assert cp2.runtime.wandb['name'].endswith('full64-cp2')
+    actual, expected = cp2.to_dict(), full32.to_dict()
+    actual['model']['options'].pop('context_parallel_size')
+    for value in (actual, expected):
+        value.pop('name')
+        value.pop('provenance')
+        value['runtime']['wandb'].pop('name')
+    assert actual == expected
+    offline = replace(cp2, evaluation=replace(cp2.evaluation, at_updates=(2,)))
+    with pytest.raises(ConfigError, match='training only'):
+        backend.validate_config(offline)
+    # Direct callers must also fail before distributed setup or asset loading.
+    with pytest.raises(ConfigError, match='training only'):
+        runtime.run(cp2, evaluate_only=True)
 
 
 def test_training_skips_all_eval_then_offline_restores_without_optimizer_updates(tmp_path, monkeypatch):

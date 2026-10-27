@@ -44,6 +44,8 @@ def validate_config(c):
     if degree == 2 and (c.runtime.distributed != "fsdp" or c.algorithm.name != "diffusionart"
                         or mo["finetune"]["mode"] != "full"):
         raise ConfigError("H3 CP2 requires full ART and FSDP")
+    if degree == 2 and c.evaluation.enabled:
+        raise ConfigError("H3 CP2 supports training only; evaluation ownership is not implemented")
     from ..models.finetune import FineTuneConfig
     try:
         FineTuneConfig(**mo["finetune"])
