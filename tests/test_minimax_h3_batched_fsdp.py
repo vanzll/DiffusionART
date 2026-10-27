@@ -76,6 +76,8 @@ def _worker(rank, directory):
             generator = torch.Generator().manual_seed(90 + rank)
             # Different max text lengths across ranks must not alter collective order.
             lengths = torch.tensor([1, 4, 2, 3, 4, 2, 1, 3]) + rank * 3
+            if rank == 0:
+                lengths.fill_(4)  # Rank0 elides its mask; rank1 retains real padding.
             mask = torch.arange(int(lengths.max()))[None] < lengths[:, None]
             embeds = torch.randn(8, mask.shape[1], 8, generator=generator)
             embeds[~mask] = 10000

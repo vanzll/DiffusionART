@@ -11,12 +11,19 @@ POST_TRAINING = {"video_pool": 4, "audio_pool": 3, "count": 2,
                  "reward_normalization": "prompt_group_std", "eval_gallery": True}
 
 DURATION_OPTIONS = {"duration_frames", "full_duration_rewards"}
+EVALUATION_OPTIONS = {"eval_frames"}
 
 
 def duration_frames(c):
     """Frozen configurations remain single-length; only the explicit recipe mixes."""
     post = c.algorithm.options.get("post_training") or {}
     return tuple(post.get("duration_frames", (c.sampling.frames,)))
+
+
+def evaluation_frames(c):
+    """Evaluation subset is independent of the completed-rollout rotation."""
+    post = c.algorithm.options.get("post_training") or {}
+    return tuple(post.get("eval_frames", duration_frames(c)))
 
 
 def duration_config(c, frames):
@@ -46,7 +53,7 @@ def fast_innovation_seed(seed, attempt, rank):
 
 
 def validate_post_training(options, boundaries):
-    if (not isinstance(options, dict) or set(options) - (set(POST_TRAINING) | DURATION_OPTIONS)
+    if (not isinstance(options, dict) or set(options) - (set(POST_TRAINING) | DURATION_OPTIONS | EVALUATION_OPTIONS)
             or not set(POST_TRAINING) <= set(options)
             or type(options["count"]) is not int or options["count"] != 2
             or options["reward_normalization"] != "prompt_group_std"
@@ -62,6 +69,12 @@ def validate_post_training(options, boundaries):
                 or len(set(frames)) != len(frames) or frames != sorted(frames)
                 or options["full_duration_rewards"] is not True):
             raise ConfigError("H3 durations require unique ascending native 17n+5 frames within5..15s and full rewards")
+    if "eval_frames" in options:
+        selected = options["eval_frames"]
+        if (not isinstance(selected, list) or not selected
+                or any(type(n) is not int or n not in options.get("duration_frames", ()) for n in selected)
+                or selected != sorted(set(selected))):
+            raise ConfigError("H3 eval_frames must be a nonempty ascending subset of training duration_frames")
     for name in ("video_pool", "audio_pool"):
         if type(options[name]) is not int or not 2 <= options[name] <= boundaries - 2:
             raise ConfigError("H3 candidate pools must contain at least two nonfinal rollout positions")

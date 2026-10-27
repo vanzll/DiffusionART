@@ -175,9 +175,30 @@ def worker(rank, root, mode):
 
             checkpoint._pack_model = lambda live: live
             checkpoint._write, checkpoint._atomic_json = legacy_write, legacy_json
+        if mode == "resume_retention":
+            # Simulate an attempt exiting before its best-effort daemon registers.
+            checkpoint.enqueue_retention = lambda *args, **kwargs: None
         receipt = checkpoint.save_fsdp_checkpoint(output, progress=progress,
-                                                 keep_last=2 if mode in {"retention", "publication_failure", "write_failure", "slow_cleanup"} else None,
+                                                 keep_last=2 if mode in {"retention", "resume_retention", "publication_failure", "write_failure", "slow_cleanup"} else None,
                                                  **kwargs)
+        if mode == "resume_retention":
+            publications = []
+            for index in range(3):
+                current = receipt if index == 0 else checkpoint.save_fsdp_checkpoint(
+                    output, progress=progress, **kwargs, keep_last=2)
+                publications.append(current)
+                assert checkpoint.load_fsdp_checkpoint(current, **kwargs) == progress
+                equal(before, snapshot(model, optimizer, cursor, generator))
+                if rank == 0:
+                    assert retention.enqueue_resumed_retention(output, current,
+                        expected_config_sha256=kwargs["config_sha256"], expected_world_size=2, keep_last=2)
+                    assert retention._WORKER.wait_idle(timeout=10)
+                dist.barrier()
+            assert not publications[0].parent.exists()
+            assert all(path.exists() for path in publications[1:])
+            assert checkpoint.load_fsdp_checkpoint(publications[-1], **kwargs) == progress
+            equal(before, snapshot(model, optimizer, cursor, generator))
+            return
         if mode == "legacy":
             checkpoint._pack_model = original_pack
             checkpoint._write, checkpoint._atomic_json = original_write, original_json
@@ -377,7 +398,7 @@ def worker(rank, root, mode):
         dist.destroy_process_group()
 
 
-@pytest.mark.parametrize("mode", ["resume", "retention", "slow_cleanup", "publication_failure", "mixed", "padding", "scalar", "write_failure", "corrupt", "world",
+@pytest.mark.parametrize("mode", ["resume", "retention", "resume_retention", "slow_cleanup", "publication_failure", "mixed", "padding", "scalar", "write_failure", "corrupt", "world",
                                   "config", "wrapping", "optimizer_order", "components",
                                   "bad_names", "gradients", "step_mismatch", "apply_failure",
                                   "extraction_failure", "legacy", "shard_metadata", "shard_shape",

@@ -2,6 +2,9 @@ set +u
 source /m2v_intern2/zhenglin/my_bashrc.sh
 set -euo pipefail
 unset PYTHONPATH PYTHONHOME LD_PRELOAD CUDA_VISIBLE_DEVICES
+# Select the clean, owner-admitted checkout after removing inherited paths.
+# An older editable venv installation must not override this attempt's source.
+export PYTHONPATH="${H3_CHECKOUT:?missing admitted H3 checkout}/src"
 unset NCCL_CUMEM_ENABLE NCCL_CUMEM_HOST_ENABLE NCCL_P2P_LEVEL NCCL_P2P_DIRECT_DISABLE
 export PYTHONNOUSERSITE=1 PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 export CUBLAS_WORKSPACE_CONFIG=:4096:8

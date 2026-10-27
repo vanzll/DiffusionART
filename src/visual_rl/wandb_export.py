@@ -35,7 +35,11 @@ def execution_source():
 
         commit = git("rev-parse", "HEAD").decode().strip()
         dirty = bool(git("status", "--porcelain", "--untracked-files=normal").strip())
-        return {"commit": commit, "dirty": dirty, "status": "captured_at_metrics_open"}
+        record = {"commit": commit, "dirty": dirty, "status": "captured_at_metrics_open"}
+        cap = os.environ.get("H3_INFERENCE_FORWARD_MICROBATCH")
+        if cap is not None:
+            record["runtime_overrides"] = {"inference_forward_microbatch_cap": int(cap)}
+        return record
     except (OSError, subprocess.SubprocessError, UnicodeError):
         return unknown
 

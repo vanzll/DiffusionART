@@ -52,7 +52,7 @@ from .minimax_h3_execution import execution_policy
 from .minimax_h3_observability import BatchTrace, event
 from .minimax_h3_posttraining import (
     duration_config,
-    duration_frames,
+    evaluation_frames,
     evaluation_step_directory,
     fast_innovation_seed,
     rollout_config,
@@ -175,11 +175,15 @@ def prediction_callback(parts, rows, repeats, session):
         conditioning = parts.conditioner.encode([row.text for row in rows]).to("cpu")
     indices = torch.arange(len(rows)).repeat_interleave(repeats)
     conditioning = conditioning.select(indices)
-    def predict(state, video_sigma, audio_sigma, original_rows):
+    def predict_direct(state, video_sigma, audio_sigma, original_rows):
         selected = conditioning.select(original_rows.cpu()).to(session.device)
         with torch.autocast(device_type=session.device.type, dtype=torch.bfloat16,
                             enabled=session.device.type == "cuda"):
             return parts.adapter.predict_velocity(state, video_sigma, audio_sigma, selected)
+    from .minimax_h3_forward_chunks import inference_forward_cap, predict_in_chunks
+    cap = inference_forward_cap()
+    def predict(state, video_sigma, audio_sigma, original_rows):
+        return predict_in_chunks(predict_direct, state, video_sigma, audio_sigma, original_rows, cap=cap)
     return predict
 
 
@@ -393,7 +397,7 @@ def evaluate(session, c, parts, dataset, step, root):
     if "duration_frames" not in (c.algorithm.options.get("post_training") or {}):
         return _evaluate_duration(session, c, parts, dataset, step, root)
     results = {}
-    for frames in duration_frames(c):
+    for frames in evaluation_frames(c):
         workload = duration_config(c, frames)
         complete = session.primary("AV duration evaluation receipt", lambda: _completed_duration_evaluation(
             workload, dataset, step, root))
@@ -481,7 +485,7 @@ def _completed_evaluation(c, dataset, step, root):
     if "duration_frames" not in (c.algorithm.options.get("post_training") or {}):
         return _completed_duration_evaluation(c, dataset, step, root)
     return all(_completed_duration_evaluation(duration_config(c, frames), dataset, step, root)
-               for frames in duration_frames(c))
+               for frames in evaluation_frames(c))
 
 
 def _completed_duration_evaluation(c, dataset, step, root):
@@ -532,10 +536,17 @@ def run(c, *, resume=None, resume_rewind=False, evaluate_only=False, backend_api
         raise ConfigError("H3 full-shard checkpoint/shadow requires two or more ranks")
     timeout = float(os.environ.get("VISUAL_RL_COLLECTIVE_TIMEOUT_SECONDS", "300"))
     with distributed_session(c.runtime.distributed, device=c.runtime.device, timeout_seconds=timeout) as session:
-        session.require_same_digest(c.fingerprint())
-        session.agree({"resume": None if resume is None else str(Path(resume).absolute()),
-                       "rewind": resume_rewind, "evaluate_only": evaluate_only})
-        return _run(session, c, prompts, resume, api, resume_rewind=resume_rewind, evaluate_only=evaluate_only)
+        from .minimax_h3_failure_fence import native_failure_fence
+        from .minimax_h3_forward_chunks import inference_forward_cap
+        with native_failure_fence():
+            cap = session.local("physical inference forward cap", inference_forward_cap)
+            session.require_same_digest(c.fingerprint())
+            session.agree({"resume": None if resume is None else str(Path(resume).absolute()),
+                           "rewind": resume_rewind, "evaluate_only": evaluate_only,
+                           "physical_inference_forward_cap": cap})
+            event("physical_inference_forward_cap", cap=cap,
+                  configured_sampling_microbatch=c.sampling.microbatch, training_microbatch=c.training.microbatch)
+            return _run(session, c, prompts, resume, api, resume_rewind=resume_rewind, evaluate_only=evaluate_only)
 
 
 def _run(session, c, prompts, resume, api, *, resume_rewind, evaluate_only):
@@ -631,6 +642,11 @@ def _run(session, c, prompts, resume, api, *, resume_rewind, evaluate_only):
                 if c.algorithm.options.get("post_training") is not None:
                     session.primary("AV eval-only export", lambda: resources.enter_context(open_metrics(c, root)))
                 return evaluate(session, c, parts, validation, progress.optimizer_steps, root)
+            if session.distributed and rank == 0:
+                from ..training.checkpoint_retention import enqueue_resumed_retention
+                enqueue_resumed_retention(root / "checkpoints", resume,
+                    expected_config_sha256=c.fingerprint(), expected_world_size=world,
+                    keep_last=c.runtime.checkpoint_keep)
             session.primary("AV resume history", lambda: prepare_resume_history(c, root, progress, receipt=resume, rewind=resume_rewind))
             session.local("AV cost lineage", lambda: _restore_cost(c, root, progress))
             if progress.optimizer_steps == c.training.max_updates and c.algorithm.options.get("post_training") is None:
@@ -644,6 +660,11 @@ def _run(session, c, prompts, resume, api, *, resume_rewind, evaluate_only):
                     "actual_output_dir": str(root.resolve()), "strategy": c.runtime.distributed,
                     "ordering": "global-prompt-stream/prompt-half-K-u2-v1", "pretrained_reference": reference is not None})
             session.primary("AV run identity", publish_run)
+            reused = os.environ.get("H3_PRETRAINED_EVAL0_SOURCE")
+            if reused:
+                from .minimax_h3_eval_reuse import reuse_pretrained_eval0
+                session.primary("AV proven pretrained eval0 import", lambda: reuse_pretrained_eval0(
+                    c, validation, root, reused))
         clock = CostClock(progress, gpu_count=world if session.device.type == "cuda" else 0)
         log = session.primary("AV metrics open", lambda: resources.enter_context(open_metrics(c, root)))
         if (resume and validation is not None and c.algorithm.options.get("post_training") is not None
@@ -659,6 +680,23 @@ def _run(session, c, prompts, resume, api, *, resume_rewind, evaluate_only):
         sigmas = sigma_schedules(c.sampling.steps, video_shift=c.sampling.options["video_shift"], audio_shift=c.sampling.options["audio_shift"])
         if validation is not None and resume is None:
             evaluate(session, c, parts, validation, 0, root)
+        if os.environ.get("H3_TRACE_ATTENTION_ONCE") == "1" and rank == 0:
+            from .minimax_h3_attention_trace import OneShotAttentionTrace
+            attention_trace = OneShotAttentionTrace(root, enabled=True)
+            attention_trace.install()
+            resources.callback(attention_trace.close)
+        from .minimax_h3_attempt_budget import AttemptBudget
+        budget = AttemptBudget(session, c, root, api.updates_per_rollout(c), progress.optimizer_steps)
+        def publish_checkpoint():
+            event("checkpoint_begin", optimizer_steps=progress.optimizer_steps)
+            clock.tick()
+            from .minimax_h3_checkpoint_admission import checkpoint_admission
+            with checkpoint_admission(session, root, progress.optimizer_steps):
+                receipt = save(root / "checkpoints", progress=progress,
+                    keep_last=c.runtime.checkpoint_keep, **checkpoint)
+            event("checkpoint_complete", optimizer_steps=progress.optimizer_steps)
+            return receipt
+
         while progress.optimizer_steps < c.training.max_updates:
             model.train()
             if session.device.type == "cuda":
@@ -744,6 +782,8 @@ def _run(session, c, prompts, resume, api, *, resume_rewind, evaluate_only):
                 metrics.update({"time/rollout_seconds": rollout_seconds, "time/decode_reward_prepare_seconds": reward_seconds,
                     "time/update_seconds": update_seconds, "av/transitions": len(sigmas[0]) - 1,
                     "av/training_positions": (len(objective.video_sigmas) / len(cache.endpoints) if nft is not None else len(cache.selected))})
+                from .minimax_h3_forward_chunks import inference_forward_cap
+                metrics["system/inference_forward_microbatch_cap"] = inference_forward_cap()
                 metrics.update(_cost(session, clock))
                 if "duration_frames" in (c.algorithm.options.get("post_training") or {}):
                     metrics.update({f"train/frames{workload.sampling.frames}/{key.removeprefix('train/')}": value
@@ -755,20 +795,23 @@ def _run(session, c, prompts, resume, api, *, resume_rewind, evaluate_only):
                     log.flush()
                 session.primary("AV metrics publication", publish_metrics)
             step = progress.optimizer_steps
-            checkpoint_due = actual and c.runtime.checkpoint_due(step, c.training.max_updates)
+            boundary_due = bool(actual and budget.should_yield(progress))
+            checkpoint_due = actual and c.runtime.checkpoint_due(step, c.training.max_updates) and not boundary_due
             eval_due = actual and validation is not None and c.evaluation.due(
                 step, c.training.max_updates, completed_rollouts=progress.completed_rollouts)
             post = c.algorithm.options.get("post_training") is not None
             if eval_due and not post:
                 evaluate(session, c, parts, validation, step, root)
             if checkpoint_due:
-                event("checkpoint_begin", optimizer_steps=step)
-                clock.tick()
-                save(root / "checkpoints", progress=progress, keep_last=c.runtime.checkpoint_keep, **checkpoint)
-                event("checkpoint_complete", optimizer_steps=step)
+                publish_checkpoint()
             if eval_due and post:
                 evaluate(session, c, parts, validation, step, root)
             _publish_cost(session, c, root, clock)
+            if boundary_due:
+                receipt = publish_checkpoint()
+                result = _publish_cost(session, c, root, clock)
+                session.primary("H3 checkpoint boundary handoff", lambda: budget.publish(progress, receipt))
+                return result
         final = _publish_cost(session, c, root, clock)
         session.primary("AV completion", lambda: _atomic_json(root / "status.json", {"status": "completed",
             "kind": "minimax_h3_native_development", "config_sha256": c.fingerprint(), **final}))
