@@ -76,6 +76,8 @@ def _worker(rank, directory):
             generator = torch.Generator().manual_seed(90 + rank)
             # Different max text lengths across ranks must not alter collective order.
             lengths = torch.tensor([1, 4, 2, 3, 4, 2, 1, 3]) + rank * 3
+            if rank == 0:
+                lengths.fill_(4)  # Rank0 elides its mask; rank1 retains real padding.
             mask = torch.arange(int(lengths.max()))[None] < lengths[:, None]
             embeds = torch.randn(8, mask.shape[1], 8, generator=generator)
             embeds[~mask] = 10000
@@ -84,6 +86,17 @@ def _worker(rank, directory):
                             torch.randn(8, 2, 3, 3, generator=generator))
             sv, sa = torch.linspace(.2, .9, 8), torch.linspace(.8, .1, 8)
             expected = _singleton(reference, state, conditioning, sv, sa)
+            from visual_rl.backends.minimax_h3_forward_chunks import predict_in_chunks
+            rng_before = torch.get_rng_state().clone()
+            def direct(part, video_sigma, audio_sigma, rows):
+                return adapter.predict_velocity(part, video_sigma, audio_sigma, conditioning.select(rows))
+            with torch.no_grad():
+                chunked = predict_in_chunks(direct, state, sv, sa, torch.arange(8), cap=2)
+            assert physical == [2] * 4
+            assert torch.equal(rng_before, torch.get_rng_state())
+            torch.testing.assert_close(chunked.video, expected.video, rtol=2e-5, atol=2e-6)
+            torch.testing.assert_close(chunked.audio, expected.audio, rtol=2e-5, atol=2e-6)
+            physical.clear()
             actual = adapter.predict_velocity(state, sv, sa, conditioning)
             assert physical == [8]
             torch.testing.assert_close(actual.video, expected.video, rtol=2e-5, atol=2e-6)

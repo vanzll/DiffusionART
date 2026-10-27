@@ -173,11 +173,15 @@ def prediction_callback(parts, rows, repeats, session):
         conditioning = parts.conditioner.encode([row.text for row in rows]).to("cpu")
     indices = torch.arange(len(rows)).repeat_interleave(repeats)
     conditioning = conditioning.select(indices)
-    def predict(state, video_sigma, audio_sigma, original_rows):
+    def predict_direct(state, video_sigma, audio_sigma, original_rows):
         selected = conditioning.select(original_rows.cpu()).to(session.device)
         with torch.autocast(device_type=session.device.type, dtype=torch.bfloat16,
                             enabled=session.device.type == "cuda"):
             return parts.adapter.predict_velocity(state, video_sigma, audio_sigma, selected)
+    from .minimax_h3_forward_chunks import inference_forward_cap, predict_in_chunks
+    cap = inference_forward_cap()
+    def predict(state, video_sigma, audio_sigma, original_rows):
+        return predict_in_chunks(predict_direct, state, video_sigma, audio_sigma, original_rows, cap=cap)
     return predict
 
 
@@ -518,10 +522,17 @@ def run(c, *, resume=None, resume_rewind=False, evaluate_only=False, backend_api
         raise ConfigError("H3 full-shard checkpoint/shadow requires two or more ranks")
     timeout = float(os.environ.get("VISUAL_RL_COLLECTIVE_TIMEOUT_SECONDS", "300"))
     with distributed_session(c.runtime.distributed, device=c.runtime.device, timeout_seconds=timeout) as session:
-        session.require_same_digest(c.fingerprint())
-        session.agree({"resume": None if resume is None else str(Path(resume).absolute()),
-                       "rewind": resume_rewind, "evaluate_only": evaluate_only})
-        return _run(session, c, prompts, resume, api, resume_rewind=resume_rewind, evaluate_only=evaluate_only)
+        from .minimax_h3_failure_fence import native_failure_fence
+        with native_failure_fence():
+            from .minimax_h3_forward_chunks import inference_forward_cap
+            cap = session.local("physical inference forward cap", inference_forward_cap)
+            session.require_same_digest(c.fingerprint())
+            session.agree({"resume": None if resume is None else str(Path(resume).absolute()),
+                           "rewind": resume_rewind, "evaluate_only": evaluate_only,
+                           "physical_inference_forward_cap": cap})
+            event("physical_inference_forward_cap", cap=cap,
+                  configured_sampling_microbatch=c.sampling.microbatch, training_microbatch=c.training.microbatch)
+            return _run(session, c, prompts, resume, api, resume_rewind=resume_rewind, evaluate_only=evaluate_only)
 
 
 def _run(session, c, prompts, resume, api, *, resume_rewind, evaluate_only):
@@ -757,6 +768,8 @@ def _run(session, c, prompts, resume, api, *, resume_rewind, evaluate_only):
                 metrics.update({"time/rollout_seconds": rollout_seconds, "time/decode_reward_prepare_seconds": reward_seconds,
                     "time/update_seconds": update_seconds, "av/transitions": len(sigmas[0]) - 1,
                     "av/training_positions": (len(objective.video_sigmas) / len(cache.endpoints) if nft is not None else len(cache.selected))})
+                from .minimax_h3_forward_chunks import inference_forward_cap
+                metrics["system/inference_forward_microbatch_cap"] = inference_forward_cap()
                 metrics.update(_cost(session, clock))
                 if "duration_frames" in (c.algorithm.options.get("post_training") or {}):
                     metrics.update({f"train/frames{workload.sampling.frames}/{key.removeprefix('train/')}": value
