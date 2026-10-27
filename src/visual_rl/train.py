@@ -112,6 +112,12 @@ def main(argv=None):
             if config.runtime.distributed == "none":
                 raise ConfigError("--nproc-per-node requires a distributed config")
             workers = args.nproc_per_node * args.nnodes
+            if config.model.name == "minimax_h3":
+                from .backends.minimax_h3_parallel import H3Parallel
+                from .training.distributed import RankInfo
+
+                identity = RankInfo(0, workers, 0, args.nproc_per_node)
+                workers = H3Parallel.from_config(config, identity).dp_world
             if (config.sampling.prompts_per_rollout < workers
                     or config.sampling.prompts_per_rollout % workers):
                 raise ConfigError("global prompt count must divide evenly over the requested workers")
