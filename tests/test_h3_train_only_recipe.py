@@ -72,6 +72,28 @@ def test_public_cp2_recipe_preserves_training_contract_and_rejects_eval(tmp_path
         runtime.run(cp2, evaluate_only=True)
 
 
+def test_public_lora8_keeps_effective_batch_optimizer_rewards_and_reference(tmp_path, monkeypatch):
+    test_public_train_only_protocol_and_offline_resume_signature(tmp_path, monkeypatch)
+    full32 = load_config(ROOT / 'configs/examples/minimax_h3_art_posttrain_full_32gpu.yaml')
+    lora8 = load_config(ROOT / 'configs/examples/minimax_h3_art_posttrain_lora_8gpu.yaml')
+    backend.validate_config(lora8)
+    fine = lora8.model.options['finetune']
+    assert (fine['mode'], fine['rank'], fine['alpha']) == ('lora', 32, 64)
+    assert set(fine['target_modules']) == {'to_q', 'to_k', 'to_v', 'to_out.0',
+                                         'ff.net.0.proj', 'ff.net.2'}
+    assert lora8.sampling.microbatch == lora8.training.microbatch == 1
+    assert lora8.model.options.get('context_parallel_size', 1) == 1
+    actual, expected = lora8.to_dict(), full32.to_dict()
+    for value in (actual, expected):
+        value.pop('name')
+        value.pop('provenance')
+        value['model']['options'].pop('finetune')
+        value['sampling'].pop('microbatch')
+        value['training'].pop('microbatch')
+        value['runtime']['wandb'].pop('name')
+    assert actual == expected
+
+
 def test_training_skips_all_eval_then_offline_restores_without_optimizer_updates(tmp_path, monkeypatch):
     factory = make_config_factory.__wrapped__(tmp_path, monkeypatch)
     base = mixed_config(factory, 'train-only')

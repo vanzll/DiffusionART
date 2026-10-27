@@ -1,0 +1,26 @@
+# One 8-GPU FSDP node; preserve P32/K8/U2 with smaller execution chunks.
+extends: minimax_h3_art_posttrain_full_32gpu.yaml
+name: minimax-h3-art-posttrain-lora-8gpu
+model:
+  options:
+    finetune:
+      mode: lora
+      rank: 32
+      alpha: 64
+      target_modules:
+      - to_q
+      - to_k
+      - to_v
+      - to_out.0
+      - ff.net.0.proj
+      - ff.net.2
+sampling:
+  microbatch: 1
+training:
+  microbatch: 1
+runtime:
+  wandb:
+    name: minimax-h3-art-six-reward-480p-10steps-v4a3-124frames-refmse1e-3-trainonly-lora32-8gpu
+provenance:
+  deployment: 1 node x 8 GPUs, full-world FSDP8, CP1/TP1
+  microbatch_policy: rollout1/update1; accumulate with unchanged P32/K8/U2 and loss denominators

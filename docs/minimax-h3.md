@@ -507,22 +507,26 @@ continuation and distributed rank progress. Keep healthy experiments running.
 CPU oracles, ready assets and launch commands do not replace these runtime
 records. The existing `track.md` holds actual evidence and remaining limits.
 
-## 480p, ten-step ART post-training on 32 or 64 GPUs
+## 480p, ten-step ART post-training
 
-The current training-only full-parameter recipe has two execution profiles:
+The current training-only recipe has three execution profiles:
 
 | Profile | Physical GPUs | Logical data replicas | Context parallelism | Rollout / update microbatch |
 |---|---:|---:|---:|---:|
+| [`minimax_h3_art_posttrain_lora_8gpu.yaml`](../configs/examples/minimax_h3_art_posttrain_lora_8gpu.yaml) | 8 | 8 | 1 | 1 / 1 |
 | [`minimax_h3_art_posttrain_full_32gpu.yaml`](../configs/examples/minimax_h3_art_posttrain_full_32gpu.yaml) | 32 | 32 | 1 | 8 / 8 |
 | [`minimax_h3_art_posttrain_full_64gpu_cp2.yaml`](../configs/examples/minimax_h3_art_posttrain_full_64gpu_cp2.yaml) | 64 | 32 | 2 | 8 / 8 |
 
-Both use **864×480, 124 frames at 24 fps**
+All use **864×480, 124 frames at 24 fps**
 (about 5.17 seconds), guidance scale 1, native Euler integration and the original
 video/audio shifts 12/3. The native scheduler takes **11 sigma boundaries**,
 including zero, for **10 actual transformer forwards**; `steps: 10` would instead
 execute nine transitions. No acceleration LoRA or extra CFG branch is added.
 
-Rollout and update microbatches remain **8**. P32/K8 means 256 trajectories per
+Full-parameter profiles use rollout/update microbatches **8**; the 8-GPU LoRA
+profile uses **1** with rank32/alpha64 attention and FFN adapters. FSDP8 and
+activation checkpointing remain enabled. Smaller microbatches accumulate toward
+the same effective batch and optimizer boundary. P32/K8 means 256 trajectories per
 rollout. Compute each reward's statistics over its complete K8 group, then split
 every prompt's samples into disjoint K4+K4 windows: two global optimizer steps,
 128 trajectories per step. This is not two epochs over the same 256 trajectories.
@@ -552,10 +556,11 @@ new write. These are full training checkpoints, not standalone HF exports.
 The disabled evaluation fields bind the future offline protocol in advance:
 1344×768, 124 frames, 50 boundaries / 49 forwards, and the fixed held-out manifest.
 They generate no evaluation during training. Bind `H3_EVAL_MANIFEST` and its hash
-as shown below, but leave every cadence at zero/empty. For the **32-GPU CP1
-profile**, later, on the same FSDP
+as shown below, but leave every cadence at zero/empty. For the **CP1 profiles**,
+later, on the same FSDP
 topology and using the original output directory and data/asset bindings, create
-an inherited evaluation config that changes **only** `evaluation.at_updates`:
+an inherited evaluation config that changes **only** `evaluation.at_updates`.
+Use the exact training recipe as its parent (LoRA8 or Full32):
 
 ```yaml
 extends: /absolute/path/configs/examples/minimax_h3_art_posttrain_full_32gpu.yaml
@@ -580,6 +585,16 @@ trainer or change training cadence when returning to training. The backend
 checks the training resume signature and retains the checkpoint's identity;
 changing evaluation cadence does not bypass model/data/optimizer validation.
 Offline evaluation does not call `optimizer.step` or rewrite checkpoint state.
+
+### 8-GPU LoRA profile
+
+Use the prepared H3 environment and asset bindings:
+
+```bash
+.venv-h3-cu128/bin/python -m visual_rl.train \
+  --config configs/examples/minimax_h3_art_posttrain_lora_8gpu.yaml \
+  --nproc-per-node 8
+```
 
 ### 64-GPU context-parallel profile
 

@@ -185,7 +185,7 @@ Each model card includes its inference setup, base-model requirements and exampl
 | **Tasks** | ✅ Text-to-image<br>✅ Text-to-video<br>✅ Image-to-video<br>✅ Text-to-audio/video |
 | **Algorithms** | ✅ DiffusionART / [DiffusionART-Flash](docs/art-flash.md)<br>✅ DiffusionNFT (EMA / on-policy)<br>✅ Flow-GRPO / Flow-GRPO-Fast<br>✅ Flow-DPPO<br>✅ DanceGRPO<br>✅ ReFL (video) |
 | **Base Models** | ✅ [SD3.5-M](docs/sd3-runner.md)<br>✅ [FLUX.1-dev](docs/flux-runner.md)<br>✅ [HunyuanVideo-13B](docs/hunyuan-runner.md)<br>✅ [Wan2.1-I2V-14B (CFG/step-distilled)](docs/wan-runner.md)<br>✅ [MiniMax-H3 (audio/video)](docs/minimax-h3.md) |
-| **Reward Models** | ✅ GenEval / PickScore / OCR<br>✅ CLIPScore / Aesthetic<br>✅ [VideoReward (TA / VQ / MQ)](docs/video-installation.md)<br>✅ [VideoAlign / HPSv3 / AudioBox / CLAP / DeSync](docs/minimax-h3.md#prompt-data-and-native-scorer-assets)<br>✅ [ImageBind + 32/64-GPU AV post-training](docs/minimax-h3.md#480p-ten-step-art-post-training-on-32-or-64-gpus)<br>✅ [Configurable reward weights](docs/composite-rewards.md) |
+| **Reward Models** | ✅ GenEval / PickScore / OCR<br>✅ CLIPScore / Aesthetic<br>✅ [VideoReward (TA / VQ / MQ)](docs/video-installation.md)<br>✅ [VideoAlign / HPSv3 / AudioBox / CLAP / DeSync](docs/minimax-h3.md#prompt-data-and-native-scorer-assets)<br>✅ [ImageBind + AV post-training](docs/minimax-h3.md#480p-ten-step-art-post-training)<br>✅ [Configurable reward weights](docs/composite-rewards.md) |
 | **Feedback** | ✅ Scalar rewards<br>✅ Pairwise preferences (Hunyuan ART)<br>✅ Configurable rollout groups: K = 2, 4, 8 |
 | **Training** | ✅ LoRA / full-parameter tuning<br>✅ DDP / FSDP<br>✅ Checkpoint resume / local evaluation artifacts |
 
@@ -287,6 +287,17 @@ recipes and shared reference caches.
 Add `--prepare-only` to prepare without training, or `--validate` for network-free checks. See
 [distributed execution](docs/distributed-execution.md) for multi-node launches and
 [checkpoint/resume](docs/checkpoint-resume.md) for recovery and evaluation.
+
+#### MiniMax-H3
+
+Audio/video post-training at **480P, ~5 seconds, 10 denoising steps**.
+See [setup and launch instructions](docs/minimax-h3.md#480p-ten-step-art-post-training).
+
+| GPUs | Training | Recipe |
+|---:|---|---|
+| 8 | LoRA (rank 32) | [LoRA8](configs/examples/minimax_h3_art_posttrain_lora_8gpu.yaml) |
+| 32 | Full parameters | [Full32](configs/examples/minimax_h3_art_posttrain_full_32gpu.yaml) |
+| 64 | Full parameters, CP2 | [Full64](configs/examples/minimax_h3_art_posttrain_full_64gpu_cp2.yaml) |
 
 ## Configure Your Experiment
 
