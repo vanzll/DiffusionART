@@ -171,7 +171,8 @@ def test_reward_manifest_rejects_empty_and_floating_assets(reward_assets):
         build_reward_manifest(paths, provenance, base_dir=root)
 
 
-def test_prepared_extended_provenance_roundtrips_runtime(reward_assets, monkeypatch):
+@pytest.mark.parametrize('full_duration', [False, True])
+def test_prepared_extended_provenance_roundtrips_runtime(reward_assets, monkeypatch, full_duration):
     from types import SimpleNamespace
 
     from visual_rl.backends.minimax_h3 import load_reward
@@ -186,16 +187,20 @@ def test_prepared_extended_provenance_roundtrips_runtime(reward_assets, monkeypa
     path = root / 'rewards.json'
     write_manifest(path, manifest)
     observed = {}
-    def make_reward(cls, actual_paths, *, device, expected_sha256):
-        observed.update(paths=actual_paths, device=device, sha256=expected_sha256)
+    def make_reward(cls, actual_paths, *, device, expected_sha256, full_duration=False):
+        observed.update(paths=actual_paths, device=device, sha256=expected_sha256,
+                        full_duration=full_duration)
         return SimpleNamespace()
     monkeypatch.setattr(AudioVideoReward, 'from_paths', classmethod(make_reward))
     config = SimpleNamespace(reward=SimpleNamespace(options={'manifest': str(path)},
-        weights=dict(video_align=1., hpsv3=1.5, audiobox=.5, clap=1., desync=1.)))
+        weights=dict(video_align=1., hpsv3=1.5, audiobox=.5, clap=1., desync=1.)),
+        algorithm=SimpleNamespace(options=(
+            {'post_training': {'full_duration_rewards': True}} if full_duration else {})))
     reward = load_reward(config, 'cpu')
     assert reward.asset_identity['provenance'] == provenance
     assert observed['sha256'] == manifest['sha256']
     assert observed['paths'] == manifest['paths']
+    assert observed['full_duration'] is full_duration
     assert reward.asset_identity['manifest_sha256'] == hashlib.sha256(path.read_bytes()).hexdigest()
 
 

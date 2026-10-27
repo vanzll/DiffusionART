@@ -56,6 +56,24 @@ checkpoint, the default is to refuse resume. Add `--resume-rewind` to explicitly
 archive that future history before continuing; recorded physical costs remain.
 Only load checkpoints you trust.
 
+H3 can set `evaluation.frames: 124` independently of its training duration
+rotation. `H3_EVAL0_SOURCE` optionally names an earlier native output containing
+the identified pretrained 32-prompt, 124-frame eval0. The bounded I/O worker
+checks model/assets, inference and reward settings, prompt identities, seeds,
+and MP4/WAV hashes before linking the immutable baseline into a fresh output.
+`eval0-reuse.json` records its source; no optimized model state is imported.
+
+`H3_ATTEMPT_STOP_UPDATE` is an optional absolute optimizer boundary for one
+native H3 attempt. It must advance beyond the restored step, preserve a whole
+rollout, and stay within the original training budget. At that boundary the
+trainer writes one complete checkpoint and an `attempt-boundaries/<nonce>.json`
+handoff, then exits without declaring the full run completed. The caller must
+verify native exits, fenced drain receipts and checkpoint identity before a new
+nonce resumes the remaining budget. Early `checkpoint_at_updates` such as
+`[2, 4, 6]` may protect startup while `checkpoint_every: 50` and `checkpoint_keep: 2`
+remain unchanged. A handoff at an early checkpoint does not create a duplicate
+snapshot of the same boundary.
+
 To evaluate a checkpoint without updating parameters or training history:
 
 ```bash

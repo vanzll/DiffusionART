@@ -72,6 +72,9 @@ def validate_config(c):
         raise ConfigError("this H3 checkpoint is CFG-distilled; true CFG must equal one")
     if c.sampling.fps != 24 or c.sampling.frames % 17 != 5:
         raise ConfigError("fixed H3 VAE requires 24 FPS and frames=17n+5")
+    if c.evaluation.frames is not None and (
+            c.evaluation.frames % 17 != 5 or not 5 <= c.evaluation.frames / 24 <= 15):
+        raise ConfigError("H3 evaluation.frames must be a native 17n+5 length within5..15s")
     if any(v % 16 for v in [c.sampling.height, c.sampling.width]):
         raise ConfigError("H3 spatial dimensions must divide by 16")
     so = c.sampling.options

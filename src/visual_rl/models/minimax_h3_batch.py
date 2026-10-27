@@ -27,6 +27,12 @@ def _rotary(x, cos, sin):
                       + rotated * sin.to(x.dtype)[:, :, None], trailing), dim=-1).contiguous()
 
 
+def _padding_attention_mask(valid):
+    # SDPA treats a None mask as all-visible. Keeping a redundant bool mask
+    # can exclude fused backends even when every token is valid.
+    return None if bool(valid.all()) else valid[:, None, None, :]
+
+
 class MiniMaxH3BatchedAttnProcessor(native.MiniMaxH3AttnProcessor):
     def __call__(self, attn, hidden_states, rotary_emb=None, attention_mask=None):
         if attn.fused_projections:
@@ -102,6 +108,7 @@ class MiniMaxH3Transformer3DModel(native.MiniMaxH3Transformer3DModel):
                 or text_mask.shape != encoder_hidden_states.shape[:2]
                 or text_mask.dtype != torch.bool):
             raise ValueError("Invalid batched H3 layout, timestep indices, or text mask")
+        refiner_mask = _padding_attention_mask(text_mask)
         rotary_emb = tuple(x.reshape(batch, length, -1)
                            for x in self.rope(position_ids.reshape(-1, 3)))
         video = self.proj_in(hidden_states.to(get_parameter_dtype(self.proj_in)))
@@ -109,14 +116,14 @@ class MiniMaxH3Transformer3DModel(native.MiniMaxH3Transformer3DModel):
         # Invalid padded values cannot enter a projection or receive gradients.
         text = encoder_hidden_states.masked_fill(~text_mask[..., None], 0)
         text = self.context_embedder(text.to(get_parameter_dtype(self.context_embedder)))
-        text = self.token_refiner(text, text_mask[:, None, None, :])
+        text = self.token_refiner(text, refiner_mask)
         packed = text.new_zeros((batch, length, text.shape[-1]))
         packed = packed.index_copy(1, text_indices, text)
         packed = packed.index_copy(1, video_indices, video.to(text.dtype))
         packed = packed.index_copy(1, audio_indices, audio.to(text.dtype))
         valid = torch.ones((batch, length), dtype=torch.bool, device=packed.device)
         valid[:, text_indices] = text_mask
-        attention_mask = valid[:, None, None, :]
+        attention_mask = None if refiner_mask is None else valid[:, None, None, :]
         temb = self.time_embedder(self.time_proj(timestep).to(get_parameter_dtype(self.time_embedder)))
         adaln_indices = timestep_indices * native.MINIMAX_H3_MODALITY_NUM + token_tags[None]
         for block in self.transformer_blocks:

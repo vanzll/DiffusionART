@@ -19,6 +19,11 @@ def duration_frames(c):
     return tuple(post.get("duration_frames", (c.sampling.frames,)))
 
 
+def evaluation_frames(c):
+    """An explicit eval length never changes the training duration rotation."""
+    return (c.evaluation.frames,) if c.evaluation.frames is not None else duration_frames(c)
+
+
 def duration_config(c, frames):
     """A local workload view; checkpoint and run identity use the original config."""
     return replace(c, sampling=replace(c.sampling, frames=frames))
