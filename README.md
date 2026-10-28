@@ -5,6 +5,8 @@
 <p align="center"><strong>Efficient, stable and scalable reinforcement of diffusion models</strong></p>
 <p align="center">Text-to-image &nbsp;&middot;&nbsp; Text-to-video &nbsp;&middot;&nbsp; Image-to-video &nbsp;&middot;&nbsp; Omni</p>
 
+<a id="paper"></a>
+
 <p align="center">
   <a href="https://arxiv.org/abs/2610.12572"><img src="https://img.shields.io/badge/arXiv-2610.12572-b31b1b?style=flat-square" alt="arXiv paper"></a>
   <a href="https://github.com/vanzll/DiffusionART"><img src="https://img.shields.io/badge/GitHub-24292f?style=flat-square&amp;logo=github&amp;logoColor=white" alt="GitHub"></a>
@@ -26,9 +28,9 @@
 
 - ⚡ **[2026.10.25]** **[Diffusion-ART-Flash](#diffusionart-flash) is supported.** Training only high-noise timesteps achieves comparable performance to all-timesteps training with substantially less training time cost.
 
-- 🎉 **[2026.10.22]** [MiniMax-H3](docs/minimax-h3.md) is now supported for **text-to-audio/video (omni)** training with **DiffusionART, DiffusionNFT and Flow-GRPO-Fast**, including LoRA and full-parameter recipes!
+- 🎉 **[2026.10.22]** [MiniMax-H3](#minimax-h3) is now supported for **text-to-audio/video (omni)** training with **DiffusionART, DiffusionNFT and Flow-GRPO-Fast**, including LoRA and full-parameter recipes!
 
-- 🥇 **[2026.10.12]** DiffusionART ranked **#1 on [Hugging Face Daily Papers](https://huggingface.co/papers/2610.12572)**!
+- 🥇 **[2026.10.12]** DiffusionART ranked **#1 on [Hugging Face Daily Papers](#paper)**!
 
 <details>
 <summary><strong>Changelog</strong></summary>
@@ -291,7 +293,22 @@ Add `--prepare-only` to prepare without training, or `--validate` for network-fr
 #### MiniMax-H3
 
 Audio/video post-training at **480P, ~5 seconds, 10 denoising steps**.
-See [setup and launch instructions](docs/minimax-h3.md#480p-ten-step-art-post-training).
+Randomly train **2 of the first 4 video steps** (noise level σ ≈ 0.966–1)
+and **2 of the first 3 audio steps** (σ ≈ 0.923–1) per rollout.
+
+Each reward is centered and divided by its own prompt-group standard deviation, then routed:
+
+- **Video:** VideoAlign + 1.5 HPSv3 + DeSync + 0.5 ImageBind.
+- **Audio:** 0.5 AudioBox + CLAP + DeSync + 0.5 ImageBind.
+
+<p align="center">
+  <img src="assets/readme/minimax-h3-video-reward.svg" width="48%" alt="MiniMax-H3 video mean training reward versus optimizer step">
+  <img src="assets/readme/minimax-h3-audio-reward.svg" width="48%" alt="MiniMax-H3 audio mean training reward versus optimizer step">
+</p>
+
+<p align="center"><em>Full-parameter training. Equal-weight means of each route's four reward components before group normalization; EMA with a span of 5 rollouts.</em></p>
+
+See [setup and launch instructions](docs/minimax-h3.md#480p-ten-step-art-post-training), or choose a recipe:
 
 | GPUs | Training | Recipe |
 |---:|---|---|
