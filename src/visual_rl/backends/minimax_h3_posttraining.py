@@ -1,4 +1,4 @@
-"""Explicit H3 six-reward high-noise recipe; no rollout RNG consumption."""
+"""Explicit H3 routed high-noise recipes; no rollout RNG consumption."""
 
 import hashlib
 import random
@@ -51,7 +51,7 @@ def validate_post_training(options, boundaries):
             or type(options["count"]) is not int or options["count"] != 2
             or options["reward_normalization"] != "prompt_group_std"
             or options["eval_gallery"] is not True):
-        raise ConfigError("H3 post-training requires two positions, six-reward group std and AV gallery")
+        raise ConfigError("H3 post-training requires two positions, per-reward group std and AV gallery")
     present = DURATION_OPTIONS & set(options)
     if present and present != DURATION_OPTIONS:
         raise ConfigError("H3 duration buckets and full-duration rewards must be configured together")

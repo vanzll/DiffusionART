@@ -641,6 +641,61 @@ checkpoint conversion are not implemented: enabling evaluation is rejected
 before loading assets. The CP1 offline-evaluation instructions above apply to
 CP1 checkpoints, not to a CP2 checkpoint by changing its YAML.
 
+### Three-reward ART recipe
+
+`configs/examples/minimax_h3_art_three_reward_full_64gpu_cp2.yaml` inherits
+the 480p, ten-transition, five-second Full64/DP32×CP2 recipe above. It changes
+only the reward profile: **CLAP, ImageBind and PickScore, each with weight1**.
+Model/data, physical microbatch8, P32/K8, disjoint K4+K4 U2, video first4 choose2,
+audio first3 choose2, reference velocity MSE0.001, optimizer,400-update budget,
+disabled evaluation and checkpoint50/keep2 stay unchanged. Start a fresh run
+from the original base model; six-reward checkpoints have a different objective
+identity and are not continuation checkpoints for this experiment.
+
+Center each component and divide by its own complete K8 prompt-group sample
+std plus1e-4, before splitting optimizer windows. Video receives
+`PickScore + ImageBind`; audio receives `CLAP + ImageBind`. Keep separate
+covariances/masks and the equal video/audio mean loss. ImageBind is the existing
+unscaled AV cosine; CLAP keeps the existing audio text, resampling and window
+policy. No VideoAlign, HPSv3, AudioBox or DeSync model is loaded.
+
+PickScore uses `yuvalkirstain/PickScore_v1` at
+`a4e4367c6dfa7288a00c550414478f865b875800`, with the slow PIL processor from
+`laion/CLIP-ViT-H-14-laion2B-s32B-b79K` at
+`1c2b8495b28150b8a4922ee1c8edee224c284c0c`. It uniformly selects eight decoded
+frames including both endpoints, scores each against `reward_text.video`,
+then takes the arithmetic mean of **raw logits**, without top-k, clipping or
+softmax. The existing native scorer runs frozen in FP32. Text is truncated to
+77tokens by its official CLIP tokenizer; inspect the retained visual descriptions
+when preparing long prompts. Frame preference and semantic AV matching do not
+directly measure motion continuity, audio quality or precise synchronization.
+
+Prepare the two pinned PickScore directories on the coordinator, using ordinary
+files rather than symlinked Hub-cache snapshots. Reuse the successful recipe's
+CLAP, ImageBind checkpoint and verified ImageBind source without changing their
+bytes. The helper below generates the five-entry asset manifest and verifies
+those retained assets against the original receipt:
+
+```bash
+source /m2v_intern2/zhenglin/my_bashrc.sh
+"$H3_PYTHON" -m visual_rl.models.prepare_h3_preference \
+  --legacy-manifest "$H3_LEGACY_REWARD_MANIFEST" \
+  --pickscore "$H3_PICKSCORE_MODEL" \
+  --pickscore-processor "$H3_PICKSCORE_PROCESSOR" \
+  --manifest "$H3_REWARD_MANIFEST"
+"$H3_PYTHON" -m visual_rl.train \
+  --config configs/examples/minimax_h3_art_three_reward_full_64gpu_cp2.yaml --validate
+```
+
+Use a fresh manifest/output path, preserving the original six-reward receipts.
+The existing `all-scorers` environment probe deliberately checks the legacy
+scorer stack and requires Synchformer. For this profile use `--mode model-only`,
+then load and score the **actual three-reward manifest** before formal training.
+Reuse the same MPI/node-owner/lease launcher, substituting the new config through
+`H3_ACCEPTANCE_CONFIG`. The existing `train/reward/*`, reward std, branch loss,
+reference MSE, gradient, time and memory telemetry apply; PickScore appears as
+`train/reward/pickscore`. This recipe introduces no GPU-capacity or quality claim.
+
 ## Archived 768p multi-duration ART recipe
 
 `configs/examples/minimax_h3_art_posttrain_multiduration_32gpu.yaml` is the archived full-parameter

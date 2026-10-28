@@ -14,6 +14,7 @@ import stat
 import tempfile
 from pathlib import Path, PurePosixPath
 
+from ..rewards.av_profiles import THREE_REWARD_ASSETS, validate_pickscore_provenance
 from .minimax_h3 import DIFFUSERS_REVISION, MODEL_ID, MODEL_REVISION
 from .minimax_h3_assets import H3_ASSET_ALLOW_PATTERNS
 
@@ -210,8 +211,10 @@ def build_reward_manifest(paths, provenance, *, base_dir="."):
     This is a complete recursive ordinary-file inventory. Symlinked files and
     directories are rejected instead of following mutable external locations.
     """
-    if set(paths) not in (REWARD_ASSETS, SIX_REWARD_ASSETS) or set(provenance) != set(paths):
-        raise ValueError("reward paths/provenance require exactly the seven legacy assets or all nine six-reward assets")
+    if set(paths) not in (REWARD_ASSETS, SIX_REWARD_ASSETS, THREE_REWARD_ASSETS) or set(provenance) != set(paths):
+        raise ValueError("reward paths/provenance require seven legacy, nine six-reward or five three-reward assets")
+    if set(paths) == THREE_REWARD_ASSETS:
+        validate_pickscore_provenance(provenance)
     if "imagebind" in paths:
         from ..rewards._native_av.imagebind import (
             IMAGEBIND_LICENSE,
@@ -311,7 +314,7 @@ def main():
     action.add_argument("--download", action="store_true", help="download required native components")
     action.add_argument("--inspect", action="store_true", help="metadata/configs only; NOT training-ready")
     action.add_argument("--validate-only", action="store_true", help="offline local manifest validation")
-    action.add_argument("--reward-paths", help="JSON file mapping seven legacy or nine six-reward native assets to paths")
+    action.add_argument("--reward-paths", help="JSON mapping the complete legacy, six-reward or three-reward assets to paths")
     parser.add_argument("--cache-dir")
     parser.add_argument("--model-root")
     parser.add_argument("--manifest")

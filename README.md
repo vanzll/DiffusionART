@@ -316,6 +316,9 @@ See [setup and launch instructions](docs/minimax-h3.md#480p-ten-step-art-post-tr
 | 32 | Full parameters | [Full32](configs/examples/minimax_h3_art_posttrain_full_32gpu.yaml) |
 | 64 | Full parameters, CP2 | [Full64](configs/examples/minimax_h3_art_posttrain_full_64gpu_cp2.yaml) |
 
+An optional [three-reward Full64 recipe](configs/examples/minimax_h3_art_three_reward_full_64gpu_cp2.yaml)
+uses CLAP + ImageBind + eight-frame mean PickScore; see [reward setup](docs/minimax-h3.md#three-reward-art-recipe).
+
 ## Configure Your Experiment
 
 Extend an [example](configs/examples/) or [paper recipe](configs/paper/).

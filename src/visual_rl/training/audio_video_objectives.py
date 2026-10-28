@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 import torch
 
 from ..algorithms import art_loss, art_scalar_covariance, clipped_grpo_loss, nft_loss
+from ..rewards.av_profiles import THREE_REWARD_WEIGHTS
 from .audio_video_rollout import (
     AVRollout,
     feature_mask,
@@ -35,12 +36,13 @@ def route_rewards(components: Mapping[str, torch.Tensor], *, groups=None, weight
     DeSync enters both modality routes and enters the Fast scalar exactly once.
     """
     expected = set(ROUTING["shared"])
+    preference = weights is not None and set(weights) == set(THREE_REWARD_WEIGHTS)
     if weights is not None:
-        expected.add("imagebind")
+        expected = set(THREE_REWARD_WEIGHTS) if preference else expected | {"imagebind"}
         if set(weights) != expected:
-            raise ValueError("six-reward routes require all six explicit weights")
+            raise ValueError("AV routes require all six or all three explicit weights")
     if set(components) != expected:
-        raise ValueError("AV reward routing requires all five explicit scorer components")
+        raise ValueError("AV reward routing requires exactly the configured scorer components")
     values = {key: value.detach().float() for key, value in components.items()}
     shape = next(iter(values.values())).shape
     if len(shape) != 1 or not shape[0] or any(v.shape != shape or not torch.isfinite(v).all() for v in values.values()):
@@ -61,8 +63,10 @@ def route_rewards(components: Mapping[str, torch.Tensor], *, groups=None, weight
                                         (raw - raw.mean()) / (raw.std(correction=1) + 1e-4))
             values[name] = normalized
     if weights is not None:
-        names = {"video": {"video_align", "hpsv3", "desync", "imagebind"},
-                 "audio": {"audiobox", "clap", "desync", "imagebind"}, "shared": expected}
+        names = ({"video": {"pickscore", "imagebind"}, "audio": {"clap", "imagebind"}, "shared": expected}
+                 if preference else
+                 {"video": {"video_align", "hpsv3", "desync", "imagebind"},
+                  "audio": {"audiobox", "clap", "desync", "imagebind"}, "shared": expected})
         return {route: sum(float(weights[key]) * values[key] for key in sorted(keys))
                 for route, keys in names.items()}
     return {route: sum(weight * values[key] for key, weight in weights.items())

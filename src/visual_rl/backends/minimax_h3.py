@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..config import ConfigError
+from ..rewards.av_profiles import THREE_REWARD_PROFILE, THREE_REWARD_WEIGHTS
 
 MODEL_REVISION = "42ed227ee7df40d41602854ae760620d6eb651fe"
 DIFFUSERS_REVISION = "73faca368c0da77645ea58836aa8780d2d8c5353"
@@ -29,7 +30,7 @@ def validate_config(c):
             or c.algorithm.name not in {"diffusionart", "diffusionnft", "flow_grpo_fast"}
             or c.reward.name != "audio_video" or c.runtime.distributed not in {"none", "fsdp"}
             or c.training.precision != "bf16"):
-        raise ConfigError("H3 supports T2AV ART/NFT/Fast, BF16, none/FSDP and five AV rewards")
+        raise ConfigError("H3 supports T2AV ART/NFT/Fast, BF16, none/FSDP and explicit AV reward profiles")
     if not c.data or not c.model.checkpoint or not re.fullmatch(r"[0-9a-f]{40}", c.model.revision or ""):
         raise ConfigError("H3 requires a fixed model revision and hashed prompt manifest")
     if c.model.revision != MODEL_REVISION:
@@ -65,11 +66,16 @@ def validate_config(c):
             raise ConfigError("H3 sampling.frames must match the first duration bucket")
         if (c.algorithm.name not in {"diffusionart", "flow_grpo_fast"} or c.training.timestep_selection != "configured"
                 or c.sampling.samples_per_prompt != 8):
-            raise ConfigError("H3 post-training requires ART/routed Fast, K8, explicit dual selection and six reward group std")
-    weights = {**SHARED_WEIGHTS, "imagebind": .5} if post is not None else SHARED_WEIGHTS
+            raise ConfigError("H3 post-training requires ART/routed Fast, K8, explicit dual selection and per-reward group std")
+    preference = c.reward.options.get("profile") == THREE_REWARD_PROFILE
+    if preference and (post is None or c.algorithm.name != "diffusionart"):
+        raise ConfigError("H3 three-reward profile requires routed ART post-training")
+    weights = (THREE_REWARD_WEIGHTS if preference else
+               {**SHARED_WEIGHTS, "imagebind": .5} if post is not None else SHARED_WEIGHTS)
     if set(c.reward.weights) != set(weights) or dict(c.reward.weights) != weights:
-        raise ConfigError("H3 shared reward weights must explicitly be 1/1.5/.5/1/1; DeSync counted once")
-    if set(c.reward.options) != {"manifest"} or not isinstance(c.reward.options["manifest"], str):
+        raise ConfigError("H3 reward weights must match the explicit frozen profile")
+    reward_options = {"manifest", "profile"} if preference else {"manifest"}
+    if set(c.reward.options) != reward_options or not isinstance(c.reward.options["manifest"], str):
         raise ConfigError("H3 rewards require an explicit pinned scorer manifest")
     if c.reward.normalization != "raw":
         raise ConfigError("AV scorer transforms are explicit; no extra top-level normalization")
@@ -192,7 +198,7 @@ def load_reward(c, device):
     manifest_bytes = path.read_bytes()
     record = json.loads(manifest_bytes)
     if set(record) != {"schema_version", "paths", "sha256", "provenance"} or record["schema_version"] != 1:
-        raise ConfigError("invalid H3 five-scorer asset manifest")
+        raise ConfigError("invalid H3 scorer asset manifest")
     if (not isinstance(record["paths"], dict)
             or any(not isinstance(v, str) or not v.strip() for v in record["paths"].values())
             or not isinstance(record["provenance"], dict)
@@ -204,12 +210,21 @@ def load_reward(c, device):
         except ValueError as error:
             raise ConfigError("scorer provenance needs repo, fixed revision and license") from error
     paths = {key: os.path.abspath(path.parent / value) for key, value in record["paths"].items()}
-    expected_six = "imagebind" in c.reward.weights
-    if expected_six != ("imagebind" in paths):
-        raise ConfigError("H3 reward asset manifest must match the configured five/six scorer set")
+    reward_type = AudioVideoReward
+    if c.reward.options.get("profile") == THREE_REWARD_PROFILE:
+        from ..rewards.av_profiles import THREE_REWARD_ASSETS, validate_pickscore_provenance
+        from ..rewards.h3_preference import H3PreferenceReward
+        if set(paths) != THREE_REWARD_ASSETS:
+            raise ConfigError("H3 three-reward manifest must contain only its five asset entries")
+        validate_pickscore_provenance(record["provenance"])
+        reward_type = H3PreferenceReward
+    else:
+        expected_six = "imagebind" in c.reward.weights
+        if expected_six != ("imagebind" in paths):
+            raise ConfigError("H3 reward asset manifest must match the configured five/six scorer set")
     duration_options = ({"full_duration": True}
                         if c.algorithm.options.get("post_training", {}).get("full_duration_rewards", False) else {})
-    reward = AudioVideoReward.from_paths(paths, device=device, expected_sha256=record["sha256"], **duration_options)
+    reward = reward_type.from_paths(paths, device=device, expected_sha256=record["sha256"], **duration_options)
     reward.asset_identity = {"manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
                              "paths": paths, "sha256": record["sha256"],
                              "provenance": record["provenance"]}
