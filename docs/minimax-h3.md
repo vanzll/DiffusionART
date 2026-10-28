@@ -645,12 +645,43 @@ CP1 checkpoints, not to a CP2 checkpoint by changing its YAML.
 
 `configs/examples/minimax_h3_art_three_reward_full_64gpu_cp2.yaml` inherits
 the 480p, ten-transition, five-second Full64/DP32×CP2 recipe above. It changes
-only the reward profile: **CLAP, ImageBind and PickScore, each with weight1**.
-Model/data, physical microbatch8, P32/K8, disjoint K4+K4 U2, video first4 choose2,
+the reward profile and explicit OmniNFT train/test bindings described below:
+**CLAP, ImageBind and PickScore, each with weight1**.
+Model, physical microbatch8, P32/K8, disjoint K4+K4 U2, video first4 choose2,
 audio first3 choose2, reference velocity MSE0.001, optimizer,400-update budget,
 disabled evaluation and checkpoint50/keep2 stay unchanged. Start a fresh run
 from the original base model; six-reward checkpoints have a different objective
 identity and are not continuation checkpoints for this experiment.
+
+Use the **same VGGSound prompt splits as verl-omni OmniNFT**: the complete
+`train_metadata_20k.jsonl` (19,487 rows) and `test_metadata.jsonl` (16 rows) from
+OmniNFT revision `fb9237f6e74edf0d0f2a683f4d975b79fde588fe`. Keep their order,
+duplicate rows and text unchanged. Map `prompt_av` to the generation prompt,
+`prompt_v` to video reward text and `prompt_a` to audio reward text. This trainer
+uses a lossless JSONL schema conversion of the prompts that verl-omni writes
+to parquet; it does not require video/audio files. This replaces the hand-written
+eval32 binding for the three-reward profile; legacy recipes retain that protocol.
+Online evaluation remains disabled, and CP2 evaluation is still unsupported.
+
+After selecting a writable persistent output directory, prepare and bind both
+splits on the coordinator:
+
+```bash
+source /m2v_intern2/zhenglin/my_bashrc.sh
+"$H3_PYTHON" -m visual_rl.models.prepare_h3_omninft_data \
+  --output-dir "$H3_DATA_ROOT"
+source "$H3_DATA_ROOT/data.env"
+```
+
+The helper pins and verifies both source SHA256 values, preserves all three
+prompt fields exactly, rejects train/test prompt overlap, and writes the two
+training-format manifests, original files, `dataset-info.json` and `data.env`.
+It never overwrites different existing artifacts. `data.env` binds the existing
+`H3_TRAIN_MANIFEST`/`H3_TRAIN_SHA256` and `H3_EVAL_MANIFEST`/`H3_EVAL_SHA256`
+variables for launcher compatibility. The public three-reward YAML explicitly
+binds `${H3_OMNINFT_DATA_ROOT}/train.jsonl` and `test.jsonl` with fixed converted
+SHA256 values, so an old eval32 binding cannot silently select a different split.
+The test split is held for later evaluation rather than fed to training.
 
 Center each component and divide by its own complete K8 prompt-group sample
 std plus1e-4, before splitting optimizer windows. Video receives

@@ -1,4 +1,4 @@
-# Matched to the successful six-reward 480p run; only reward composition changes.
+# Matched 480p Full64 training with the complete verl-omni OmniNFT prompt splits.
 extends: minimax_h3_art_posttrain_full_64gpu_cp2.yaml
 name: minimax-h3-art-three-reward-full-64gpu-cp2
 reward:
@@ -8,6 +8,13 @@ reward:
     pickscore: 1.0
   options:
     profile: clap_imagebind_pickscore
+data:
+  manifest: ${H3_OMNINFT_DATA_ROOT}/train.jsonl
+  sha256: 29c004c3927c34663ee8f95ad1b34b1bce7c91c95f86af18724627324e82699d
+evaluation:
+  # Bind the original 16-row OmniNFT test split; online evaluation stays off.
+  manifest: ${H3_OMNINFT_DATA_ROOT}/test.jsonl
+  manifest_sha256: e0e6b9f2451e2089582121436f6a8b7b539920b671e0ae9ba1587f86c83785a4
 runtime:
   wandb:
     name: minimax-h3-art-clap-imagebind-pickscore-480p-10steps-v4a3-B8-U2-refmse1e-3-full64-cp2

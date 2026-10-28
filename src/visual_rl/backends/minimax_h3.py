@@ -167,8 +167,9 @@ def load_datasets(c):
                     or any(not isinstance(v, str) or not v.strip() for v in text.values())):
                 raise ConfigError("T2AV prompt metadata requires explicit reward_text.video and reward_text.audio")
     if c.algorithm.options.get("post_training") is not None and validation is not None:
-        if len(validation.rows) != 32:
-            raise ConfigError("the H3 post-training evaluation protocol requires exactly 32 fixed prompts")
+        expected = 16 if c.reward.options.get("profile") == THREE_REWARD_PROFILE else 32
+        if len(validation.rows) != expected:
+            raise ConfigError(f"the H3 post-training evaluation protocol requires exactly {expected} fixed prompts")
         train_ids = {row.sample_id for row in data.rows}
         train_texts = {row.text.strip() for row in data.rows}
         if any(row.sample_id in train_ids or row.text.strip() in train_texts for row in validation.rows):

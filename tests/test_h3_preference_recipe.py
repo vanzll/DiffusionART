@@ -45,21 +45,30 @@ ROOT = Path(__file__).resolve().parents[1]
 RECIPE = ROOT / 'configs/examples/minimax_h3_art_three_reward_full_64gpu_cp2.yaml'
 
 
-def test_only_reward_contract_and_run_names_change(tmp_path, monkeypatch):
+def test_only_reward_data_bindings_and_run_names_change(tmp_path, monkeypatch):
     factory = make_config_factory.__wrapped__(tmp_path, monkeypatch)
     factory('art', 'full')
     monkeypatch.setenv('H3_EVAL_MANIFEST', str(tmp_path / 'unused-eval.jsonl'))
     monkeypatch.setenv('H3_OUTPUT_DIR', str(tmp_path / 'run'))
+    monkeypatch.setenv('H3_OMNINFT_DATA_ROOT', str(tmp_path / 'omninft-data'))
     current = load_config(RECIPE)
     baseline = load_config(RECIPE.with_name('minimax_h3_art_posttrain_full_64gpu_cp2.yaml'))
     backend.validate_config(current)
     assert current.reward.weights == THREE_REWARD_WEIGHTS
     assert current.reward.options['profile'] == THREE_REWARD_PROFILE
+    assert current.data.manifest == str(tmp_path / 'omninft-data/train.jsonl')
+    assert current.data.sha256 == '29c004c3927c34663ee8f95ad1b34b1bce7c91c95f86af18724627324e82699d'
+    assert current.evaluation.manifest == str(tmp_path / 'omninft-data/test.jsonl')
+    assert current.evaluation.manifest_sha256 == 'e0e6b9f2451e2089582121436f6a8b7b539920b671e0ae9ba1587f86c83785a4'
     assert resume_signature(current.to_dict()) != resume_signature(baseline.to_dict())
     actual, expected = current.to_dict(), baseline.to_dict()
     for value in (actual, expected):
         value.pop('name')
         value.pop('reward')
+        value['data'].pop('manifest')
+        value['data'].pop('sha256')
+        value['evaluation'].pop('manifest')
+        value['evaluation'].pop('manifest_sha256')
         value['runtime']['wandb'].pop('name')
     assert actual == expected
     for bad in (
