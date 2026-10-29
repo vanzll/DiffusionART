@@ -304,11 +304,10 @@ Each reward is centered and divided by its own prompt-group standard deviation, 
 - **Audio:** 0.5 AudioBox + CLAP + DeSync + 0.5 ImageBind.
 
 <p align="center">
-  <img src="assets/readme/minimax-h3-video-reward.svg" width="48%" alt="MiniMax-H3 video mean training reward versus optimizer step">
-  <img src="assets/readme/minimax-h3-audio-reward.svg" width="48%" alt="MiniMax-H3 audio mean training reward versus optimizer step">
+  <img src="assets/readme/minimax-h3-rewards.svg" width="100%" alt="MiniMax-H3 training reward curves for VideoAlign, HPSv3, AudioBox, CLAP, DeSync and ImageBind, arranged in two rows of three">
 </p>
 
-<p align="center"><em>Full-parameter training. Equal-weight means of each route's four reward components before group normalization; EMA with a span of 5 rollouts.</em></p>
+<p align="center"><em>Full-parameter training. Six individual reward components before prompt-group normalization.</em></p>
 
 The curves above use **Full64 (CP2)**. Full32 uses a smaller update microbatch.
 See [setup and launch instructions](docs/minimax-h3.md#480p-ten-step-art-post-training):
