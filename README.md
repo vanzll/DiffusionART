@@ -345,6 +345,18 @@ on disk. Set `runtime.log: wandb` for [scalar logging](docs/logging.md).
 
 ## Implementation Notes and Discussion
 
+**Rollout diversity and sampler compatibility.** Diverse rollouts help provide
+informative reward guidance. When more exploration is needed, SDE sampling can
+increase rollout diversity while retaining ART's frozen-target regression
+formulation. Guidance can be expressed through either the ODE mean or the SDE
+transition mean. For means affine in the predicted velocity with a nonzero
+velocity coefficient, map the guidance displacement using that coefficient and
+divide the mean-space MSE by its square. With matched timestep weights and
+consistent restoration and masking, the two formulations yield identical
+parameter gradients on the same cached states and frozen velocity targets.
+Changing the sampler still changes the rollout distribution. Current public ART
+recipes use ODE rollouts.
+
 **Covariance normalization.** Normalize the aggregated covariance before
 constructing the regression target. This controls the guidance scale independently
 of the raw covariance magnitude. For multiple rewards, combine their weighted
