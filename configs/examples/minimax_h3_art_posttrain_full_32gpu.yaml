@@ -1,6 +1,6 @@
 # 480p / ten actual Euler transitions / fixed five-second training only.
-# Shared base for Full64 and LoRA8. Standalone CP1/B8 hit backward OOM;
-# use minimax_h3_art_posttrain_full_64gpu_cp2.yaml for full-parameter training.
+# Full32 uses rollout8/update4 after the original update8 backward OOM.
+# Full64 and LoRA8 explicitly override their update microbatches.
 extends: minimax_h3_art_full_32gpu.yaml
 name: minimax-h3-art-posttrain-full-32gpu
 algorithm:
@@ -33,6 +33,7 @@ data:
   manifest: ${H3_OMNINFT_DATA_ROOT}/train.jsonl
   sha256: 29c004c3927c34663ee8f95ad1b34b1bce7c91c95f86af18724627324e82699d
 training:
+  microbatch: 4
   max_updates: 400
 evaluation:
   # Disabled at startup, all intermediate boundaries, resume and completion.

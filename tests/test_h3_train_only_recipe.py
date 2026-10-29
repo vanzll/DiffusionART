@@ -34,7 +34,7 @@ def test_public_train_only_protocol_and_offline_resume_signature(tmp_path, monke
     assert c.evaluation.manifest_sha256 == backend.OMNINFT_TEST_SHA256
     assert (c.sampling.width, c.sampling.height, c.sampling.frames, c.sampling.fps) == (864, 480, 124, 24)
     assert c.sampling.steps == 11 and c.sampling.guidance_scale == 1
-    assert c.sampling.microbatch == c.training.microbatch == 8
+    assert c.sampling.microbatch == 8 and c.training.microbatch == 4
     assert c.sampling.prompts_per_rollout == 32 and c.sampling.samples_per_prompt == 8
     assert c.training.max_updates == 400 and backend.updates_per_rollout(c) == 2
     post = c.algorithm.options['post_training']
@@ -60,6 +60,7 @@ def test_public_cp2_recipe_preserves_training_contract_and_rejects_eval(tmp_path
     full32 = load_config(ROOT / 'configs/examples/minimax_h3_art_posttrain_full_32gpu.yaml')
     cp2 = load_config(ROOT / 'configs/examples/minimax_h3_art_posttrain_full_64gpu_cp2.yaml')
     backend.validate_config(cp2)
+    assert cp2.sampling.microbatch == cp2.training.microbatch == 8
     assert cp2.model.options['context_parallel_size'] == 2
     assert cp2.runtime.wandb['name'].endswith('full64-cp2')
     actual, expected = cp2.to_dict(), full32.to_dict()
@@ -68,6 +69,7 @@ def test_public_cp2_recipe_preserves_training_contract_and_rejects_eval(tmp_path
         value.pop('name')
         value.pop('provenance')
         value['runtime']['wandb'].pop('name')
+        value['training'].pop('microbatch')
     assert actual == expected
     offline = replace(cp2, evaluation=replace(cp2.evaluation, at_updates=(2,)))
     with pytest.raises(ConfigError, match='training only'):

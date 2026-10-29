@@ -4,6 +4,8 @@ name: minimax-h3-art-posttrain-full-64gpu-cp2
 model:
   options:
     context_parallel_size: 2
+training:
+  microbatch: 8
 runtime:
   wandb:
     name: minimax-h3-art-six-reward-480p-10steps-v4a3-124frames-refmse1e-3-trainonly-full64-cp2
