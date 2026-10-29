@@ -28,7 +28,7 @@
 
 - ⚡ **[2026.10.25]** **[Diffusion-ART-Flash](#diffusionart-flash) is supported.** Training only high-noise timesteps achieves comparable performance to all-timesteps training with substantially less training time cost.
 
-- 🎉 **[2026.10.22]** [MiniMax-H3](#minimax-h3) is now supported for **text-to-audio/video (omni)** training，along with our recipes[] of DiffusionART on Minimax-H3 post-training.  
+- 🎉 **[2026.10.22]** [MiniMax-H3](#minimax-h3) is now supported for **text-to-audio/video (omni)** training, with [DiffusionART post-training recipes](#minimax-h3-recipes).
 
 - 🥇 **[2026.10.12]** DiffusionART ranked **#1 on [Hugging Face Daily Papers](#paper)**!
 
@@ -36,7 +36,7 @@
 <summary><strong>Changelog</strong></summary>
 
 - **2026.10.17:** ART now splits each prompt's trajectories evenly between its
-  two update windows, retaining all prompts in each update to reduce the gradient variance. Guidance still uses the full K-sample group.
+  two update windows, retaining all prompts in each update to reduce gradient variance. Guidance still uses the full K-sample group.
 
 - **2026.10.14:** Fixed Hunyuan recipes that defaulted to rollout/update
   microbatches of 1 instead of 8 (ReFL remains 1/1). Microbatch size can strongly
@@ -287,10 +287,10 @@ Add `--prepare-only` to prepare without training, or `--validate` for network-fr
 
 #### MiniMax-H3
 
-We hereby provide our recipe to fine-tuning minimax-H3 for future research: we use six-reward audio/video post-training at **480P, ~5 seconds, 10 denoising steps** (the official recommended denoising steps is 50, while using 10 steps for training is sufficient based on our observation. However, resolution lower than 480P will significantly degrade rollout quality and training performance. If the computational resources are sufficient, we recommend to use 768P as stated in the official model release).
+We provide a recipe for fine-tuning MiniMax-H3 to support future research, using six rewards for audio/video post-training at **480P, ~5 seconds, 10 denoising steps**. Although the official model release recommends 50 denoising steps, we have found 10 steps sufficient for training. However, resolutions below 480P significantly degrade rollout quality and training performance. With sufficient computational resources, we recommend the official 768P resolution.
 
-We use DiffusionART-Flash to accelerate training: randomly train **2 of the first 4 video steps** (noise level σ ≈ 0.966–1)
-and **2 of the first 3 audio steps** (σ ≈ 0.923–1) per rollout.
+We use DiffusionART-Flash to accelerate training by randomly selecting **2 of the first 4 video steps** (noise level σ ≈ 0.966–1)
+and **2 of the first 3 audio steps** (σ ≈ 0.923–1) for training in each rollout.
 
 Each reward is centered and divided by its own prompt-group standard deviation, then routed:
 
@@ -305,7 +305,10 @@ Each reward is centered and divided by its own prompt-group standard deviation, 
 
 The curves above use **Full64 (CP2)**. Full32 uses a smaller update microbatch.
 
-**Note**: The open-source reward model is always insufficient to capture the human-desired visual-output feature. Hence, it is normal to observe the reward improvement while sub-optimal visualization results. For research purpose, we suggest to use the reward value as the golden metric. For industrial purpose, we suggest to use better reward models.
+**Note:** Open-source reward models cannot fully capture human preferences for visual outputs. As a result, reward scores can improve even when the generated videos remain visually unsatisfactory. For research purposes, we suggest using reward scores as the primary evaluation metric; for industrial applications, we recommend using higher-quality reward models.
+
+<a id="minimax-h3-recipes"></a>
+
 See [setup and launch instructions](docs/minimax-h3.md#480p-ten-step-art-post-training):
 
 | GPUs | Training | Rollout / update microbatch | Recipe |
