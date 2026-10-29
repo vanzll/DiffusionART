@@ -1,4 +1,6 @@
 # 480p / ten actual Euler transitions / fixed five-second training only.
+# Shared base for Full64 and LoRA8. Standalone CP1/B8 hit backward OOM;
+# use minimax_h3_art_posttrain_full_64gpu_cp2.yaml for full-parameter training.
 extends: minimax_h3_art_full_32gpu.yaml
 name: minimax-h3-art-posttrain-full-32gpu
 algorithm:

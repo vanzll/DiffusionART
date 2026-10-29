@@ -310,13 +310,13 @@ Each reward is centered and divided by its own prompt-group standard deviation, 
 
 <p align="center"><em>Full-parameter training. Equal-weight means of each route's four reward components before group normalization; EMA with a span of 5 rollouts.</em></p>
 
-See [setup and launch instructions](docs/minimax-h3.md#480p-ten-step-art-post-training), or choose a recipe:
+Use **Full64 (CP2)** for full-parameter training, as used for the curves above.
+See [setup and launch instructions](docs/minimax-h3.md#480p-ten-step-art-post-training):
 
 | GPUs | Training | Recipe |
 |---:|---|---|
-| 8 | LoRA (rank 32) | [LoRA8](configs/examples/minimax_h3_art_posttrain_lora_8gpu.yaml) |
-| 32 | Full parameters | [Full32](configs/examples/minimax_h3_art_posttrain_full_32gpu.yaml) |
 | 64 | Full parameters, CP2 | [Full64](configs/examples/minimax_h3_art_posttrain_full_64gpu_cp2.yaml) |
+| 8 | LoRA (rank 32) | [LoRA8](configs/examples/minimax_h3_art_posttrain_lora_8gpu.yaml) |
 
 ## Configure Your Experiment
 

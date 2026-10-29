@@ -509,13 +509,18 @@ records. The existing `track.md` holds actual evidence and remaining limits.
 
 ## 480p, ten-step ART post-training
 
-The current training-only recipe has three execution profiles:
+The current training-only recipe has two public execution profiles.
+**Full64 (CP2) is the full-parameter recipe used for the training curves.**
 
 | Profile | Physical GPUs | Logical data replicas | Context parallelism | Rollout / update microbatch |
 |---|---:|---:|---:|---:|
-| [`minimax_h3_art_posttrain_lora_8gpu.yaml`](../configs/examples/minimax_h3_art_posttrain_lora_8gpu.yaml) | 8 | 8 | 1 | 1 / 1 |
-| [`minimax_h3_art_posttrain_full_32gpu.yaml`](../configs/examples/minimax_h3_art_posttrain_full_32gpu.yaml) | 32 | 32 | 1 | 8 / 8 |
 | [`minimax_h3_art_posttrain_full_64gpu_cp2.yaml`](../configs/examples/minimax_h3_art_posttrain_full_64gpu_cp2.yaml) | 64 | 32 | 2 | 8 / 8 |
+| [`minimax_h3_art_posttrain_lora_8gpu.yaml`](../configs/examples/minimax_h3_art_posttrain_lora_8gpu.yaml) | 8 | 8 | 1 | 1 / 1 |
+
+The Full32 CP1 YAML is retained as their shared configuration base. Its physical
+microbatch8 run exhausted GPU memory during the first update's backward pass;
+it is not a recommended standalone launch target. Full64 adds sequence splitting
+with CP2; increasing FSDP ranks alone does not split activation memory.
 
 All use **864×480, 124 frames at 24 fps**
 (about 5.17 seconds), guidance scale 1, native Euler integration and the original
@@ -523,7 +528,7 @@ video/audio shifts 12/3. The native scheduler takes **11 sigma boundaries**,
 including zero, for **10 actual transformer forwards**; `steps: 10` would instead
 execute nine transitions. No acceleration LoRA or extra CFG branch is added.
 
-Full-parameter profiles use rollout/update microbatches **8**; the 8-GPU LoRA
+Full64 uses rollout/update microbatches **8**; the 8-GPU LoRA
 profile uses **1** with rank32/alpha64 attention and FFN adapters. FSDP8 and
 activation checkpointing remain enabled. Smaller microbatches accumulate toward
 the same effective batch and optimizer boundary. P32/K8 means 256 trajectories per
@@ -594,8 +599,8 @@ OmniNFT revision `fb9237f6e74edf0d0f2a683f4d975b79fde588fe`. Keep their order,
 duplicate rows and text unchanged. Map `prompt_av` to the generation prompt,
 `prompt_v` to video reward text and `prompt_a` to audio reward text. This trainer
 uses a lossless JSONL schema conversion of the prompts that verl-omni writes
-to parquet; it does not require video/audio files. The current six-reward LoRA8,
-Full32 and Full64 recipes all bind these exact train/test splits.
+to parquet; it does not require video/audio files. The current six-reward LoRA8
+and Full64 recipes inherit these exact train/test splits from their shared base.
 Online evaluation remains disabled, and CP2 evaluation is still unsupported.
 
 After selecting a writable persistent output directory, prepare and bind both
@@ -651,7 +656,8 @@ does not double-count samples or reward statistics. The complete modality
 losses use SUM-backward sequence gathers followed by the physical-world FSDP
 average, preserving the original gradient scale and loss denominators.
 
-Use this profile when the 32-GPU B8 backward exceeds available memory. It keeps
+Use Full64 for full-parameter training; the 32-GPU B8 backward exceeded memory
+in the original attempt. Full64 keeps
 P32/K8, the two disjoint K4 updates, six reward routes, reference MSE, optimizer,
 checkpoint cadence and disabled evaluation unchanged. **P32 cannot be launched
 as 64 independent data replicas**; changing only the node count on the CP1 YAML
