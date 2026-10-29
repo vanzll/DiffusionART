@@ -92,12 +92,16 @@ def validate_config(c):
         raise ConfigError("H3 spatial dimensions must divide by 16")
     so = c.sampling.options
     allowed = {"video_shift", "audio_shift", "noise_level", "window_size", "window_range", "window_seed"}
+    if "transition_kind" in so:
+        if c.algorithm.name != "flow_grpo_fast" or post is None or so["transition_kind"] not in ("cps", "sde"):
+            raise ConfigError("H3 explicit transition_kind is only supported for routed Fast (cps or sde)")
+        allowed.add("transition_kind")
     if set(so) != allowed or so["video_shift"] != 12 or so["audio_shift"] != 3:
         raise ConfigError("H3 requires explicit dual schedules (video12/audio3) and CPS window options")
     if so["window_size"] != 3 or so["window_range"] != [0, 8] or so["window_seed"] != 42:
         raise ConfigError("H3 Fast reference window is length3, [0,8), seed42")
     if so["noise_level"] != .8:
-        raise ConfigError("H3 Fast reference CPS noise level is .8")
+        raise ConfigError("H3 Fast noise level is .8")
     if c.sampling.steps < 3 or (c.algorithm.name == "flow_grpo_fast" and c.sampling.steps < 4):
         raise ConfigError("Fast requires at least three native transitions")
     options = c.algorithm.options

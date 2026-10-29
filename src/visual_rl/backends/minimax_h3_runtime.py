@@ -221,8 +221,10 @@ def collect(parts, c, predict, noise, sigmas, session, generator, *, rollout_ind
                 seed=c.sampling.options["window_seed"], size=c.sampling.options["window_size"],
                 window_range=tuple(c.sampling.options["window_range"]))
             innovations_generator = generator
+        transition_kind = c.sampling.options.get("transition_kind", "cps")
         options.update(selected=positions, stochastic=positions, innovations=_innovations(noise, positions, innovations_generator),
-            noise_level=c.sampling.options["noise_level"], unselected_kind="cps_zero_noise")
+            noise_level=c.sampling.options["noise_level"], transition_kind=transition_kind,
+            unselected_kind="ode" if transition_kind == "sde" else "cps_zero_noise")
     elif evaluation or c.algorithm.name == "diffusionnft":
         options["selected"] = ()
     return collect_av_rollout(predict, noise, *sigmas, microbatch=c.sampling.microbatch,

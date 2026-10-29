@@ -16,7 +16,7 @@ from visual_rl.training.audio_video_objectives import (
 from visual_rl.training.audio_video_rollout import (
     collect_av_rollout,
     feature_mean,
-    h3_cps_transition,
+    h3_fast_transition,
 )
 from visual_rl.training.audio_video_types import AVState
 
@@ -32,7 +32,7 @@ class Policy(torch.nn.Module):
                        state.audio * self.audio * (1 + sa[:, None]))
 
 
-def fixture(selection=None, *, padding=0):
+def fixture(selection=None, *, padding=0, kind="cps"):
     selection = selection or {"video": (0, 3), "audio": (1, 2)}
     generator = torch.Generator().manual_seed(819)
     model = Policy()
@@ -50,7 +50,7 @@ def fixture(selection=None, *, padding=0):
                                  torch.randn(audio.shape, generator=generator)) for step in union}
     cache = collect_av_rollout(model, noise, sv, sa, selected=union, stochastic=union,
         innovations=innovations, modality_selected=selection, modality_stochastic=selection,
-        unselected_kind="cps_zero_noise", microbatch=2)
+        unselected_kind="ode" if kind == "sde" else "cps_zero_noise", transition_kind=kind, microbatch=2)
     return model, cache
 
 
@@ -70,8 +70,9 @@ def manual(model, cache, video, audio, *, reference=None, beta=0.):
             state, following = cache.states[slot], cache.next_states[slot]
             prediction = model(state, cache.video_sigmas[step].expand(8),
                                cache.audio_sigmas[step].expand(8), torch.arange(8))
-            replay = h3_cps_transition(getattr(state, name), getattr(prediction, name), schedule[step],
-                schedule[step + 1], observed=getattr(following, name), mask=getattr(state, name + "_mask"))
+            replay = h3_fast_transition(getattr(state, name), getattr(prediction, name), schedule[step],
+                schedule[step + 1], observed=getattr(following, name), mask=getattr(state, name + "_mask"),
+                kind=cache.transition_kind, sigma_max=float(schedule[1]))
             term = clipped_grpo_loss(replay.log_prob, getattr(cache, "old_" + name + "_log_probs")[:, slot],
                 reward, ratio_clip=1e-4, advantage_clip=5.)["per_item_loss"]
             if reference is not None:
@@ -88,8 +89,9 @@ def manual(model, cache, video, audio, *, reference=None, beta=0.):
     {"video": (0, 3), "audio": (1, 2)},
 ])
 @pytest.mark.parametrize("padding", [0, 7])
-def test_loss_and_gradient_are_separate_modal_means(selection, padding):
-    model, cache = fixture(selection, padding=padding)
+@pytest.mark.parametrize("kind", ["cps", "sde"])
+def test_loss_and_gradient_are_separate_modal_means(selection, padding, kind):
+    model, cache = fixture(selection, padding=padding, kind=kind)
     obj = objective(model, cache)
     assert isinstance(obj, AVFastObjective)
     with torch.no_grad():
@@ -104,8 +106,9 @@ def test_loss_and_gradient_are_separate_modal_means(selection, padding):
         torch.testing.assert_close(left, right)
 
 
-def test_initial_active_ratios_are_one_and_rewards_are_not_renormalized():
-    model, cache = fixture()
+@pytest.mark.parametrize("kind", ["cps", "sde"])
+def test_initial_active_ratios_are_one_and_rewards_are_not_renormalized(kind):
+    model, cache = fixture(kind=kind)
     video, audio = torch.arange(8).float() + 3, torch.arange(8).float() * -2
     obj = objective(model, cache, video, audio)
     torch.testing.assert_close(obj.advantages, video)
@@ -135,8 +138,9 @@ def test_clipping_is_independent_before_equal_modal_mixing():
 
 
 @pytest.mark.parametrize("active", ["video", "audio"])
-def test_route_reward_has_no_direct_gradient_on_other_modal_output(active):
-    model, cache = fixture()
+@pytest.mark.parametrize("kind", ["cps", "sde"])
+def test_route_reward_has_no_direct_gradient_on_other_modal_output(active, kind):
+    model, cache = fixture(kind=kind)
     rewards = {"video": torch.zeros(8), "audio": torch.zeros(8)}
     rewards[active] = torch.ones(8)
     obj = objective(model, cache, **rewards)
@@ -177,8 +181,9 @@ def test_reference_mse_is_raw_unclipped_and_survives_zero_policy_reward(padding)
         assert left.abs() > 0
 
 
-def test_full_u2_is_invariant_to_physical_microbatch():
-    first, cache = fixture()
+@pytest.mark.parametrize("kind", ["cps", "sde"])
+def test_full_u2_is_invariant_to_physical_microbatch(kind):
+    first, cache = fixture(kind=kind)
     second = copy.deepcopy(first)
     routes = (torch.linspace(-2, 2, 8), torch.linspace(2, -1, 8))
     metrics = []

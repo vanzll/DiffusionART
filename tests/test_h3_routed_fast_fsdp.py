@@ -54,7 +54,7 @@ def _same(left, right):
         assert left == right
 
 
-def _worker(rank, root):
+def _worker(rank, root, kind):
     torch.set_num_threads(1)
     dist.init_process_group("gloo", init_method=f"file://{root}/rendezvous", rank=rank,
                             world_size=2, timeout=timedelta(seconds=30))
@@ -87,7 +87,8 @@ def _worker(rank, root):
                                          torch.randn(8, 3, generator=generator)) for step in union}
             cache = collect_av_rollout(predict, noise, video_sigmas, audio_sigmas, selected=union,
                 stochastic=union, innovations=innovations, modality_selected=selections,
-                modality_stochastic=selections, unselected_kind="cps_zero_noise", microbatch=1)
+                modality_stochastic=selections, unselected_kind="ode" if kind == "sde" else "cps_zero_noise",
+                transition_kind=kind, microbatch=1)
             with reference.use_reference():
                 targets = prepare_reference_predictions(cache, predict, "cpu", 1)
             objective = prepare_routed_fast_objective(cache, predict, torch.arange(8).float() - 3.5,
@@ -128,8 +129,9 @@ def _worker(rank, root):
         dist.destroy_process_group()
 
 
-def test_two_rank_routed_fast_inactive_heads_reference_and_exact_resume(tmp_path):
-    context = mp.spawn(_worker, args=(str(tmp_path),), nprocs=2, join=False)
+@pytest.mark.parametrize("kind", ["cps", "sde"])
+def test_two_rank_routed_fast_inactive_heads_reference_and_exact_resume(tmp_path, kind):
+    context = mp.spawn(_worker, args=(str(tmp_path), kind), nprocs=2, join=False)
     deadline = time.monotonic() + 75
     try:
         while not context.join(timeout=1):

@@ -1,8 +1,8 @@
-"""Explicit dual-sigma AV rollouts and H3 CPS observation replay.
+"""Explicit dual-sigma AV rollouts and CPS/Flow-SDE observation replay.
 
 CPS arithmetic follows verl-omni PR744 93c8a747, flow_match_sde.py and
 minimax_h3_flow_grpo/common.py (Apache-2.0); see algorithm provenance.
-No Gaussian/Hunyuan Fast policy is imported here.
+The opt-in Flow-SDE policy uses the common scheduler's Gaussian density.
 """
 from __future__ import annotations
 
@@ -98,6 +98,26 @@ def h3_cps_transition(state, velocity, sigma, sigma_next, *, noise_level=.8,
     return Transition(sample, mean, std, logp)
 
 
+def h3_fast_transition(state, velocity, sigma, sigma_next, *, kind="cps", sigma_max=None,
+                       noise_level=.8, innovation=None, observed=None, mask=None) -> Transition:
+    """Explicit H3 Fast policy: legacy CPS/MSE or Flow-SDE/Gaussian.
+
+    SDE uses the actual modality schedule's second boundary for the t=1
+    diffusion guard, identically in sampling and observed-state replay.
+    Likelihoods average valid features, preserving the existing modality mean.
+    """
+    if kind == "cps":
+        return h3_cps_transition(state, velocity, sigma, sigma_next, noise_level=noise_level,
+                                 innovation=innovation, observed=observed, mask=mask)
+    if kind != "sde":
+        raise ValueError("H3 Fast transition must be cps or sde")
+    result = flow_transition(state, velocity, sigma, sigma_next, kind="sde", likelihood="gaussian",
+        sigma_max=sigma_max, noise_level=noise_level, innovation=innovation, observed=observed)
+    logp = feature_mean(-(result.sample.detach() - result.mean).square() / (2 * result.std.square())
+                        - result.std.log() - math.log(2 * math.pi) / 2, mask)
+    return Transition(result.sample, result.mean, result.std, logp)
+
+
 def select_fast_window(transition_count: int, *, rollout_index: int = 0, seed: int = 42,
                        size: int = 3, window_range: tuple[int, int] = (0, 8)) -> tuple[int, ...]:
     """Pinned H3 [low,high) range; start in [low, high-size], inclusive.
@@ -132,6 +152,7 @@ class AVRollout:
     audio_selected: tuple[int, ...] | None = None
     old_video_log_probs: torch.Tensor | None = None
     old_audio_log_probs: torch.Tensor | None = None
+    transition_kind: str = "cps"
 
     @property
     def items(self):
@@ -152,19 +173,25 @@ def collect_av_rollout(predict: Callable, noise: AVState, video_sigmas: torch.Te
                        audio_sigmas: torch.Tensor, *, selected: Sequence[int] | None = None,
                        stochastic: Sequence[int] = (), innovations: Mapping[int, AVState] | None = None,
                        microbatch: int = 1, noise_level: float = .8, unselected_kind: str = "ode",
-                       device=None, modality_selected=None, modality_stochastic=None) -> AVRollout:
+                       device=None, modality_selected=None, modality_stochastic=None,
+                       transition_kind="cps") -> AVRollout:
     """One joint forward/step with independent schedules; detached CPU caches.
 
     Caller activates NFT's old policy around collection. ART defaults to all
     transitions except the last. Fast supplies its selected stochastic window
     and uses cps_zero_noise for unselected transitions, including the last.
+    The opt-in routed SDE policy uses ODE at unselected transitions instead.
     Innovations are supplied upfront and independent of physical microbatching.
-    Explicit modality_stochastic selects independent noisy CPS positions and
+    Explicit modality_stochastic selects independent noisy positions and
     requires the matching modality_selected replay union. Its inactive logp
     entries are zero placeholders, not likelihoods of a noisy transition.
     """
     validate_state(noise)
     validate_schedules(video_sigmas, audio_sigmas)
+    if transition_kind not in ("cps", "sde"):
+        raise ValueError("H3 Fast transition must be cps or sde")
+    if transition_kind == "sde" and (modality_stochastic is None or unselected_kind != "ode"):
+        raise ValueError("H3 SDE requires routed stochastic positions and ODE elsewhere")
     count = len(video_sigmas) - 1
     selected = tuple(range(count - 1)) if selected is None else tuple(selected)
     video_selected = audio_selected = None
@@ -201,7 +228,7 @@ def collect_av_rollout(predict: Callable, noise: AVState, video_sigmas: torch.Te
                     or tuple(sorted(set(positions))) != positions):
                 raise ValueError("modality CPS positions must be chronological nonfinal integer transitions")
         if (noisy_by_modality["video"] != video_selected or noisy_by_modality["audio"] != audio_selected
-                or stochastic != selected or unselected_kind != "cps_zero_noise"):
+                or stochastic != selected or unselected_kind != ("ode" if transition_kind == "sde" else "cps_zero_noise")):
             raise ValueError("modality CPS requires matching selected/stochastic unions and zero-noise unselected steps")
     innovations = {} if innovations is None else innovations
     if set(innovations) != set(stochastic):
@@ -237,7 +264,8 @@ def collect_av_rollout(predict: Callable, noise: AVState, video_sigmas: torch.Te
                 value, prediction = getattr(state, name), getattr(velocity, name)
                 noisy = step in (stochastic if noisy_by_modality is None else noisy_by_modality[name])
                 if noisy:
-                    result = h3_cps_transition(value, prediction, sigma, schedule[step + 1],
+                    result = h3_fast_transition(value, prediction, sigma, schedule[step + 1],
+                        kind=transition_kind, sigma_max=float(schedule[1]),
                         noise_level=noise_level, innovation=getattr(innovations[step].select(rows), name).to(value),
                         mask=getattr(state, name + "_mask"))
                 else:
@@ -266,4 +294,4 @@ def collect_av_rollout(predict: Callable, noise: AVState, video_sigmas: torch.Te
         audio_sigmas.detach().float().cpu().clone(), states, velocities, following, logp, stochastic, noise_level,
         video_selected, audio_selected,
         None if modal_logp is None else modal_logp["video"],
-        None if modal_logp is None else modal_logp["audio"])
+        None if modal_logp is None else modal_logp["audio"], transition_kind)

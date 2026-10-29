@@ -15,6 +15,7 @@ from .audio_video_rollout import (
     feature_mean,
     gather_slots,
     h3_cps_transition,
+    h3_fast_transition,
     validate_state,
 )
 from .audio_video_types import AVState
@@ -413,7 +414,7 @@ def prepare_fast_objective(cache, predict, shared_rewards, groups, device, *, gl
 
 @dataclass
 class AVRoutedFastObjective(AVFastObjective):
-    """Independent CPS ratios and PPO clipping, then an equal-modal mean.
+    """Independent cached-policy ratios and PPO clipping, then an equal-modal mean.
 
     ``advantages`` and ``audio_advantages`` are the already normalized/routed
     complete-group rewards. Do not apply another cross-group standard deviation.
@@ -425,6 +426,8 @@ class AVRoutedFastObjective(AVFastObjective):
 
     def __post_init__(self):
         super().__post_init__()
+        if self.cache.transition_kind not in ("cps", "sde"):
+            raise ValueError("routed Fast requires an explicit supported transition policy")
         count, slots = len(self.cache.endpoints), len(self.cache.selected)
         if (self.audio_advantages is None or self.audio_advantages.shape != (count,)
                 or not torch.isfinite(self.audio_advantages).all()):
@@ -495,8 +498,9 @@ class AVRoutedFastObjective(AVFastObjective):
             policy = current.flatten(1)[:, 0] * 0.
             ratio, clip_fraction = torch.zeros_like(sigma), torch.zeros_like(sigma)
             if bool(active.any()):
-                replay = h3_cps_transition(getattr(state, name)[active], current[active], sigma[active],
+                replay = h3_fast_transition(getattr(state, name)[active], current[active], sigma[active],
                     schedule[steps[active.cpu()] + 1].to(self.device),
+                    kind=self.cache.transition_kind, sigma_max=float(schedule[1]),
                     observed=getattr(following, name)[active], noise_level=self.cache.noise_level,
                     mask=None if mask is None else mask[active])
                 old = getattr(self.cache, "old_" + name + "_log_probs")[rows[active.cpu()], slots[active.cpu()]]
