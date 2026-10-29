@@ -12,6 +12,7 @@ MODEL_REVISION = "42ed227ee7df40d41602854ae760620d6eb651fe"
 DIFFUSERS_REVISION = "73faca368c0da77645ea58836aa8780d2d8c5353"
 COMPONENTS = {"video_align", "hpsv3", "audiobox", "clap", "desync"}
 SHARED_WEIGHTS = {"video_align": 1., "hpsv3": 1.5, "audiobox": .5, "clap": 1., "desync": 1.}
+OMNINFT_TEST_SHA256 = "e0e6b9f2451e2089582121436f6a8b7b539920b671e0ae9ba1587f86c83785a4"
 
 
 def updates_per_rollout(c):
@@ -167,7 +168,10 @@ def load_datasets(c):
                     or any(not isinstance(v, str) or not v.strip() for v in text.values())):
                 raise ConfigError("T2AV prompt metadata requires explicit reward_text.video and reward_text.audio")
     if c.algorithm.options.get("post_training") is not None and validation is not None:
-        expected = 16 if c.reward.options.get("profile") == THREE_REWARD_PROFILE else 32
+        # The pinned prompt split is independent of the reward stack. Preserve
+        # the original eval32 protocol for older, explicitly bound recipes.
+        omninft = c.evaluation.manifest_sha256 == OMNINFT_TEST_SHA256
+        expected = 16 if omninft or c.reward.options.get("profile") == THREE_REWARD_PROFILE else 32
         if len(validation.rows) != expected:
             raise ConfigError(f"the H3 post-training evaluation protocol requires exactly {expected} fixed prompts")
         train_ids = {row.sample_id for row in data.rows}

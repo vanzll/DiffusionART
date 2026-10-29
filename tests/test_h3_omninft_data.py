@@ -8,6 +8,7 @@ import pytest
 from test_h3_mixed_reference_runtime import mixed_config
 from test_minimax_h3_runtime import config_factory as make_config_factory
 
+from visual_rl.backends import minimax_h3 as backend
 from visual_rl.backends.minimax_h3 import load_datasets
 from visual_rl.config import ConfigError, Evaluation
 from visual_rl.data import PromptDataset
@@ -73,7 +74,7 @@ def test_prepare_pins_bytes_is_idempotent_and_never_overwrites_other_data(tmp_pa
         preparation.prepare(tmp_path / 'new-output', source_dir=source)
 
 
-def test_preference_profile_binds_sixteen_tests_legacy_keeps_thirty_two(tmp_path, monkeypatch):
+def test_omninft_split_binds_sixteen_tests_independently_of_reward_profile(tmp_path, monkeypatch):
     factory = make_config_factory.__wrapped__(tmp_path, monkeypatch)
     config = mixed_config(factory, 'omninft-test-protocol')
     heldout = tmp_path / 'heldout.jsonl'
@@ -85,5 +86,26 @@ def test_preference_profile_binds_sixteen_tests_legacy_keeps_thirty_two(tmp_path
         load_datasets(config)
     preference = replace(config, reward=replace(config.reward, weights=THREE_REWARD_WEIGHTS,
         options={**config.reward.options, 'profile': THREE_REWARD_PROFILE}))
-    train, test = load_datasets(preference)
+    assert len(load_datasets(preference)[1].rows) == 16
+    # A verified OmniNFT binding selects the held-out split for six rewards too.
+    monkeypatch.setattr(backend, 'OMNINFT_TEST_SHA256', config.evaluation.manifest_sha256)
+    train, test = load_datasets(config)
     assert len(test.rows) == 16 and len(train.rows) == 3
+
+
+@pytest.mark.parametrize('count,overlap,message', [(15, False, '16 fixed prompts'),
+                                                (16, True, 'held out')])
+def test_omninft_protocol_preserves_count_and_heldout_guards(tmp_path, monkeypatch, count, overlap, message):
+    factory = make_config_factory.__wrapped__(tmp_path, monkeypatch)
+    config = mixed_config(factory, 'omninft-invalid-test')
+    records = [{'sample_id': f'test-{i}', 'prompt': f'heldout prompt {i}',
+        'metadata': {'reward_text': {'video': f'visual {i}', 'audio': f'sound {i}'}}} for i in range(count)]
+    if overlap:
+        records[0]['prompt'] = json.loads(open(config.data.manifest).readline())['prompt']
+    path = tmp_path / 'heldout.jsonl'
+    path.write_bytes(raw(records))
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    monkeypatch.setattr(backend, 'OMNINFT_TEST_SHA256', digest)
+    config = replace(config, evaluation=Evaluation(every_updates=2, manifest=str(path), manifest_sha256=digest))
+    with pytest.raises(ConfigError, match=message):
+        load_datasets(config)

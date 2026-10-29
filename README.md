@@ -292,7 +292,9 @@ Add `--prepare-only` to prepare without training, or `--validate` for network-fr
 
 #### MiniMax-H3
 
-Audio/video post-training at **480P, ~5 seconds, 10 denoising steps**.
+Six-reward audio/video post-training at **480P, ~5 seconds, 10 denoising steps**.
+Train and held-out eval prompts follow **verl-omni OmniNFT's VGGSound splits**
+(19,487 train / 16 test); online evaluation stays disabled.
 Randomly train **2 of the first 4 video steps** (noise level σ ≈ 0.966–1)
 and **2 of the first 3 audio steps** (σ ≈ 0.923–1) per rollout.
 
@@ -315,10 +317,6 @@ See [setup and launch instructions](docs/minimax-h3.md#480p-ten-step-art-post-tr
 | 8 | LoRA (rank 32) | [LoRA8](configs/examples/minimax_h3_art_posttrain_lora_8gpu.yaml) |
 | 32 | Full parameters | [Full32](configs/examples/minimax_h3_art_posttrain_full_32gpu.yaml) |
 | 64 | Full parameters, CP2 | [Full64](configs/examples/minimax_h3_art_posttrain_full_64gpu_cp2.yaml) |
-
-An optional [three-reward Full64 recipe](configs/examples/minimax_h3_art_three_reward_full_64gpu_cp2.yaml)
-uses CLAP + ImageBind + eight-frame mean PickScore; see [reward setup](docs/minimax-h3.md#three-reward-art-recipe).
-It uses the same VGGSound train/test prompt splits as verl-omni OmniNFT.
 
 ## Configure Your Experiment
 

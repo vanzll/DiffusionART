@@ -27,6 +27,9 @@ reward:
     clap: 1.0
     desync: 1.0
     imagebind: 0.5
+data:
+  manifest: ${H3_OMNINFT_DATA_ROOT}/train.jsonl
+  sha256: 29c004c3927c34663ee8f95ad1b34b1bce7c91c95f86af18724627324e82699d
 training:
   max_updates: 400
 evaluation:
@@ -36,8 +39,8 @@ evaluation:
   at_updates: []
   # Bind the later offline protocol now so enabling only its cadence preserves
   # the checkpoint resume signature. No evaluation dataset is loaded in training.
-  manifest: ${H3_EVAL_MANIFEST}
-  manifest_sha256: ${H3_EVAL_SHA256}
+  manifest: ${H3_OMNINFT_DATA_ROOT}/test.jsonl
+  manifest_sha256: e0e6b9f2451e2089582121436f6a8b7b539920b671e0ae9ba1587f86c83785a4
   sampling_steps: 50
   height: 768
   width: 1344

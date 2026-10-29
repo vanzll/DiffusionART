@@ -24,9 +24,14 @@ def test_public_train_only_protocol_and_offline_resume_signature(tmp_path, monke
     monkeypatch.setenv('H3_EVAL_MANIFEST', str(validation))
     monkeypatch.setenv('H3_EVAL_SHA256', hashlib.sha256(validation.read_bytes()).hexdigest())
     monkeypatch.setenv('H3_OUTPUT_DIR', str(tmp_path / 'run'))
+    monkeypatch.setenv('H3_OMNINFT_DATA_ROOT', str(tmp_path / 'omninft-data'))
     path = ROOT / 'configs/examples/minimax_h3_art_posttrain_full_32gpu.yaml'
     c = load_config(path)
     backend.validate_config(c)
+    assert c.data.manifest == str(tmp_path / 'omninft-data/train.jsonl')
+    assert c.data.sha256 == '29c004c3927c34663ee8f95ad1b34b1bce7c91c95f86af18724627324e82699d'
+    assert c.evaluation.manifest == str(tmp_path / 'omninft-data/test.jsonl')
+    assert c.evaluation.manifest_sha256 == backend.OMNINFT_TEST_SHA256
     assert (c.sampling.width, c.sampling.height, c.sampling.frames, c.sampling.fps) == (864, 480, 124, 24)
     assert c.sampling.steps == 11 and c.sampling.guidance_scale == 1
     assert c.sampling.microbatch == c.training.microbatch == 8

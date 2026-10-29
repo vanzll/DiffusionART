@@ -555,8 +555,8 @@ new write. These are full training checkpoints, not standalone HF exports.
 
 The disabled evaluation fields bind the future offline protocol in advance:
 1344×768, 124 frames, 50 boundaries / 49 forwards, and the fixed held-out manifest.
-They generate no evaluation during training. Bind `H3_EVAL_MANIFEST` and its hash
-as shown below, but leave every cadence at zero/empty. For the **CP1 profiles**,
+They generate no evaluation during training. Prepare the pinned OmniNFT splits
+[below](#omninft-train-and-eval-prompts), but leave every cadence at zero/empty. For the **CP1 profiles**,
 later, on the same FSDP
 topology and using the original output directory and data/asset bindings, create
 an inherited evaluation config that changes **only** `evaluation.at_updates`.
@@ -585,6 +585,42 @@ trainer or change training cadence when returning to training. The backend
 checks the training resume signature and retains the checkpoint's identity;
 changing evaluation cadence does not bypass model/data/optimizer validation.
 Offline evaluation does not call `optimizer.step` or rewrite checkpoint state.
+
+### OmniNFT train and eval prompts
+
+Use the **same VGGSound prompt splits as verl-omni OmniNFT**: the complete
+`train_metadata_20k.jsonl` (19,487 rows) and `test_metadata.jsonl` (16 rows) from
+OmniNFT revision `fb9237f6e74edf0d0f2a683f4d975b79fde588fe`. Keep their order,
+duplicate rows and text unchanged. Map `prompt_av` to the generation prompt,
+`prompt_v` to video reward text and `prompt_a` to audio reward text. This trainer
+uses a lossless JSONL schema conversion of the prompts that verl-omni writes
+to parquet; it does not require video/audio files. The current six-reward LoRA8,
+Full32 and Full64 recipes all bind these exact train/test splits.
+Online evaluation remains disabled, and CP2 evaluation is still unsupported.
+
+After selecting a writable persistent output directory, prepare and bind both
+splits on the coordinator:
+
+```bash
+source /m2v_intern2/zhenglin/my_bashrc.sh
+"$H3_PYTHON" -m visual_rl.models.prepare_h3_omninft_data \
+  --output-dir "$H3_DATA_ROOT"
+source "$H3_DATA_ROOT/data.env"
+```
+
+For MPI launches, source this same `data.env` from the attempt's `launch.env`
+on every node. Use a fresh output directory when changing dataset bindings;
+existing checkpoints retain their original config and data identity.
+
+The helper pins and verifies both source SHA256 values, preserves all three
+prompt fields exactly, rejects train/test prompt overlap, and writes the two
+training-format manifests, original files, `dataset-info.json` and `data.env`.
+It never overwrites different existing artifacts. `data.env` binds the existing
+`H3_TRAIN_MANIFEST`/`H3_TRAIN_SHA256` and `H3_EVAL_MANIFEST`/`H3_EVAL_SHA256`
+variables for launcher compatibility. The shared six-reward Full32 YAML explicitly
+binds `${H3_OMNINFT_DATA_ROOT}/train.jsonl` and `test.jsonl` with fixed converted
+SHA256 values, so an old eval32 binding cannot silently select a different split.
+The test split is held for later evaluation rather than fed to training.
 
 ### 8-GPU LoRA profile
 
@@ -640,92 +676,6 @@ model, Adam, reference, RNG and prompt cursor. CP2 evaluation and cross-topology
 checkpoint conversion are not implemented: enabling evaluation is rejected
 before loading assets. The CP1 offline-evaluation instructions above apply to
 CP1 checkpoints, not to a CP2 checkpoint by changing its YAML.
-
-### Three-reward ART recipe
-
-`configs/examples/minimax_h3_art_three_reward_full_64gpu_cp2.yaml` inherits
-the 480p, ten-transition, five-second Full64/DP32×CP2 recipe above. It changes
-the reward profile and explicit OmniNFT train/test bindings described below:
-**CLAP, ImageBind and PickScore, each with weight1**.
-Model, physical microbatch8, P32/K8, disjoint K4+K4 U2, video first4 choose2,
-audio first3 choose2, reference velocity MSE0.001, optimizer,400-update budget,
-disabled evaluation and checkpoint50/keep2 stay unchanged. Start a fresh run
-from the original base model; six-reward checkpoints have a different objective
-identity and are not continuation checkpoints for this experiment.
-
-Use the **same VGGSound prompt splits as verl-omni OmniNFT**: the complete
-`train_metadata_20k.jsonl` (19,487 rows) and `test_metadata.jsonl` (16 rows) from
-OmniNFT revision `fb9237f6e74edf0d0f2a683f4d975b79fde588fe`. Keep their order,
-duplicate rows and text unchanged. Map `prompt_av` to the generation prompt,
-`prompt_v` to video reward text and `prompt_a` to audio reward text. This trainer
-uses a lossless JSONL schema conversion of the prompts that verl-omni writes
-to parquet; it does not require video/audio files. This replaces the hand-written
-eval32 binding for the three-reward profile; legacy recipes retain that protocol.
-Online evaluation remains disabled, and CP2 evaluation is still unsupported.
-
-After selecting a writable persistent output directory, prepare and bind both
-splits on the coordinator:
-
-```bash
-source /m2v_intern2/zhenglin/my_bashrc.sh
-"$H3_PYTHON" -m visual_rl.models.prepare_h3_omninft_data \
-  --output-dir "$H3_DATA_ROOT"
-source "$H3_DATA_ROOT/data.env"
-```
-
-The helper pins and verifies both source SHA256 values, preserves all three
-prompt fields exactly, rejects train/test prompt overlap, and writes the two
-training-format manifests, original files, `dataset-info.json` and `data.env`.
-It never overwrites different existing artifacts. `data.env` binds the existing
-`H3_TRAIN_MANIFEST`/`H3_TRAIN_SHA256` and `H3_EVAL_MANIFEST`/`H3_EVAL_SHA256`
-variables for launcher compatibility. The public three-reward YAML explicitly
-binds `${H3_OMNINFT_DATA_ROOT}/train.jsonl` and `test.jsonl` with fixed converted
-SHA256 values, so an old eval32 binding cannot silently select a different split.
-The test split is held for later evaluation rather than fed to training.
-
-Center each component and divide by its own complete K8 prompt-group sample
-std plus1e-4, before splitting optimizer windows. Video receives
-`PickScore + ImageBind`; audio receives `CLAP + ImageBind`. Keep separate
-covariances/masks and the equal video/audio mean loss. ImageBind is the existing
-unscaled AV cosine; CLAP keeps the existing audio text, resampling and window
-policy. No VideoAlign, HPSv3, AudioBox or DeSync model is loaded.
-
-PickScore uses `yuvalkirstain/PickScore_v1` at
-`a4e4367c6dfa7288a00c550414478f865b875800`, with the slow PIL processor from
-`laion/CLIP-ViT-H-14-laion2B-s32B-b79K` at
-`1c2b8495b28150b8a4922ee1c8edee224c284c0c`. It uniformly selects eight decoded
-frames including both endpoints, scores each against `reward_text.video`,
-then takes the arithmetic mean of **raw logits**, without top-k, clipping or
-softmax. The existing native scorer runs frozen in FP32. Text is truncated to
-77tokens by its official CLIP tokenizer; inspect the retained visual descriptions
-when preparing long prompts. Frame preference and semantic AV matching do not
-directly measure motion continuity, audio quality or precise synchronization.
-
-Prepare the two pinned PickScore directories on the coordinator, using ordinary
-files rather than symlinked Hub-cache snapshots. Reuse the successful recipe's
-CLAP, ImageBind checkpoint and verified ImageBind source without changing their
-bytes. The helper below generates the five-entry asset manifest and verifies
-those retained assets against the original receipt:
-
-```bash
-source /m2v_intern2/zhenglin/my_bashrc.sh
-"$H3_PYTHON" -m visual_rl.models.prepare_h3_preference \
-  --legacy-manifest "$H3_LEGACY_REWARD_MANIFEST" \
-  --pickscore "$H3_PICKSCORE_MODEL" \
-  --pickscore-processor "$H3_PICKSCORE_PROCESSOR" \
-  --manifest "$H3_REWARD_MANIFEST"
-"$H3_PYTHON" -m visual_rl.train \
-  --config configs/examples/minimax_h3_art_three_reward_full_64gpu_cp2.yaml --validate
-```
-
-Use a fresh manifest/output path, preserving the original six-reward receipts.
-The existing `all-scorers` environment probe deliberately checks the legacy
-scorer stack and requires Synchformer. For this profile use `--mode model-only`,
-then load and score the **actual three-reward manifest** before formal training.
-Reuse the same MPI/node-owner/lease launcher, substituting the new config through
-`H3_ACCEPTANCE_CONFIG`. The existing `train/reward/*`, reward std, branch loss,
-reference MSE, gradient, time and memory telemetry apply; PickScore appears as
-`train/reward/pickscore`. This recipe introduces no GPU-capacity or quality claim.
 
 ## Archived 768p multi-duration ART recipe
 
@@ -860,7 +810,8 @@ The existing preparation CLI accepts the full nine-entry paths/provenance JSON:
   --manifest /absolute/path/h3-six-reward-manifest.json
 ```
 
-A ready-made, manually authored 32-prompt evaluation suite is provided at
+For the archived multi-duration configuration only, a manually authored
+32-prompt evaluation suite is provided at
 `configs/examples/data/minimax_h3_eval32.jsonl`. Its visible sound-producing
 scenes cover dialogue, animals, instruments, actions, transport and environments.
 It is a fixed qualitative monitoring suite, not a benchmark result. The loader
@@ -875,7 +826,7 @@ export H3_EVAL_SHA256="$(.venv-h3-cu128/bin/python -c \
 export H3_OUTPUT_DIR=/absolute/persistent/path/fresh-h3-posttraining-run
 # Also bind H3_MODEL, H3_TRAIN_MANIFEST, H3_TRAIN_SHA256 and H3_REWARD_MANIFEST.
 .venv-h3-cu128/bin/python -m visual_rl.train \
-  --config configs/examples/minimax_h3_art_posttrain_full_32gpu.yaml --validate
+  --config configs/examples/minimax_h3_art_posttrain_multiduration_32gpu.yaml --validate
 ```
 
 ### Evaluation, checkpoints and AV playback
