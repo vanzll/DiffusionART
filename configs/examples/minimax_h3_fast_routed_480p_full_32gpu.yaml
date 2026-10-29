@@ -22,6 +22,9 @@ sampling:
   options:
     transition_kind: sde
 runtime:
+  # This comparison run records metrics only, including at the final update.
+  checkpoint_every: 0
+  checkpoint_at_updates: []
   wandb:
     name: minimax-h3-fast-sde-routed-six-reward-480p-10steps-v4a3-124frames-refmse1e-3-trainonly-full32
 provenance:

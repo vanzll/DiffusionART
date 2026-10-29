@@ -768,8 +768,9 @@ For the current 480p train-only recipe, use
 [`minimax_h3_fast_routed_480p_full_32gpu.yaml`](../configs/examples/minimax_h3_fast_routed_480p_full_32gpu.yaml).
 It matches the ART profile's six rewards, OmniNFT data, 864×480/124-frame
 ten-transition rollout, video first4 random2/audio first3 random2, P32/K8/U2,
-rollout8/update4, reference MSE0.001 and checkpoint settings. Online evaluation
-is disabled. Only the algorithm and run labels change: stochastic Flow-SDE rollout
+rollout8/update4 and reference MSE0.001. Online evaluation and checkpoint saving
+(including at completion) are disabled for this comparison run; metrics remain
+on disk and W&B. Stochastic Flow-SDE rollout
 and independently clipped modality ratios replace ART's ODE/covariance update.
 This profile explicitly selects `sampling.options.transition_kind: sde`, with
 Gaussian log probabilities averaged over valid features. At sigma=1, diffusion

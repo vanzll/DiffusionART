@@ -71,6 +71,8 @@ def test_current_480p_recipe_changes_only_algorithm_and_run_labels(tmp_path, mon
     assert fast.sampling.microbatch == 8 and fast.training.microbatch == 4
     assert fast.sampling.steps == 11 and fast.sampling.frames == 124
     assert not fast.evaluation.enabled
+    assert not any(fast.runtime.checkpoint_due(step, fast.training.max_updates)
+                   for step in range(fast.training.max_updates + 1))
 
 
 @pytest.mark.parametrize("steps,video_pool,audio_pool,kind", [(50, 15, 10, "cps"), (11, 4, 3, "cps"), (11, 4, 3, "sde")])
