@@ -1,6 +1,7 @@
 """Scorer calibration/asset contracts; fixtures are not pretrained GPU evidence."""
 import asyncio
 import hashlib
+from types import SimpleNamespace
 
 import pytest
 import torch
@@ -84,6 +85,37 @@ def test_hps_five_frames_top_fraction_cap():
     assert result == {"score": 12.5, "hpsv3_raw": 12.5}
 
 
+@pytest.mark.parametrize("broken", [float("nan"), float("inf"), float("-inf")])
+def test_hps_rejects_nonfinite_frame_before_cap_and_top_selection(broken):
+    from visual_rl.rewards._native_av import hpsv3_reward
+
+    class Model:
+        async def infer(self, images, prompts):
+            return torch.tensor([[broken], [2.], [3.], [10.], [100.]])
+
+    with pytest.raises(ValueError, match="frame scores.*finite"):
+        asyncio.run(hpsv3_reward.compute_score_hpsv3(
+            None, torch.zeros(25, 3, 4, 4, dtype=torch.uint8), "video text",
+            {"media_kind": "video", "fps": 24.}, reward_model=Model(),
+            num_frames=5, top_fraction=.3, score_cap=15., max_batch_size=5,
+            reward_scale=1.))
+
+
+def test_hps_cached_batch_rejects_bad_request_without_dropping_healthy_peer(monkeypatch):
+    from visual_rl.rewards._native_av import hpsv3_reward
+
+    monkeypatch.setattr(hpsv3_reward, "_select_reward_frames", lambda *args: [object()])
+    monkeypatch.setattr(hpsv3_reward, "_get_inferencer", lambda *args: SimpleNamespace(
+        reward=lambda *args: torch.tensor([[float("inf")], [7.]])))
+    requests = [SimpleNamespace(
+        solution_image=None, extra_info={}, num_frames=1, batch_key=("local", "cpu", 2),
+        prompt=prompt, top_fraction=.3, score_cap=15., reward_scale=1.)
+        for prompt in ("broken", "healthy")]
+    results = hpsv3_reward._score_batch(requests)
+    assert isinstance(results[0], ValueError)
+    assert results[1] == {"score": 7., "hpsv3_raw": 7.}
+
+
 def test_desync_native_preprocess_and_class_offset():
     from visual_rl.rewards._native_av import desync
     class Model:
@@ -98,6 +130,24 @@ def test_desync_native_preprocess_and_class_offset():
                     "media_kind": "video", "fps": 24.}, reward_model=Model(), fps=24.))
     assert result["score"] == pytest.approx(1 / 2.5)
     assert result["absolute_offset_raw"] == pytest.approx(1.5)
+
+
+@pytest.mark.parametrize("broken", [float("nan"), float("inf"), float("-inf")])
+def test_desync_rejects_nonfinite_logits_before_argmax(broken):
+    from visual_rl.rewards._native_av import desync
+
+    class Model:
+        async def infer(self, video, audio):
+            logits = torch.zeros(2, 1, 21)
+            logits[0, 0, 10] = broken
+            return logits
+
+    with pytest.raises(ValueError, match="DeSync logits.*finite"):
+        asyncio.run(desync.compute_score(
+            solution_image=torch.zeros(24, 3, 16, 16, dtype=torch.uint8),
+            extra_info={"audio": torch.zeros(2, 16000), "audio_layout": "CT",
+                        "audio_sample_rate": 16000, "media_kind": "video", "fps": 24.},
+            reward_model=Model(), fps=24.))
 
 
 def test_staging_restores_cpu_on_failure():

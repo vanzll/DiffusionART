@@ -211,6 +211,78 @@ def test_decode_denormalization_and_stereo_order_with_explicit_test_decoders(nat
     assert all(not p.requires_grad for p in list(v.parameters()) + list(a.parameters()))
 
 
+@pytest.mark.parametrize("broken", [float("nan"), float("inf"), float("-inf")])
+def test_decode_rejects_nonfinite_native_pixels_before_clipping(native_model, broken):
+    class Video(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.weight = torch.nn.Parameter(torch.ones(()))
+            self.config = SimpleNamespace(latents_mean=[0, 0, 0], latents_std=[1, 1, 1])
+
+        def decode(self, z, return_dict=False):
+            output = torch.zeros_like(z)
+            output[0, 0, 0, 0, 0] = broken
+            return (output,)
+
+    video, audio = Video(), torch.nn.Linear(1, 1)
+    adapter = MiniMaxH3Adapter(native_model, video, audio)
+    state = AVState(torch.zeros(1, 3, 1, 2, 2), torch.zeros(1, 2, 3, 4))
+    with pytest.raises(ValueError, match="decoder.*nonfinite"):
+        adapter.decode(state)
+
+
+@pytest.mark.parametrize("broken", [float("nan"), float("inf"), float("-inf")])
+def test_native_audio_preclamp_failure_is_rejected_and_hook_removed(native_model, broken):
+    from diffusers import AutoencoderKLMiniMaxH3Audio
+
+    class Video(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.weight = torch.nn.Parameter(torch.ones(()))
+            self.config = SimpleNamespace(latents_mean=[0, 0, 0], latents_std=[1, 1, 1])
+
+        def decode(self, z, return_dict=False):
+            return (z,)
+
+    audio = AutoencoderKLMiniMaxH3Audio(
+        encoder_dim=8, encoder_rates=(2, 2), latent_dim=8, latent_channels=2,
+        num_attention_heads=2, decoder_dim=16, decoder_rates=(2, 2),
+        decoder_kernel_sizes=(4, 4), resblock_kernel_sizes=(3,),
+        resblock_dilation_sizes=((1, 3, 5),), latents_mean=[0, 0], latents_std=[1, 1],
+    )
+    adapter = MiniMaxH3Adapter(native_model, Video(), audio)
+    state = AVState(torch.zeros(1, 3, 1, 2, 2), torch.randn(1, 2, 2, 4, requires_grad=True))
+    raw = state.audio.detach().reshape(2, 2, 4).clone().requires_grad_()
+    expected = audio.decode(raw, return_dict=False)[0]
+    expected_gradient, = torch.autograd.grad(expected.square().sum(), raw)
+    assert torch.isfinite(expected_gradient).all() and expected_gradient.norm() > 0
+    corrupt = audio.decoder.conv_post.register_forward_hook(
+        lambda module, inputs, output: torch.full_like(output, broken))
+    hooks_before = tuple(audio.decoder.conv_post._forward_hooks)
+    try:
+        # The native decoder itself hides infinities behind its internal clamp.
+        native = audio.decode(state.audio.reshape(2, 2, 4), return_dict=False)[0]
+        if broken == broken:
+            assert torch.isfinite(native).all()
+        with pytest.raises(ValueError, match="audio decoder.*nonfinite"):
+            adapter.decode(state)
+        assert tuple(audio.decoder.conv_post._forward_hooks) == hooks_before
+    finally:
+        corrupt.remove()
+    actual = adapter.decode(state).audio
+    torch.testing.assert_close(actual, expected.detach().reshape(1, 2, -1), rtol=0, atol=0)
+    assert not actual.requires_grad  # Public H3 media decoding remains no-grad.
+    # Exercise the same implementation with its guard active under autograd;
+    # bypass only the public no-grad decorator, without changing production use.
+    guarded = MiniMaxH3Adapter.decode.__wrapped__(adapter, state).audio
+    guarded_gradient, = torch.autograd.grad(guarded.square().sum(), state.audio)
+    torch.testing.assert_close(guarded_gradient, expected_gradient.reshape_as(state.audio), rtol=0, atol=0)
+    replay = audio.decode(raw, return_dict=False)[0]
+    actual_gradient, = torch.autograd.grad(replay.square().sum(), raw)
+    torch.testing.assert_close(actual_gradient, expected_gradient, rtol=0, atol=0)
+    assert not audio.decoder.conv_post._forward_hooks
+
+
 def test_actual_tiny_native_vaes_decode_and_checkpoint_roundtrip(native_model, tmp_path):
     from diffusers import AutoencoderKLMiniMaxH3, AutoencoderKLMiniMaxH3Audio
     vae = AutoencoderKLMiniMaxH3(
@@ -243,6 +315,17 @@ def test_actual_tiny_native_vaes_decode_and_checkpoint_roundtrip(native_model, t
     ).decode(state)
     torch.testing.assert_close(media.video, loaded.video, rtol=0, atol=0)
     torch.testing.assert_close(media.audio, loaded.audio, rtol=0, atol=0)
+    # The native video decoder's final projection has no internal saturation;
+    # corrupt outputs must remain visible to the adapter's pre-RGB-clip guard.
+    for broken in (float("nan"), float("inf"), float("-inf")):
+        corrupt = vae.decoder.proj_out.register_forward_hook(
+            lambda module, inputs, output: torch.full_like(output, broken))
+        try:
+            with pytest.raises(ValueError, match="video decoder.*nonfinite"):
+                adapter.decode(state)
+        finally:
+            corrupt.remove()
+    assert not vae.decoder.proj_out._forward_hooks
 
 
 def _independent_native_batch(model, state, sv, sa, conditioning):

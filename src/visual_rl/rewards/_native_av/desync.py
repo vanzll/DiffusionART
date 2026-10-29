@@ -246,8 +246,9 @@ async def compute_score(
     video = _prepare_video(solution_image.detach().cpu(), fps)
     audio = _prepare_audio(waveform.unsqueeze(0), source_rate)
     logits = await reward_model.infer(video.unsqueeze(0), audio.unsqueeze(0))
-    if not isinstance(logits, torch.Tensor) or logits.shape != (2, 1, 21):
-        raise ValueError("DeSync logits must have shape (2, 1, 21).")
+    if (not isinstance(logits, torch.Tensor) or logits.shape != (2, 1, 21)
+            or not logits.is_floating_point() or not torch.isfinite(logits).all()):
+        raise ValueError("DeSync logits must be finite floating-point values with shape (2, 1, 21).")
     offsets = _CLASS_GRID[logits.argmax(dim=-1)].abs()
     score = (1.0 / (1.0 + offsets.mean())).float()
     if not torch.isfinite(score):

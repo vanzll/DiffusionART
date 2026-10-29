@@ -13,7 +13,7 @@ Install the tensor image transforms and fetch the pinned scorer assets:
 uv sync --locked --extra diffusers --extra image-rewards
 uv run --locked --extra diffusers --extra image-rewards hf download openai/clip-vit-large-patch14 \
   --revision 32bd64288804d66eefd0ccbe215aa642df71cc41 \
-  --include '*.json' '*.txt' '*.safetensors'
+  --include '*.json' --include '*.txt' --include '*.safetensors'
 uv run --locked --extra diffusers --extra image-rewards visual-rl \
   --config configs/examples/sd3_clipscore.yaml --validate
 uv run --locked --extra diffusers --extra image-rewards visual-rl \

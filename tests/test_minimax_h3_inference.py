@@ -16,7 +16,9 @@ ROOT = Path(__file__).resolve().parents[1]
 RECIPES = sorted(path for path in (ROOT / 'configs/examples').glob('minimax_h3_*.yaml')
                  if path.name not in {'minimax_h3_art_posttrain_full_32gpu.yaml',
                                       'minimax_h3_art_posttrain_full_64gpu_cp2.yaml',
-                                      'minimax_h3_art_posttrain_lora_8gpu.yaml'})
+                                      'minimax_h3_art_posttrain_lora_8gpu.yaml',
+                                      'minimax_h3_art_three_reward_full_64gpu_cp2.yaml',
+                                      'minimax_h3_fast_routed_480p_full_32gpu.yaml'})
 
 
 @pytest.mark.parametrize('path', RECIPES, ids=lambda path: path.stem)

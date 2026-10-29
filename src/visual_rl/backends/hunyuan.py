@@ -21,6 +21,7 @@ from ..config import ConfigError
 from ..data import PromptDataset, PromptStream
 from ..evaluation import SampleRecord
 from ..evaluation.video import encode_video
+from ..models.base import checked_vae_decode
 from ..models.finetune import FineTuneConfig, parameter_inventory
 from ..models.hunyuan import HunyuanVideoConditioning
 from ..models.hunyuan_assets import cached_conditioning, load_adapter, load_reward
@@ -263,7 +264,7 @@ def score_videos(c, parts, endpoints, prompts, directory, device, *, evaluation=
         for index, endpoint in enumerate(endpoints):
             with torch.autocast(device.type, dtype=torch.bfloat16, enabled=decode_bf16 and c.training.precision == "bf16"):
                 raw = parts.adapter.to_vae_latents(endpoint[None].to(device))
-                decoded = vae.decode(raw, return_dict=False)[0].clamp(-1, 1)
+                decoded = checked_vae_decode(vae, raw).clamp(-1, 1)
             expected = _shape(c, 1, evaluation=evaluation)
             if decoded.shape != (1, 3, c.sampling.frames, expected[-2] * 8, expected[-1] * 8):
                 raise ValueError("VAE output differs from configured video geometry")

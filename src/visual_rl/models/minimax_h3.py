@@ -200,14 +200,29 @@ class MiniMaxH3Adapter:
         vp = next(self.vae.parameters())
         ap = next(self.audio_vae.parameters())
         video = self.vae.decode(denormalize(v.to(vp), self.vae.config, 5), return_dict=False)[0]
+        if not torch.isfinite(video).all():
+            raise ValueError("native H3 video decoder returned nonfinite pixels")
         mean = video.new_tensor(self.config.pixel_mean).reshape(1, 3, 1, 1, 1)
         std = video.new_tensor(self.config.pixel_std).reshape(1, 3, 1, 1, 1)
         video = (video.float() * std + mean).clamp(0, 1)
         batch, stereo, channels, frames = a.shape
         audio = denormalize(a.reshape(batch * stereo, channels, frames).to(ap), self.audio_vae.config, 3)
-        audio = self.audio_vae.decode(audio, return_dict=False)[0].float()
+        # Native BigVGAN clamps conv_post inside decoder.forward, so checking
+        # its returned waveform alone would let +/-Inf become finite audio.
+        def check_audio(module, inputs, output):
+            if not torch.isfinite(output).all():
+                raise ValueError("native H3 audio decoder returned nonfinite samples")
+        projection = getattr(getattr(self.audio_vae, "decoder", None), "conv_post", None)
+        hook = projection.register_forward_hook(check_audio) if isinstance(projection, torch.nn.Module) else None
+        try:
+            audio = self.audio_vae.decode(audio, return_dict=False)[0].float()
+        finally:
+            if hook is not None:
+                hook.remove()
         if audio.ndim != 3 or audio.shape[1] != 1:
             raise RuntimeError("native mono audio decoder returned unexpected shape")
+        if not torch.isfinite(audio).all():
+            raise ValueError("native H3 audio decoder returned nonfinite samples")
         return AVMedia(video, audio.reshape(batch, stereo, -1), self.config.fps,
                        int(self.audio_vae.config.sampling_rate))
 

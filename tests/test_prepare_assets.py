@@ -137,6 +137,42 @@ def test_wrong_source_never_publishes_manifest(tmp_path, monkeypatch):
     assert not plan[1][0][1].exists()
 
 
+def test_only_pinned_sd3_snapshot_omits_unused_weight_copies(tmp_path, monkeypatch):
+    from fnmatch import fnmatch
+
+    # Native loader inputs at the pinned public repository revision, including
+    # both shards referenced by T5's default weight index.
+    required = ["model_index.json", "scheduler/scheduler_config.json",
+                "transformer/config.json", "transformer/diffusion_pytorch_model.safetensors",
+                "vae/config.json", "vae/diffusion_pytorch_model.safetensors",
+                "text_encoder/config.json", "text_encoder/model.safetensors",
+                "text_encoder_2/config.json", "text_encoder_2/model.safetensors",
+                "text_encoder_3/config.json", "text_encoder_3/model.safetensors.index.json",
+                "text_encoder_3/model-00001-of-00002.safetensors",
+                "text_encoder_3/model-00002-of-00002.safetensors",
+                "tokenizer/vocab.json", "tokenizer/merges.txt", "tokenizer_2/tokenizer_config.json",
+                "tokenizer_3/tokenizer.json", "tokenizer_3/spiece.model", "LICENSE.md"]
+    unused = ["sd3.5_medium.safetensors", "text_encoders/clip_g.safetensors",
+              "text_encoders/t5xxl_fp16.safetensors", "text_encoders/t5xxl_fp8_e4m3fn.safetensors",
+              "text_encoder/model.fp16.safetensors", "text_encoder_2/model.fp16.safetensors",
+              "text_encoder_3/model.fp16-00001-of-00002.safetensors",
+              "text_encoder_3/model.safetensors.index.fp16.json"]
+    selected = []
+
+    def download(**kwargs):
+        patterns = kwargs.get("allow_patterns", ["*"])
+        selected.append([name for name in required + unused if any(fnmatch(name, p) for p in patterns)])
+
+    monkeypatch.setitem(sys.modules, "huggingface_hub", SimpleNamespace(snapshot_download=download))
+    pinned = {"env": "SD3_MODEL", "repo_id": "stabilityai/stable-diffusion-3.5-medium",
+              "revision": "b940f670f0eda2d07fbb75229e779da1ad11eb80"}
+    entries = [pinned, {**pinned, "revision": "a" * 40},
+               {**pinned, "env": "CUSTOM_MODEL"}, {**pinned, "allow_patterns": ["*"]}]
+    prepare_assets(([(entry, tmp_path / str(i)) for i, entry in enumerate(entries)], []))
+    assert selected[0] == required
+    assert all(files == required + unused for files in selected[1:])
+
+
 @pytest.mark.parametrize("change", [
     {"unknown": []}, {"defaults": {"WANDB_API_KEY": "not-allowed"}},
     {"snapshots": [{"env": "TEST_MODEL", "repo_id": "author/model", "revision": "main"}]},

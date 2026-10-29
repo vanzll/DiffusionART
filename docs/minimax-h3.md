@@ -608,8 +608,7 @@ After selecting a writable persistent output directory, prepare and bind both
 splits on the coordinator:
 
 ```bash
-source /m2v_intern2/zhenglin/my_bashrc.sh
-"$H3_PYTHON" -m visual_rl.models.prepare_h3_omninft_data \
+.venv-h3-cu128/bin/python -m visual_rl.models.prepare_h3_omninft_data \
   --output-dir "$H3_DATA_ROOT"
 source "$H3_DATA_ROOT/data.env"
 ```

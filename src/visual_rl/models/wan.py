@@ -99,7 +99,10 @@ def decode_wan_differentiable(vae, raw_latents: Tensor) -> Tensor:
         if has_first_chunk:
             kwargs["first_chunk"] = index == 0
         frames.append(vae.decoder(x[:, :, index : index + 1], **kwargs))
-    return torch.cat(frames, dim=2).clamp(-1.0, 1.0)
+    decoded = torch.cat(frames, dim=2)
+    if not torch.isfinite(decoded).all():
+        raise ValueError("Wan VAE decoder returned nonfinite pixels")
+    return decoded.clamp(-1.0, 1.0)
 
 
 class WanI2VAdapter(VelocityAdapter):

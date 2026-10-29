@@ -214,7 +214,7 @@ def test_historical_direction_cast_is_flux_bf16_only(name, precision, expected_d
     rewards, groups = torch.tensor([0., 1., 0., 1.]), torch.tensor([0, 0, 1, 1])
     expected = art_scalar_covariance(endpoints, rewards, groups, 2)["group_directions"][groups]
     objective, _ = sd3._art_update(
-        c, SimpleNamespace(endpoints=endpoints), None,
+        c, SimpleNamespace(endpoints=endpoints, selected=(0,)), None,
         SimpleNamespace(scores=SimpleNamespace(weighted=rewards)), groups,
         2, 2, (0,), generator, torch.device("cpu"))
     assert objective.row_directions.dtype == expected_dtype

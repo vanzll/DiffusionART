@@ -148,6 +148,7 @@ def test_mpi_transport_zero_requires_every_node_receipt(
     assert (attempt / 'mpi.exitcode').read_text().strip() == str(expected)
 
 
+@pytest.mark.skipif(sys.platform != 'linux', reason='optional KML helper targets Linux/GNU tools')
 @pytest.mark.parametrize('relative', ['cache', 'fresh-reproduction/kernel-cache'])
 def test_kernel_caches_stay_inside_task_root(tmp_path, relative):
     source = Path(__file__).resolve().parents[1] / 'scripts/minimax_h3_runtime_env.sh'
@@ -167,6 +168,7 @@ def test_kernel_caches_stay_inside_task_root(tmp_path, relative):
         assert (cache / directory).is_dir()
 
 
+@pytest.mark.skipif(sys.platform != 'linux', reason='optional KML helper targets Linux/GNU tools')
 def test_kernel_cache_rejects_path_outside_task_before_creation(tmp_path):
     source = Path(__file__).resolve().parents[1] / 'scripts/minimax_h3_runtime_env.sh'
     fragment = source.read_text().split('export NCCL_IB_HCA', 1)[0].replace(

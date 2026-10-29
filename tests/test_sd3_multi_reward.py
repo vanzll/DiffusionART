@@ -96,7 +96,7 @@ def test_joint_scores_not_scalar_total_reach_covariance_without_clipping(space, 
         return art_scalar_covariance(x, rewards, groups, count, **kwargs)
 
     monkeypatch.setattr(sd3, "art_scalar_covariance", covariance)
-    cache = SimpleNamespace(endpoints=torch.arange(12.0).reshape(4, 3))
+    cache = SimpleNamespace(endpoints=torch.arange(12.0).reshape(4, 3), selected=(0, 1))
     objective, windows = sd3._art_update(
         c,
         cache,
@@ -217,7 +217,7 @@ def test_large_joint_advantage_is_not_clipped_before_covariance(monkeypatch):
     monkeypatch.setattr(sd3, "art_scalar_covariance", check)
     sd3._art_update(
         c,
-        SimpleNamespace(endpoints=torch.arange(64.0)[:, None]),
+        SimpleNamespace(endpoints=torch.arange(64.0)[:, None], selected=(0,)),
         None,
         scored,
         torch.zeros(64, dtype=torch.long),

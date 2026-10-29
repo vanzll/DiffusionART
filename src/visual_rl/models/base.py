@@ -93,6 +93,24 @@ def module_dtype(module: nn.Module, fallback: torch.dtype) -> torch.dtype:
     return fallback if parameter is None else parameter.dtype
 
 
+def checked_vae_decode(vae: nn.Module, latents: Tensor) -> Tensor:
+    """Keep native decode/tiling, rejecting invalid pixels before native clipping."""
+    def check_pixels(module, inputs, output):
+        if isinstance(output, Tensor) and not torch.isfinite(output).all():
+            raise ValueError("VAE decoder returned nonfinite pixels")
+
+    decoder = getattr(vae, "decoder", None)
+    hook = decoder.register_forward_hook(check_pixels) if isinstance(decoder, nn.Module) else None
+    try:
+        decoded = vae.decode(latents, return_dict=False)[0]
+        if isinstance(decoded, Tensor) and not torch.isfinite(decoded).all():
+            raise ValueError("VAE decoder returned nonfinite pixels")
+        return decoded
+    finally:
+        if hook is not None:
+            hook.remove()
+
+
 class VelocityAdapter(nn.Module, ABC):
     """A policy module plus a frozen, input-differentiable VAE.
 
@@ -130,7 +148,7 @@ class VelocityAdapter(nn.Module, ABC):
         """Apply the model-to-VAE affine transform exactly once."""
 
     def _decode_raw(self, latents: Tensor) -> Tensor:
-        return self.vae.decode(latents, return_dict=False)[0]
+        return checked_vae_decode(self.vae, latents)
 
     def decode(self, latents: Tensor) -> Tensor:
         raw = self.to_vae_latents(latents)

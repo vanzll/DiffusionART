@@ -263,6 +263,21 @@ def validate_bindings(config, plan):
 def _snapshot_options(entry):
     if "allow_patterns" in entry:
         return {"allow_patterns": entry["allow_patterns"]}
+    # The native SD3 loaders use default Diffusers components, never the
+    # alternate single-file/ComfyUI weights or duplicated fp16 variants. This
+    # pinned repository otherwise downloads 45.5 GiB instead of 15.2 GiB.
+    if (entry.get("env"), entry.get("repo_id"), entry.get("revision")) == (
+        "SD3_MODEL", "stabilityai/stable-diffusion-3.5-medium",
+        "b940f670f0eda2d07fbb75229e779da1ad11eb80",
+    ):
+        return {"allow_patterns": [
+            "model_index.json", "scheduler/*", "transformer/*", "vae/*",
+            "text_encoder/config.json", "text_encoder/model.safetensors",
+            "text_encoder_2/config.json", "text_encoder_2/model.safetensors",
+            "text_encoder_3/config.json", "text_encoder_3/model.safetensors.index.json",
+            "text_encoder_3/model-*.safetensors", "tokenizer/*", "tokenizer_2/*", "tokenizer_3/*",
+            "README*", "LICENSE*", ".gitattributes",
+        ]}
     # CLIPProcessor/PIL preprocessing needs tokenizer/config bytes here.
     # PickScore's CLIPModel loads its separate pinned model snapshot.
     if (entry.get("env"), entry.get("repo_id"), entry.get("revision")) == (

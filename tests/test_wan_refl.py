@@ -6,6 +6,7 @@ import pytest
 import torch
 
 from visual_rl.models import wan_refl
+from visual_rl.models.base import checked_vae_decode
 from visual_rl.models.wan import decode_wan_differentiable
 
 native = pytest.importorskip("diffusers.models.autoencoders.autoencoder_kl_wan")
@@ -39,6 +40,23 @@ def latents(batch=1):
 def assert_frozen(vae):
     assert all(not m.training for m in vae.modules())
     assert all(not p.requires_grad and p.grad is None for p in vae.parameters())
+
+
+@pytest.mark.parametrize("decode", [checked_vae_decode, decode_wan_differentiable, wan_refl.decode_wan_checkpointed])
+@pytest.mark.parametrize("broken", [float("nan"), float("inf"), float("-inf")])
+def test_actual_native_decoder_rejects_nonfinite_output_before_clamp(vae, decode, broken):
+    wan_refl.configure_wan_vae(vae)
+    def corrupt(module, inputs, output):
+        pixels = output.clone()
+        pixels.flatten()[0] = broken
+        return pixels
+    hook = vae.decoder.register_forward_hook(corrupt)
+    try:
+        with pytest.raises(ValueError, match="decoder.*nonfinite"):
+            decode(vae, latents())
+        assert len(vae.decoder._forward_hooks) == 1
+    finally:
+        hook.remove()
 
 
 def test_configuration_is_idempotent_and_preserves_reporting(vae):

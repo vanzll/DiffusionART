@@ -27,7 +27,10 @@ checks the configured VAE affine transform and scheduler against downloaded asse
 ```bash
 uv sync --locked --python 3.10 --extra diffusers
 uv run --locked --extra diffusers visual-rl --config configs/examples/flux_pickscore.yaml --validate
-uv run --locked --extra diffusers hf download black-forest-labs/FLUX.1-dev --revision 3de623fc3c33e44ffbe2bad470d0f45bccf2eb21 --include 'model_index.json' 'scheduler/*' 'transformer/*' 'vae/*' 'text_encoder/*' 'text_encoder_2/*' 'tokenizer/*' 'tokenizer_2/*' --dry-run
+uv run --locked --extra diffusers hf download black-forest-labs/FLUX.1-dev --revision 3de623fc3c33e44ffbe2bad470d0f45bccf2eb21 \
+  --include 'model_index.json' --include 'scheduler/*' --include 'transformer/*' \
+  --include 'vae/*' --include 'text_encoder/*' --include 'text_encoder_2/*' \
+  --include 'tokenizer/*' --include 'tokenizer_2/*' --dry-run
 ```
 
 Inspect the download size, then repeat the last command without `--dry-run`.

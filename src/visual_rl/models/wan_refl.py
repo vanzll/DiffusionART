@@ -96,4 +96,7 @@ def decode_wan_checkpointed(vae, raw_latents: Tensor) -> Tensor:
             )
             frames.append(result[0])
             cache = result[1:]
-        return torch.cat(frames, dim=2).clamp(-1.0, 1.0)
+        decoded = torch.cat(frames, dim=2)
+        if not torch.isfinite(decoded).all():
+            raise ValueError("Wan VAE decoder returned nonfinite pixels")
+        return decoded.clamp(-1.0, 1.0)

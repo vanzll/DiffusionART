@@ -498,8 +498,11 @@ def _score_batch(requests: list[_ScoreRequest]) -> list[dict | Exception]:
         if not raw_reward_values:
             results[index] = RuntimeError("HPSv3 reward produced no frame scores")
             continue
-        avg_raw = _aggregate_frame_scores(raw_reward_values, request.top_fraction, request.score_cap)
-        results[index] = {"score": avg_raw * request.reward_scale, "hpsv3_raw": avg_raw}
+        try:
+            avg_raw = _aggregate_frame_scores(raw_reward_values, request.top_fraction, request.score_cap)
+            results[index] = {"score": avg_raw * request.reward_scale, "hpsv3_raw": avg_raw}
+        except Exception as error:
+            results[index] = error
 
     final_results: list[dict | Exception] = []
     for result in results:
@@ -682,6 +685,9 @@ def _select_reward_frames(solution_image, extra_info, num_frames):
 
 
 def _aggregate_frame_scores(scores, top_fraction, score_cap):
+    # Validate before cap/top-k: either transform can hide broken model output.
+    if not scores or any(not math.isfinite(score) for score in scores):
+        raise ValueError("HPSv3 frame scores must be nonempty and finite.")
     if score_cap is None and top_fraction == 1.0:
         return sum(scores) / len(scores)
     values = torch.tensor(scores, dtype=torch.float32)

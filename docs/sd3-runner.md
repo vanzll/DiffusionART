@@ -29,6 +29,9 @@ GPU workers. Existing downloads are reused; missing files are acquired through
 the Hub download/cache APIs. No separate `hf download` command or local model
 path is required for this recipe. `VISUAL_RL_ASSET_ROOT` selects a writable asset
 directory; explicit local asset bindings remain optional overrides.
+Automatic SD3 preparation selects the native Diffusers components (about
+15.2 GiB), skipping alternate single-file/ComfyUI weights and duplicated fp16
+variants that would bring the full repository download to 45.5 GiB.
 
 Models are loaded locally after preparation, so backend `local_files_only`
 does not disable the launcher's download stage. `--prepare-only` separates

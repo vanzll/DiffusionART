@@ -28,7 +28,8 @@
     "Remove verl device lookup and service media-contract imports; use explicit standalone AV payload.",
     "CLAP supports package import only. Scoring math and native model classes retained.",
     "Return additional raw scorer diagnostics without changing training score calculations; import ordering normalized.",
-    "Represent the HPS prompt trailing space with a Python escape; runtime prompt text is unchanged."
+    "Represent the HPS prompt trailing space with a Python escape; runtime prompt text is unchanged.",
+    "Reject nonfinite native HPS frame scores before cap/top-k and DeSync logits before argmax; finite scoring arithmetic is unchanged."
   ],
   "optional_imagebind": {
     "upstream": "facebookresearch/ImageBind",
