@@ -8,7 +8,7 @@
    <cc:Work>
     <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
     <dc:title>MiniMax-H3 individual training rewards</dc:title>
-    <dc:date>2026-10-29T17:05:42.335716</dc:date>
+    <dc:date>2026-10-30T12:10:10.805724</dc:date>
     <dc:format>image/svg+xml</dc:format>
     <dc:creator>
      <cc:Agent>
@@ -989,7 +989,7 @@ z
       </g>
      </g>
      <g id="text_18">
-      <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle" x="133.614743" y="341.078594" transform="rotate(-0 133.614743 341.078594)">50</text>
+      <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle" x="133.614743" y="341.078594" transform="rotate(-0 133.614743 341.078594)">25</text>
      </g>
     </g>
     <g id="xtick_15">
@@ -999,7 +999,7 @@ z
       </g>
      </g>
      <g id="text_19">
-      <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle" x="206.058286" y="341.078594" transform="rotate(-0 206.058286 341.078594)">100</text>
+      <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle" x="206.058286" y="341.078594" transform="rotate(-0 206.058286 341.078594)">50</text>
      </g>
     </g>
     <g id="xtick_16">
@@ -1009,11 +1009,11 @@ z
       </g>
      </g>
      <g id="text_20">
-      <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle" x="278.501829" y="341.078594" transform="rotate(-0 278.501829 341.078594)">150</text>
+      <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle" x="278.501829" y="341.078594" transform="rotate(-0 278.501829 341.078594)">75</text>
      </g>
     </g>
     <g id="text_21">
-     <text style="font-size: 11px; font-family: 'DejaVu Sans'; text-anchor: middle" x="172.009821" y="355.308594" transform="rotate(-0 172.009821 355.308594)">Optimizer step</text>
+     <text style="font-size: 11px; font-family: 'DejaVu Sans'; text-anchor: middle" x="172.009821" y="355.308594" transform="rotate(-0 172.009821 355.308594)">Rollout</text>
     </g>
    </g>
    <g id="matplotlib.axis_8">
@@ -1289,7 +1289,7 @@ z
       </g>
      </g>
      <g id="text_28">
-      <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle" x="408.494522" y="341.078594" transform="rotate(-0 408.494522 341.078594)">50</text>
+      <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle" x="408.494522" y="341.078594" transform="rotate(-0 408.494522 341.078594)">25</text>
      </g>
     </g>
     <g id="xtick_19">
@@ -1299,7 +1299,7 @@ z
       </g>
      </g>
      <g id="text_29">
-      <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle" x="480.938065" y="341.078594" transform="rotate(-0 480.938065 341.078594)">100</text>
+      <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle" x="480.938065" y="341.078594" transform="rotate(-0 480.938065 341.078594)">50</text>
      </g>
     </g>
     <g id="xtick_20">
@@ -1309,11 +1309,11 @@ z
       </g>
      </g>
      <g id="text_30">
-      <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle" x="553.381608" y="341.078594" transform="rotate(-0 553.381608 341.078594)">150</text>
+      <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle" x="553.381608" y="341.078594" transform="rotate(-0 553.381608 341.078594)">75</text>
      </g>
     </g>
     <g id="text_31">
-     <text style="font-size: 11px; font-family: 'DejaVu Sans'; text-anchor: middle" x="446.8896" y="355.308594" transform="rotate(-0 446.8896 355.308594)">Optimizer step</text>
+     <text style="font-size: 11px; font-family: 'DejaVu Sans'; text-anchor: middle" x="446.8896" y="355.308594" transform="rotate(-0 446.8896 355.308594)">Rollout</text>
     </g>
    </g>
    <g id="matplotlib.axis_10">
@@ -1604,7 +1604,7 @@ z
       </g>
      </g>
      <g id="text_39">
-      <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle" x="683.374302" y="341.078594" transform="rotate(-0 683.374302 341.078594)">50</text>
+      <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle" x="683.374302" y="341.078594" transform="rotate(-0 683.374302 341.078594)">25</text>
      </g>
     </g>
     <g id="xtick_23">
@@ -1614,7 +1614,7 @@ z
       </g>
      </g>
      <g id="text_40">
-      <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle" x="755.817844" y="341.078594" transform="rotate(-0 755.817844 341.078594)">100</text>
+      <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle" x="755.817844" y="341.078594" transform="rotate(-0 755.817844 341.078594)">50</text>
      </g>
     </g>
     <g id="xtick_24">
@@ -1624,11 +1624,11 @@ z
       </g>
      </g>
      <g id="text_41">
-      <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle" x="828.261387" y="341.078594" transform="rotate(-0 828.261387 341.078594)">150</text>
+      <text style="font-size: 9px; font-family: 'DejaVu Sans'; text-anchor: middle" x="828.261387" y="341.078594" transform="rotate(-0 828.261387 341.078594)">75</text>
      </g>
     </g>
     <g id="text_42">
-     <text style="font-size: 11px; font-family: 'DejaVu Sans'; text-anchor: middle" x="721.769379" y="355.308594" transform="rotate(-0 721.769379 355.308594)">Optimizer step</text>
+     <text style="font-size: 11px; font-family: 'DejaVu Sans'; text-anchor: middle" x="721.769379" y="355.308594" transform="rotate(-0 721.769379 355.308594)">Rollout</text>
     </g>
    </g>
    <g id="matplotlib.axis_12">
