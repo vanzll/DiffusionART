@@ -11,6 +11,7 @@
   <a href="https://arxiv.org/abs/2610.12572"><img src="https://img.shields.io/badge/arXiv-2610.12572-b31b1b?style=flat-square" alt="arXiv paper"></a>
   <a href="https://github.com/vanzll/DiffusionART"><img src="https://img.shields.io/badge/GitHub-24292f?style=flat-square&amp;logo=github&amp;logoColor=white" alt="GitHub"></a>
   <a href="https://x.com/Vanzllll/status/2109578565893210580"><img src="https://img.shields.io/badge/Release_Tweet-000000?style=flat-square&amp;logo=x&amp;logoColor=white" alt="Release Tweet on X"></a>
+  <a href="https://mp.weixin.qq.com/s/i7VJo2lvycS6jppsJMcWjQ"><img src="https://img.shields.io/badge/%E6%9C%BA%E5%99%A8%E4%B9%8B%E5%BF%83-Media_Coverage-0f766e?style=flat-square" alt="机器之心报道"></a>
   <a href="https://huggingface.co/papers/2610.12572"><img src="https://img.shields.io/badge/HF_Paper-ffd21e?style=flat-square&amp;logo=huggingface&amp;logoColor=black" alt="Hugging Face Paper"></a>
   <a href="https://huggingface.co/collections/vanzl/diffusionart-6acc498d285b7e7c4dbd16b7"><img src="https://img.shields.io/badge/Hugging_Face_Models-ffd21e?style=flat-square&amp;logo=huggingface&amp;logoColor=black" alt="Hugging Face Models"></a>
   <a href="https://vanzll.github.io/diffusionart-project/"><img src="https://img.shields.io/badge/Project_Page-2588a6?style=flat-square" alt="Project Page"></a>
@@ -25,6 +26,8 @@
 </p>
 
 ## News
+
+- 📰 **[2026.10.30]** Diffusion-ART is reported by [机器之心](https://mp.weixin.qq.com/s/i7VJo2lvycS6jppsJMcWjQ).
 
 - ⚡ **[2026.10.25]** **[Diffusion-ART-Flash](#diffusionart-flash) is supported.** Training only high-noise timesteps achieves comparable performance to all-timesteps training with substantially less training time cost.
 
