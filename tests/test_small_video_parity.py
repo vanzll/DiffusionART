@@ -2,6 +2,7 @@
 
 import copy
 import io
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -414,6 +415,64 @@ def test_precision_metadata_hooks_observe_actual_dtype_layout_amp_and_restore():
         with parity.observe_precision_boundaries(model):
             raise RuntimeError("injected")
     assert not model.norm_out._forward_hooks and not model.proj_out._forward_hooks
+
+
+def test_real_precision_collector_hidden_dtype_context_roundtrips_strict_json():
+    class AdaLN(nn.Module):
+        def forward(self, state, *, hidden_dtype, added_cond_kwargs):
+            return state.to(hidden_dtype), state.to(hidden_dtype)
+
+    class NativeBoundary(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.adaln_single = AdaLN()
+
+        def forward(self, value):
+            return self.adaln_single(
+                value,
+                hidden_dtype=torch.bfloat16,
+                added_cond_kwargs={"resolution": None, "aspect_ratio": None},
+            )
+
+    model = NativeBoundary()
+    value = torch.arange(8.0).reshape(4, 2).t()
+    with torch.autocast("cpu", dtype=torch.bfloat16):
+        with parity.observe_precision_boundaries(model) as records:
+            model(value)
+        context = parity.forward_precision((value,), {"hidden_dtype": torch.bfloat16})
+    # Exercise actual hook/collector output, including the native dtype kwarg.
+    payload = json.loads(json.dumps({"boundaries": records, "context": context}, allow_nan=False))
+    item = payload["boundaries"][0]
+    assert item["module"] == "adaln_single"
+    assert item["kwargs"]["hidden_dtype"] == "torch.bfloat16"
+    assert item["autocast_enabled"] and item["autocast_dtype"] == "torch.bfloat16"
+    assert item["args"][0]["shape"] == list(value.shape)
+    assert item["args"][0]["stride"] == list(value.stride())
+    assert item["output"][0]["dtype"] == "torch.bfloat16"
+    assert payload["context"]["kwargs"]["hidden_dtype"] == "torch.bfloat16"
+
+
+def test_error_report_retains_valid_evidence_and_explicitly_rejects_tensor_nonfinite(tmp_path):
+    valid = {
+        "status": "error",
+        "error_type": "RuntimeError",
+        "error": "original failure",
+        "metrics": [{"name": "kept", "passed": False, "rms_error": 0.25}],
+        "partial_reference_steps": 8,
+    }
+    path = tmp_path / "report.json"
+    parity.write_error_report(path, valid)
+    assert json.loads(path.read_text()) == valid
+    invalid = dict(valid, status="passed", unexpected_tensor=torch.ones(2), nonfinite=float("nan"))
+    parity.write_error_report(path, invalid)
+    restored = json.loads(path.read_text())
+    assert restored["status"] == "error" and restored["error"] == "original failure"
+    assert restored["metrics"] == valid["metrics"] and restored["partial_reference_steps"] == 8
+    assert set(restored["rejected_report_fields"]) == {"unexpected_tensor", "nonfinite"}
+    assert restored["rejected_report_fields"]["unexpected_tensor"]["error_type"] == "TypeError"
+    assert restored["rejected_report_fields"]["nonfinite"]["error_type"] == "ValueError"
+    assert "unexpected_tensor" not in restored and "nonfinite" not in restored
+    json.dumps(restored, allow_nan=False)
 
 
 def test_full_bf16_views_are_no_grad_parity_only_and_restore_master_identity():

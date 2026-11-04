@@ -263,6 +263,10 @@ def _cpu(value):
 
 def tensor_metadata(value):
     """Observe actual call precision/layout without copying large activations."""
+    if isinstance(value, torch.dtype):
+        # Native adaln_single passes hidden_dtype as a keyword value, not a
+        # Tensor attribute. Keep that observed context JSON-safe as well.
+        return str(value)
     if isinstance(value, torch.Tensor):
         return {
             "shape": list(value.shape),
@@ -275,6 +279,35 @@ def tensor_metadata(value):
     if isinstance(value, (tuple, list)):
         return [tensor_metadata(item) for item in value]
     return value
+
+
+def write_error_report(path, report):
+    """Retain strict error evidence even if one report field cannot encode.
+
+    Unknown tensors/objects and nonfinite values remain rejected, with their
+    field names and serialization failures recorded; never stringify them.
+    """
+    try:
+        text = json.dumps(report, indent=2, allow_nan=False)
+    except (TypeError, ValueError) as error:
+        retained, rejected = {}, {}
+        for key, value in report.items():
+            try:
+                json.dumps({key: value}, allow_nan=False)
+            except (TypeError, ValueError) as field_error:
+                rejected[key] = {
+                    "error_type": type(field_error).__name__,
+                    "error": str(field_error),
+                }
+            else:
+                retained[key] = value
+        retained.update(
+            status="error",
+            report_serialization_error={"error_type": type(error).__name__, "error": str(error)},
+            rejected_report_fields=rejected,
+        )
+        text = json.dumps(retained, indent=2, allow_nan=False)
+    Path(path).write_text(text + "\n")
 
 
 def forward_precision(args, kwargs):
@@ -1114,14 +1147,14 @@ def run_ltx_parity(
         return report
     except BaseException as error:
         report.update(status="error", error_type=type(error).__name__, error=str(error))
-        if save_tensors and "trace" in locals():
-            torch.save({"reference": vars(trace), "partial": True}, output / "failed-trace.pt")
         if "trace" in locals():
             report["partial_reference_steps"] = len(trace.steps)
             report["partial_reference_physical_batches"] = [
                 len(x["hidden_states"]) for x in trace.forwards
             ]
-        (output / "report.json").write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
+        write_error_report(output / "report.json", report)
+        if save_tensors and "trace" in locals():
+            torch.save({"reference": vars(trace), "partial": True}, output / "failed-trace.pt")
         raise
 
 
