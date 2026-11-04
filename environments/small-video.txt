@@ -1,0 +1,29 @@
+# Native Wan2.1 1.3B / LTX-Video 2B adapter environment, Python3.10/CUDA12.4.
+# Kept separate from existing image/video environments. Native source revisions
+# and model weight licenses are recorded in docs/wan-t2v.md and docs/ltx-video.md.
+# VideoReward retains its canonical environment/preprocessing; see wan.txt.
+torch==2.6.0
+torchvision==0.21.0
+diffusers==0.33.1
+transformers==4.51.3
+tokenizers==0.21.1
+huggingface-hub==0.30.2
+accelerate==1.4.0
+peft==0.13.2
+numpy==1.26.4
+safetensors==0.8.0
+Pillow==10.2.0
+einops==0.8.0
+omegaconf==2.3.0
+sentencepiece==0.2.0
+ftfy==6.3.0
+easydict==1.13
+imageio==2.36.0
+imageio-ffmpeg==0.5.1
+av==13.1.0
+decord==0.6.0
+wandb==0.18.5
+PyYAML==6.0.1
+antlr4-python3-runtime==4.9.3
+timm==1.0.15
+opencv-python==4.10.0.84

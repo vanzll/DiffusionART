@@ -1,0 +1,4 @@
+extends: ltx_video_2b_distilled_lora.yaml
+name: ltx_video_2b_distilled_lora_flash
+training:
+  timestep_selection: high_noise
