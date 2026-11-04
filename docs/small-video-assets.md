@@ -56,6 +56,40 @@ Transformers4.51.3 and HF Hub0.30.2; a successful dependency resolution does not
 establish model runtime or GPU compatibility. The model environment uses the headless OpenCV4.10.0.84 build and does not require desktop libGL. Decord is not used by the native T2V generation paths and stays out of this model environment. The separate canonical reward environment retains its pinned Decord reader; reward decoding is unchanged. Do not install upstream native
 package metadata with its broader dependency list into this environment.
 
+For **native Wan T2V**, FlashAttention2 is mandatory: the pinned official
+transformer calls `flash_attention` directly. Its generic SDPA helper is not a
+fallback for these model forwards. The shared model lock deliberately leaves
+FA optional for LTX; install the separate Wan-only add-on before native Wan
+factory or parity execution. Use the dedicated model environment above, not an
+existing training/reward environment. Torch2.6.0+cu124 must be installed first.
+
+```bash
+# CPU build tools only; do not resolve/replace the pinned model dependency closure.
+timeout -k 5s 120s "$SV_MODEL_ENV/bin/python" -m pip install --no-deps \
+  ninja==1.11.1.3 wheel==0.45.1
+timeout -k 5s 30s nvcc --version
+export MAX_JOBS=${MAX_JOBS:-4}
+# May download a matching wheel or compile for up to an hour; pip prints progress.
+timeout -k 10s 3600s "$SV_MODEL_ENV/bin/python" -m pip install \
+  --no-build-isolation --no-deps \
+  -r "$SV_REPO/environments/wan-t2v-flash-attn.txt"
+timeout -k 5s 120s "$SV_MODEL_ENV/bin/python" -m pip check
+# Import/binary/ABI check only; no CUDA query, context initialization or kernel.
+CUDA_VISIBLE_DEVICES='' timeout -k 5s 60s "$SV_MODEL_ENV/bin/python" \
+  -m visual_rl.models.wan_t2v_dependencies
+```
+
+The add-on freezes `flash-attn==2.7.4.post1` and checks Torch2.6.0, CUDA build12.4
+and C++ ABI=False. It reports actual package/module versions, binary origin and
+Torch ABI before loading native models. A discoverable `flash_attn_interface`
+(FA3) is rejected because the unmodified official default would select it over
+FA2. Use an FA2-only dedicated Wan environment; the preflight does not patch
+the native attention function or silently select another kernel. Record the
+actual `nvcc --version` output separately from Torch's CUDA build; no driver or
+Torch replacement is implied by a differing compiler minor version. Successful
+binary import is not GPU kernel or inference parity evidence. The canonical
+reward interpreter remains separate and uses its own installer below.
+
 Clone the two native model sources at their exact commits. Each command works
 only in a new operator-selected directory; fetching source may take minutes.
 

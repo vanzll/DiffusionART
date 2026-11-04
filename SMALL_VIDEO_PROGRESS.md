@@ -13,7 +13,7 @@ Native Wan1.3B T2V and LTX2B0.9.6 adapters, full native trajectory/replay math,
 pinned assets/preflight, complete checkpoint counters/RNG, Original/Flash
 configurations and the bounded runner are implemented. CPU integrated batch:
 231passed,1FFmpeg/ffprobe skip; later parity/config/checkpoint batch113passed.
-Split consolidated checks after phased scorer integration:232 new tests and261 affected legacy tests passed (493 total, no skips). The initial combined run exposed fixture-registration and test-spy errors; both corrected, original failures retained privately. Four added single-node/eight-GPU topology guards also passed (507 public tests covered); the private fenced adapter passed17 fake CPU tests and shell syntax checks, with no operational action. Independent review completed once; CUDA DDP placement and custom receipt-binding findings were fixed. GPU validation remains pending.
+Split consolidated checks after phased scorer integration:232 new tests and261 affected legacy tests passed (493 total, no skips). The initial combined run exposed fixture-registration and test-spy errors; both corrected, original failures retained privately. Four added single-node/eight-GPU topology guards also passed (522 public tests covered); the private fenced adapter passed17 fake CPU tests and shell syntax checks, with no operational action. Independent review completed once; CUDA DDP placement and custom receipt-binding findings were fixed. GPU validation remains pending.
 
 Primary-code checks corrected LTX's rounded checkpoint allowlist into the
 actual LinearQuadratic physical sigma table, and its initial/decode RNG layout.
@@ -46,3 +46,5 @@ CPU evidence and the required fresh GPU retest are recorded separately; no
 training combination has performed an optimizer update yet.
 
 A second native LTX attempt completed inference/video generation but failed while serializing an observed hidden_dtype keyword. This was not a parity pass. Strict JSON metadata/error reporting was corrected and47 targeted CPU tests passed; mathematical paths and thresholds were unchanged. A fresh GPU retest is required.
+
+Native Wan explicitly requires optional FlashAttention2.7.4.post1 on pinned Torch2.6/CUDA12.4 ABI=False. A lazy preflight now rejects missing/wrong binaries or a competing FA3 default before large model loading; the standard-library plan path stays model-free. All261 new CPU tests plus261 affected legacy tests are covered (522 total). Both model and canonical reward environments were installed into fresh isolated venvs; binary import and pip checks passed. Native Wan pretrained GPU retest remains pending.

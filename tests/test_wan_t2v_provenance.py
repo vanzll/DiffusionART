@@ -206,9 +206,13 @@ def test_native_factory_checks_provenance_before_load_and_preserves_fp32(
             calls.append(kwargs)
             self.model = nn.Linear(2, 2)
 
+    import visual_rl.models.wan_t2v_dependencies as dependencies
     import visual_rl.models.wan_t2v_provenance as provenance
 
     monkeypatch.setattr(provenance, "import_native_components", lambda source: (Model, VAE))
+    monkeypatch.setattr(
+        dependencies, "check_native_wan_dependencies", lambda: {"status": "passed", "mocked": True}
+    )
     checked = []
     adapter = WanT2VAdapter.from_pretrained(
         assets,
@@ -223,6 +227,7 @@ def test_native_factory_checks_provenance_before_load_and_preserves_fp32(
     assert adapter.transformer.time_projection.weight.dtype == torch.float32
     assert calls[1]["dtype"] == torch.float32 and calls[1]["device"] == "cpu"
     assert not any(p.requires_grad for p in adapter.vae.parameters())
+    assert adapter.native_dependency_report == {"status": "passed", "mocked": True}
     assert len(calls) == 2
     with pytest.raises(ValueError, match="FP32"):
         WanT2VAdapter.from_pretrained(assets, native_root=root, torch_dtype=torch.bfloat16)

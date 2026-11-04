@@ -4,6 +4,13 @@
 path. It prints the immutable revisions, full profile, fixed tolerances and
 required execution arguments without importing Torch or native model packages.
 
+Install the [separate pinned Wan FA2 add-on](small-video-assets.md) first.
+Explicit CUDA parity performs the lazy dependency/binary preflight before
+constructing official WanT2V or loading weights. Missing/wrong FA2, a mismatched
+Torch/CUDA/ABI, or an FA3 default-branch override produces an explicit dependency
+failure report instead of reaching the first official attention assertion.
+This preflight neither changes native attention nor executes a GPU kernel.
+
 Real execution requires an explicitly authorized CUDA device and a verified
 `wan` asset receipt:
 

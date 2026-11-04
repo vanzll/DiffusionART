@@ -229,6 +229,9 @@ class WanT2VAdapter(VelocityAdapter):
                 expected_revision=WAN_T2V_NATIVE_REVISION,
                 asset_preflight=asset_preflight,
             )
+            from .wan_t2v_dependencies import check_native_wan_dependencies
+
+            dependencies = check_native_wan_dependencies()
             WanModel, WanVAE = import_native_components(source)
             # Official native weights are FP32. In particular the native time
             # embedding/projection explicitly run FP32 under BF16 forward AMP.
@@ -238,7 +241,9 @@ class WanT2VAdapter(VelocityAdapter):
             vae = WanVAE(
                 vae_pth=str(path / "Wan2.1_VAE.pth"), dtype=torch.float32, device="cpu"
             ).model
-            return cls(transformer, vae, config)
+            adapter = cls(transformer, vae, config)
+            adapter.native_dependency_report = dependencies
+            return adapter
         if config.transformer_api != "diffusers" or config.vae_api != "diffusers":
             raise ValueError("inject components explicitly when mixing native and Diffusers APIs")
         from diffusers import AutoencoderKLWan, WanTransformer3DModel

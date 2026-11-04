@@ -18,6 +18,16 @@ another cached `wan` module origin, a different weight revision, or another
 model architecture fail before loading. Install the pinned official source separately.
 The factory does not download assets or install optional dependencies.
 
+Native Wan requires `flash-attn==2.7.4.post1` in its dedicated model environment;
+see the [Wan-only installation/preflight commands](small-video-assets.md).
+The unmodified official model calls FA directly and has no SDPA fallback on
+that path. A lazy preflight runs before importing native model components or
+loading pretrained weights, checks the pinned Torch2.6.0/CUDA12.4/ABI=False and
+FA2 binary interface, and rejects an installed FA3 interface that would change
+the official default branch. It reports actual dependency context without a
+CUDA query or kernel launch. Ordinary adapter imports, injected CPU fixtures,
+the parity plan and other model backends do not run this check.
+
 Pass `WanT2VConditioning` with positive embeddings and their binary tokenizer
 attention mask, negative embeddings/mask forCFG, and the native scheduler's
 INT64 `timesteps` for every row. The physical sigma and integer time condition

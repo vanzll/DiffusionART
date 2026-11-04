@@ -270,9 +270,26 @@ def run_wan_parity(
         WanT2VConditioning,
         WanT2VConfig,
     )
+    from .models.wan_t2v_dependencies import NativeWanDependencyError, check_native_wan_dependencies
     from .models.wan_t2v_schedule import native_wan_schedule
     from .training.small_video_replay import collect_native_video
 
+    try:
+        dependencies = check_native_wan_dependencies()
+    except NativeWanDependencyError as exc:
+        output.mkdir(parents=True, exist_ok=False)
+        _atomic_json(
+            output / "metrics.json",
+            {
+                **parity_plan(),
+                "status": "failed",
+                "error_type": type(exc).__name__,
+                "native_dependencies": exc.report,
+                "asset_receipt_checksum": verified["checksum"],
+                "finetune": finetune,
+            },
+        )
+        raise
     if not torch.cuda.is_available():
         raise RuntimeError("explicit CUDA parity requested but CUDA unavailable")
     output.mkdir(parents=True, exist_ok=False)
@@ -285,6 +302,7 @@ def run_wan_parity(
         **parity_plan(),
         "status": "running",
         "finetune": finetune,
+        "native_dependencies": dependencies,
         "asset_receipt_checksum": verified["checksum"],
         "seed": seed,
         "reference_seeds": [seed, seed + 1],
