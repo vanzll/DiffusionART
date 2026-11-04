@@ -1,5 +1,6 @@
 """CPU artifact/RNG/identity fixtures, not pretrained decode or reward evidence."""
 
+import copy
 import json
 import random
 from pathlib import Path
@@ -130,3 +131,83 @@ def test_named_full_export_fresh_load_exact_and_corruption_fails(config, tmp_pat
     (final / "policy.pt").write_bytes(b"changed")
     with pytest.raises(ValueError, match="identity differs"):
         verify_final(final)
+
+
+def test_named_lora_export_restores_nonzero_adapter_into_same_fresh_base(config, tmp_path):
+    from visual_rl.models.finetune import FineTuneConfig, prepare_policy
+
+    c = load_config(ROOT / "configs/small_video/ltx_video_2b_distilled_lora.yaml")
+    options = c.model.options["finetune"]
+
+    class AttentionFixture(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.to_q = torch.nn.Linear(4, 4, bias=False)
+            self.to_k = torch.nn.Linear(4, 4, bias=False)
+            self.to_v = torch.nn.Linear(4, 4, bias=False)
+            self.to_out = torch.nn.Sequential(torch.nn.Linear(4, 4, bias=False))
+
+        def forward(self, x):
+            return self.to_out(self.to_v(torch.tanh(self.to_q(x) + self.to_k(x))))
+
+    def prepare(base):
+        return prepare_policy(
+            base,
+            FineTuneConfig(
+                mode="lora",
+                rank=options["rank"],
+                alpha=options["alpha"],
+                target_modules=options["target_modules"],
+            ),
+        )
+
+    with torch.random.fork_rng():
+        torch.manual_seed(42)
+        base = AttentionFixture()
+        fresh_base = copy.deepcopy(base)
+        x = torch.randn(3, 4)
+        base_output = base(x).detach()
+        policy = prepare(base)
+        # A nonzero adapter is necessary: zero-initialized parity cannot expose
+        # an export/load path that silently omits the learned B matrices.
+        with torch.no_grad():
+            for name, parameter in policy.named_parameters():
+                if "lora_" in name:
+                    parameter.normal_(mean=0.0, std=0.2)
+        expected = policy(x).detach()
+        assert not torch.allclose(expected, base_output)
+        session = DistributedSession(RankInfo(), torch.device("cpu"), False)
+        root = tmp_path / "lora-run"
+        root.mkdir()
+        identity = SmallVideoIdentity(
+            c.model.name,
+            "lora",
+            "original",
+            "50f0aef1297574a4b29acbdb874e3a363a6d5f2e",
+            c.model.revision,
+            c.reward.revision,
+            "9d947fb510d67a8e5334ec1d8c7d8927f7658c08",
+            c.data.sha256,
+            _hash(backend.resolved_protocol(c)),
+            c.evaluation.manifest_sha256,
+            c.fingerprint(),
+        )
+        state = SimpleNamespace(identity=identity, budget=SimpleNamespace(completed=10))
+        final = backend.export_final(
+            session,
+            c,
+            SimpleNamespace(adapter=SimpleNamespace(transformer=policy)),
+            state,
+            "fixture-receipt",
+            root,
+        )
+        assert verify_final(final)["format"] == "peft_adapter"
+        fresh = prepare(fresh_base)
+        load_final_into_adapter(c, final, SimpleNamespace(trainable_module=fresh))
+        torch.testing.assert_close(fresh(x), expected, atol=0, rtol=0)
+        with fresh.disable_adapter():
+            torch.testing.assert_close(fresh(x), base_output, atol=0, rtol=0)
+        assert all(
+            "lora_" in name or not parameter.requires_grad
+            for name, parameter in fresh.named_parameters()
+        )
