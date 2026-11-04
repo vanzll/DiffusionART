@@ -84,6 +84,7 @@ def execute(request):
             os.chdir(temporary)
             inferencer = VideoVLMRewardInference(
                 str(Path(request["checkpoint"]).resolve(strict=True)),
+                load_from_pretrained_step=11352,
                 device="cpu",
                 dtype=torch.bfloat16,
             )

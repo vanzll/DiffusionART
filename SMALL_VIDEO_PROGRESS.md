@@ -15,7 +15,7 @@ Separate native backends, pinned assets and preflight, complete native rollout c
 
 261 new CPU tests and 261 affected existing tests passed (522 public cases covered, no skips). These include native schedule/cache checks, denominator and partition-gradient equivalence, real two-rank CPU FSDP BF16/FP32-master/Adam/resume checks, and a nonzero PEFT save/load/export/disable roundtrip. One independent code review completed; device-placement and asset-receipt binding findings were fixed. CPU algebra and fixtures are not GPU or training acceptance.
 
-Both model and canonical reward environments were installed into fresh isolated Python3.10 venvs and passed dependency/import checks. Native Wan additionally pins FlashAttention2.7.4.post1 with Torch2.6/CUDA12.4 ABI=False and rejects a competing FA3 default. All 51 required asset files (52.44GB) passed fixed revision/checksum preflight. Real GPU reward evaluation remains pending.
+Both model and canonical reward environments were installed into fresh isolated Python3.10 venvs and passed dependency/import checks. Native Wan additionally pins FlashAttention2.7.4.post1 with Torch2.6/CUDA12.4 ABI=False and rejects a competing FA3 default. All 51 required asset files (52.44GB) passed fixed revision/checksum preflight. A real canonical reward smoke on two existing full-profile native LTX videos now passed; this is independent of training acceptance.
 
 ## Actual native GPU evidence
 
@@ -37,3 +37,11 @@ Wan's proposed frozen-history affine replay passed the tested CPU arithmetic but
 The proposed native conditional normalized-mean regression with canonical Q2 reference masking requires an explicit scientific decision. This mask is not claimed as a native stochastic-kernel KL. Checked-in recipes fail closed before training. LTX's independent decision is pending; Wan's additional real-GPU replay failure must be resolved independently.
 
 The allocation reports H800 names but143771MiB and PCI device2335 (H200 in NVIDIA's driver table). This is not eight H80080GB validation. Successful native parity uses one device with physical batch2, not an eight-GPU recipe acceptance. No training reward trend or long-run stability is established. See `docs/small-video.md` for public commands, protocol and evidence requirements.
+
+## Reward diagnostic and operational fixes
+
+Two fixed native LTX videos passed canonical raw VideoReward scoring on source `1e0a31d37bb4659892d82956045838378295241a`: VQ/MQ means1.248046875 and1.8984375, with all VQ/MQ/TA finite. Reward loading18.31s, scoring2.86s, parent phase22.32s; scorer peak allocated5.262GB, reserved6.325GB. One physical visible GPU was shared by the diagnostic parent and its owned one-shot scorer child; no existing reward service or extra device was used. This establishes a scoring path, not learning or eight-GPU acceptance.
+
+Failures exposed three implementation issues: receipt source IDs/list schema, Torch2.6 bare CUuuid metadata, and native fastvideo PEP420 namespace provenance. All were fixed with targeted tests; source-pin regular-package defaults stay unchanged. A real cold reward import checked fixed native inference and prompt modules with CUDA uninitialized. The already-observed native checkpoint11352 is now passed explicitly to avoid mutable latest-directory selection; native signature/worker forwarding/cwd cleanup were checked on CPU.
+
+Latest targeted checks: Wan diagnostic25passed; reward UUID/process/parity71passed; namespace source/worker57passed. These overlap earlier groups and must not be summed as a new unique total. Sanitized numerical/source/hash evidence is in [the diagnostic record](docs/evidence/small-video-pretraining-diagnostics.json). Private artifacts retain full failed-attempt, lifecycle and video evidence; no hostnames, credentials, weights or videos are included in this record. All eight cells remain0/10 actual global optimizer calls, with no training W&B run.
