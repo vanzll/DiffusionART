@@ -1,0 +1,52 @@
+# Development acceptance protocol. Native replay scientific decision is still pending.
+task: t2v
+seed: 42
+algorithm:
+  name: diffusionart
+  options:
+    restore_zero_signal: true
+    covariance: {reduction: unbiased, direction_mode: historical, scale_mode: unit_normalized_covariance, guidance_gain: 1.0, zero_signal_mode: exact}
+    loss: {loss_space: velocity_linear_sigma, direction_normalization: rms, mask_space: velocity, velocity_mask_metric: scheduler_reference_metric, corrective_mask_enabled: true, q2_reference_sde_noise_level: 0.8, q2_reference_kl_threshold: 0.00001}
+reward:
+  name: video_reward
+  checkpoint: ${SMALL_VIDEO_ASSETS}/models/reward/4f26600130683e6f1de9f5d463887f28e8ef995c
+  revision: 4f26600130683e6f1de9f5d463887f28e8ef995c
+  normalization: raw
+  weights: {VQ: 0.5, MQ: 0.5, TA: 0.0}
+  options: {python: "${SMALL_VIDEO_REWARD_PYTHON}", native_root: "${SMALL_VIDEO_ASSETS}/sources/dancegrpo", backbone: "${SMALL_VIDEO_ASSETS}/models/reward_backbone/895c3a49bc3fa70a340399125c650a463535e71c"}
+data:
+  manifest: ${SMALL_VIDEO_ASSETS}/datasets/prompts/9d947fb510d67a8e5334ec1d8c7d8927f7658c08/t2v/train.jsonl
+  sha256: b54fe7c10e7530d24e5f928f3f40f9d6c160191301631235463945575b499194
+  shuffle: true
+sampling: {prompts_per_rollout: 16, samples_per_prompt: 8, microbatch: 8}
+training:
+  max_updates: 10
+  microbatch: 8
+  precision: bf16
+  optimizer: adamw
+  weight_decay: 0.0001
+  betas: [0.9, 0.999]
+  epsilon: 0.00000001
+  grad_clip: 1.0
+  allow_tf32: false
+  timestep_selection: configured
+evaluation:
+  every_updates: 0
+  at_updates: [10]
+  manifest: ${SMALL_VIDEO_ASSETS}/derived/eval8.jsonl
+  manifest_sha256: 06fb7106c1fa00cbe91c5f4b6e79cb3eb99c90d13f3c7995fb62d8486148c9ff
+  reward_fps: 4.0
+  seed: 42
+  retain_all: true
+runtime:
+  output_dir: ${SMALL_VIDEO_OUTPUT}
+  device: cuda
+  checkpoint_every: 0
+  checkpoint_at_updates: [4, 10]
+  checkpoint_keep: 2
+  log: wandb
+  wandb: {project: diffusionart-small-video-8gpu, mode: online}
+provenance:
+  kind: development_small_video_acceptance_not_established_recipe
+  budget: ten_cumulative_actual_global_optimizer_steps_including_resume
+  hardware_status: real_8x80GB_acceptance_pending

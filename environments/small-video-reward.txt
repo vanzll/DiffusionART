@@ -1,0 +1,4 @@
+# Canonical DanceGRPO / VideoReward environment. Keep separate from model
+# Transformers4.51.3 until actual scorer compatibility is established.
+# The existing video installer uses the corresponding resolved wan lock.
+-r wan.txt

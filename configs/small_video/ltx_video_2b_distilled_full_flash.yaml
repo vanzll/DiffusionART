@@ -1,0 +1,4 @@
+extends: ltx_video_2b_distilled_full.yaml
+name: ltx_video_2b_distilled_full_flash
+training:
+  timestep_selection: high_noise

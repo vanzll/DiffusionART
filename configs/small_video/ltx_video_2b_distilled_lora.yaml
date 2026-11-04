@@ -1,0 +1,23 @@
+extends: common.yaml
+name: ltx_video_2b_distilled_lora_original
+model:
+  name: ltx_video_2b_distilled
+  checkpoint: ${SMALL_VIDEO_ASSETS}/models/ltx/8984fa25007f376c1a299016d0957a37a2f797bb/ltxv-2b-0.9.6-distilled-04-25.safetensors
+  revision: 8984fa25007f376c1a299016d0957a37a2f797bb
+  options:
+    native_root: ${SMALL_VIDEO_ASSETS}/sources/ltx
+    asset_root: ${SMALL_VIDEO_ASSETS}
+    asset_receipt: ${SMALL_VIDEO_ASSETS}/preflight-ltx.json
+    finetune: {mode: lora, rank: 32, alpha: 32, target_modules: [to_q, to_k, to_v, to_out.0]}
+    gradient_checkpointing: true
+    allow_tf32: false
+    ffmpeg: ffmpeg
+    ffprobe: ffprobe
+    replay_contract: pending_scientific_decision
+sampling: {steps: 8, guidance_scale: 1.0, height: 704, width: 1216, frames: 153, fps: 30.0, options: {solver: from_checkpoint_rf_stochastic, shift: null}}
+training:
+  learning_rate: 0.0001
+evaluation:
+  fps: 30.0
+runtime:
+  distributed: ddp
