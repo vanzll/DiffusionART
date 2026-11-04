@@ -21,9 +21,8 @@ easydict==1.13
 imageio==2.36.0
 imageio-ffmpeg==0.5.1
 av==13.1.0
-decord==0.6.0
 wandb==0.18.5
 PyYAML==6.0.1
 antlr4-python3-runtime==4.9.3
 timm==1.0.15
-opencv-python==4.10.0.84
+opencv-python-headless==4.10.0.84

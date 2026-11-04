@@ -32,3 +32,5 @@ establish software/algebra properties, not a mature training recipe.
 See docs/small-video.md for protocol, commands, metrics and evidence limits.
 
 A real nonzero PEFT adapter roundtrip now verifies named export, strict fresh loading into the identical immutable base, output equality and disabled-adapter base parity. This adds one CPU test; it does not replace pretrained GPU acceptance.
+
+Cold Python3.10 model-environment installation, editable package import without PYTHONPATH, pip check, native LTX component imports and both model-free parity plans passed. The model lock excludes unused Decord (the separate reward reader remains pinned) and uses OpenCV4.10.0.84 headless to avoid a desktop libGL dependency. Official Wan imports query CUDA and await admitted GPU validation. The canonical reward environment is still a separate environment and has no new cold-install/GPU proof.

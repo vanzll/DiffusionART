@@ -1,12 +1,11 @@
 # Linux x86_64/Python3.10; scoped full requirement closure verified in the isolated model environment.
-# Install CUDA12.4 Torch wheels first as documented. Cold-install/GPU validation are separate.
+# Install CUDA12.4 Torch wheels first as documented. Cold model installation/import/pip-check verified; GPU validation is separate.
 accelerate==1.4.0
 antlr4-python3-runtime==4.9.3
 av==13.1.0
 certifi==2026.5.20
 charset-normalizer==3.4.7
 click==8.4.1
-decord==0.6.0
 diffusers==0.33.1
 docker-pycreds==0.4.0
 easydict==1.13
@@ -40,7 +39,7 @@ nvidia-nccl-cu12==2.21.5
 nvidia-nvjitlink-cu12==12.4.127
 nvidia-nvtx-cu12==12.4.127
 omegaconf==2.3.0
-opencv-python==4.10.0.84
+opencv-python-headless==4.10.0.84
 packaging==26.0
 peft==0.13.2
 pillow==10.2.0

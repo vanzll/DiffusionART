@@ -39,7 +39,7 @@ export TMPDIR="$SV_ROOT/tmp"
 test ! -e "$SV_MODEL_ENV"
 mkdir -p "$SV_ROOT" "$TMPDIR" "$PIP_CACHE_DIR"
 timeout -k 5s 120s python3.10 -m venv "$SV_MODEL_ENV"
-timeout -k 5s 120s "$SV_MODEL_ENV/bin/python" -m pip install 'pip>=25,<26'
+timeout -k 5s 120s "$SV_MODEL_ENV/bin/python" -m pip install pip==25.3
 # Large wheel download; terminal output reports progress, deadline two hours.
 timeout -k 10s 7200s "$SV_MODEL_ENV/bin/python" -m pip install \
   torch==2.6.0+cu124 torchvision==0.21.0+cu124 \
@@ -53,7 +53,7 @@ timeout -k 5s 120s "$SV_MODEL_ENV/bin/python" -m pip check
 
 The model lock pins the scoped dependency closure; `small-video.txt` lists its direct inputs, including Diffusers0.33.1,
 Transformers4.51.3 and HF Hub0.30.2; a successful dependency resolution does not
-establish model runtime or GPU compatibility. Do not install upstream native
+establish model runtime or GPU compatibility. The model environment uses the headless OpenCV4.10.0.84 build and does not require desktop libGL. Decord is not used by the native T2V generation paths and stays out of this model environment. The separate canonical reward environment retains its pinned Decord reader; reward decoding is unchanged. Do not install upstream native
 package metadata with its broader dependency list into this environment.
 
 Clone the two native model sources at their exact commits. Each command works
