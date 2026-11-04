@@ -4,8 +4,9 @@ from dataclasses import replace
 
 import pytest
 import torch
-
-from test_wan_t2v_schedule import native_scheduler_class as native_scheduler_class
+from test_wan_t2v_schedule import (
+    native_scheduler_class as _native_scheduler_class_fixture,
+)
 
 from visual_rl.algorithms import art_loss
 from visual_rl.models.ltx_video_sampling import (
@@ -19,6 +20,8 @@ from visual_rl.training.small_video_replay import (
     collect_native_video,
     native_window_items,
 )
+
+native_scheduler_class = _native_scheduler_class_fixture
 
 
 def prediction(state, sigma, rows, step):

@@ -411,10 +411,19 @@ def test_extra_evaluation_allows_general_population_without_mutating_training_cu
         runner.validate_extra_evaluation(PromptDataset(evaluation.rows, "main"), evaluate_only=True)
 
 
-@pytest.mark.parametrize("world,local", [(8,4),(16,8),(4,4),(64,8)])
-def test_gpu_acceptance_rejects_any_non_single_eight_gpu_topology_before_loading(world, local, tmp_path):
-    session = DistributedSession(RankInfo(world_size=world, local_world_size=local),
-                                 torch.device("cuda",0), True)
+@pytest.mark.parametrize("world,local", [(8, 4), (16, 8), (4, 4), (64, 8)])
+def test_gpu_acceptance_rejects_any_non_single_eight_gpu_topology_before_loading(
+    world, local, tmp_path
+):
+    session = DistributedSession(
+        RankInfo(world_size=world, local_world_size=local), torch.device("cuda", 0), True
+    )
     with pytest.raises(ConfigError, match="eight-rank node"):
-        runner._run(session, SimpleNamespace(), resume=None, evaluate_only=False,
-                    backend=SimpleNamespace(), pause_after=None)
+        runner._run(
+            session,
+            SimpleNamespace(),
+            resume=None,
+            evaluate_only=False,
+            backend=SimpleNamespace(),
+            pause_after=None,
+        )

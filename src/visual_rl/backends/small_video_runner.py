@@ -142,25 +142,28 @@ def _checkpoint(c, model, optimizer, state, progress, root, *, resume=None):
     return save(root, progress=progress, keep_last=2, **arguments)
 
 
-
 @contextmanager
 def _timed_optimizer(optimizer, device):
     """Actual Adam/commit interval; no model/RNG/counter changes."""
     timing = {"start": None, "end": None}
+
     def before(optimizer, args, kwargs):
         if device.type == "cuda":
             torch.cuda.synchronize(device)
         timing["start"] = time.monotonic()
+
     def after(optimizer, args, kwargs):
         if device.type == "cuda":
             torch.cuda.synchronize(device)
         timing["end"] = time.monotonic()
+
     handles = [optimizer.register_step_pre_hook(before), optimizer.register_step_post_hook(after)]
     try:
         yield timing
     finally:
         for handle in handles:
             handle.remove()
+
 
 def train_loop(
     session,
@@ -217,9 +220,16 @@ def train_loop(
                 ),
             )
             parts.adapter.transformer.eval()
-            _event(root, rank, "rollout_start", progress, rollout=rollout, selected=list(selected),
-                   prompt_sample_ids=[row.sample_id for row in prompts],
-                   global_prompt_groups=list(range(rank*local_p, (rank+1)*local_p)))
+            _event(
+                root,
+                rank,
+                "rollout_start",
+                progress,
+                rollout=rollout,
+                selected=list(selected),
+                prompt_sample_ids=[row.sample_id for row in prompts],
+                global_prompt_groups=list(range(rank * local_p, (rank + 1) * local_p)),
+            )
             noise = backend.initial_noise(
                 c, local_p * 8, session.device, c.seed + rank + 1_000_003 * rollout
             )
@@ -349,10 +359,11 @@ def train_loop(
                     "train/history_audit_max_error": cache.history_audit_max_error,
                     "cost/rollout_and_text_seconds": rollout_seconds,
                     "cost/decode_reward_covariance_seconds": reward_seconds,
-                    "cost/update_window_seconds": window_end-window_start,
-                    "cost/forward_backward_clip_pending_commit_seconds": timing["start"]-window_start,
-                    "cost/optimizer_and_commit_seconds": timing["end"]-timing["start"],
-                    "cost/update_finite_checks_seconds": window_end-timing["end"],
+                    "cost/update_window_seconds": window_end - window_start,
+                    "cost/forward_backward_clip_pending_commit_seconds": timing["start"]
+                    - window_start,
+                    "cost/optimizer_and_commit_seconds": timing["end"] - timing["start"],
+                    "cost/update_finite_checks_seconds": window_end - timing["end"],
                     "memory/peak_allocated_bytes": (
                         torch.cuda.max_memory_allocated(session.device)
                         if session.device.type == "cuda"
@@ -470,8 +481,9 @@ def _run(
     evaluation_label=None,
 ):
     rank, world = session.identity.rank, session.identity.world_size
-    if 16 % world or (session.device.type == "cuda" and
-                      (world != 8 or session.identity.local_world_size != 8)):
+    if 16 % world or (
+        session.device.type == "cuda" and (world != 8 or session.identity.local_world_size != 8)
+    ):
         raise ConfigError("GPU acceptance requires one eight-rank node with complete K8 groups")
     mode = c.model.options["finetune"]["mode"]
     if c.runtime.distributed != "none" and c.runtime.distributed != (
