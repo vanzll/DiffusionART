@@ -56,9 +56,17 @@ def execute(request):
 
     if importlib.metadata.version("transformers") != "4.46.1":
         raise RuntimeError("canonical reward interpreter must pin Transformers4.46.1")
-    import_pinned_source(request["native_root"], package="fastvideo", revision=SOURCE_REVISION)
+    source_options = dict(
+        package="fastvideo",
+        revision=SOURCE_REVISION,
+        allow_namespace=True,
+        tracked_anchor="fastvideo/models/videoalign/inference.py",
+    )
+    import_pinned_source(request["native_root"], **source_options)
     from fastvideo.models.videoalign.inference import VideoVLMRewardInference
     from fastvideo.models.videoalign.prompt_template import build_prompt
+
+    import_pinned_source(request["native_root"], **source_options)
 
     device = torch.device(request["device"])
     if device.type == "cuda":
