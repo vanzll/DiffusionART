@@ -643,7 +643,9 @@ def run_wan_parity(
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--plan", action="store_true")
-    parser.add_argument("--solver-audit-only", action="store_true")
+    diagnostics = parser.add_mutually_exclusive_group()
+    diagnostics.add_argument("--solver-audit-only", action="store_true")
+    diagnostics.add_argument("--diagnostic-first-step", action="store_true")
     parser.add_argument("--device", choices=("cuda",))
     for key in ("asset-root", "receipt", "output", "owned-root", "asset-manifest"):
         parser.add_argument("--" + key)
@@ -655,8 +657,11 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.plan or args.device is None:
         plan = parity_plan()
-        if args.solver_audit_only:
-            plan.update(status="diagnostic_plan_notaccepted", diagnostic="solver_audit_only")
+        if args.solver_audit_only or args.diagnostic_first_step:
+            plan.update(
+                status="diagnostic_plan_notaccepted",
+                diagnostic=("solver_audit_only" if args.solver_audit_only else "first_step"),
+            )
         print(json.dumps(plan, indent=2))
         return 0
     if any(
@@ -664,12 +669,14 @@ def main(argv=None):
     ):
         parser.error("CUDA execution requires asset-root, receipt, output and owned-root")
     options = {
-        key: value for key, value in vars(args).items() if key not in ("plan", "solver_audit_only")
+        key: value
+        for key, value in vars(args).items()
+        if key not in ("plan", "solver_audit_only", "diagnostic_first_step")
     }
-    if args.solver_audit_only:
+    if args.solver_audit_only or args.diagnostic_first_step:
         from .small_video_wan_diagnostics import run_wan_diagnostic
 
-        run_wan_diagnostic(mode="solver", **options)
+        run_wan_diagnostic(mode="solver" if args.solver_audit_only else "first_step", **options)
     else:
         run_wan_parity(**options)
     return 0

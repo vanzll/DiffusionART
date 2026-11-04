@@ -1,13 +1,17 @@
 """CPU diagnostic instrumentation; no claim about actual CUDA AMP behavior."""
 
+import hashlib
 import json
+from types import SimpleNamespace
 
 import pytest
 import torch
+from test_small_video_wan_parity import ObservedScheduler, RawDecoder
 from test_wan_t2v_schedule import native_scheduler_class as _native_scheduler_class_fixture
 
 from visual_rl.models.wan_t2v_schedule import capture_native_unipc
 from visual_rl.small_video_wan_diagnostics import (
+    diagnose_first_step,
     diagnose_solver,
     observe_native_einsum,
     run_wan_diagnostic,
@@ -126,3 +130,95 @@ def test_diagnostic_requires_explicit_cuda_before_assets_or_optional_imports(tmp
             owned_root=tmp_path,
         )
     assert not (tmp_path / "out").exists()
+
+
+class PrefixField(torch.nn.Module):
+    """Small real projections, native list/context/time API; no native GPU claim."""
+
+    def __init__(self):
+        super().__init__()
+        self.model_type, self.in_dim, self.out_dim, self.text_len = "t2v", 16, 16, 512
+        self.q, self.k, self.v, self.o = [torch.nn.Linear(16, 16) for _ in range(4)]
+        self.text = torch.nn.Linear(3, 16)
+        self.calls = []
+
+    def forward(self, x, *, t, context, seq_len):
+        self.calls.append(len(x))
+        state = torch.stack(x)
+        hidden = self.o(self.v(self.k(self.q(state.movedim(1, -1))))).movedim(-1, 1)
+        padded = torch.stack([torch.nn.functional.pad(c, (0, 0, 0, 512 - len(c))) for c in context])
+        text = self.text(padded).mean(1)
+        output = hidden.float() + text.float()[:, :, None, None, None]
+        output = output + t.float()[:, None, None, None, None] / 1000
+        return list(output.unbind())
+
+
+class PrefixPipe:
+    def __init__(self):
+        self.model = PrefixField().requires_grad_(False).eval()
+        self.vae = SimpleNamespace(model=torch.nn.Module())
+        self.vae.model.decoder = RawDecoder()
+        self.seeds, self.generated_states = [], []
+
+    def generate(self, prompt, **kwargs):
+        self.seeds.append(kwargs["seed"])
+        generator = torch.Generator().manual_seed(kwargs["seed"])
+        state = torch.randn(16, 1, 2, 2, generator=generator)
+        self.generated_states.append(state.clone())
+        scheduler = ObservedScheduler()
+        with torch.no_grad(), torch.autocast("cpu", dtype=torch.bfloat16):
+            for time in scheduler.timesteps:
+                cond = self.model(
+                    [state], t=time[None], context=[torch.ones(len(prompt), 3)], seq_len=1
+                )[0]
+                uncond = self.model([state], t=time[None], context=[torch.zeros(2, 3)], seq_len=1)[
+                    0
+                ]
+                state = scheduler.step(
+                    (uncond + 6 * (cond - uncond))[None], time, state[None], return_dict=False
+                )[0][0]
+        raise AssertionError("prefix observer must stop before second step/decode")
+
+
+@pytest.mark.parametrize("finetune", ["lora", "full"])
+def test_composed_prefix_real_observer_b1_replay_pre_post_peft_and_adapter_b4(finetune):
+    if finetune == "lora":
+        pytest.importorskip("peft")
+    pipe = PrefixPipe()
+    before = torch.get_rng_state()
+    original_step = ObservedScheduler.step
+    report = diagnose_first_step(
+        pipe,
+        SimpleNamespace(FlowUniPCMultistepScheduler=ObservedScheduler),
+        ["a", "longer"],
+        device="cpu",
+        finetune=finetune,
+        seed=42,
+    )
+    assert torch.equal(before, torch.get_rng_state())
+    assert report["status"] == "diagnostic_notaccepted"
+    assert report["all_frozen_tolerances_passed"]
+    assert report["reference_physical_batch"] == 1 and report["candidate_cfg_branches"] == 4
+    assert report["native_steps_per_reference"] == 1 and not report["decode_executed"]
+    assert report["text_token_lengths"] == [1, 6]
+    assert report["negative_token_lengths"] == [2, 2]
+    assert pipe.seeds == [42, 43]
+    assert report["captured_noise_equals_model_inputs"]
+    assert report["initial_noise_sha256"] == [
+        hashlib.sha256(value.contiguous().view(torch.uint8).numpy().tobytes()).hexdigest()
+        for value in pipe.generated_states
+    ]
+    assert report["positive_context_sha256"][0] != report["positive_context_sha256"][1]
+    assert pipe.model.calls == [1] * 8 + [4] * (4 if finetune == "lora" else 3)
+    assert all(row["autocast_enabled"] for row in report["reference_forwards"])
+    assert all(
+        row["output_metadata"]["dtype"] == "torch.float32" for row in report["reference_forwards"]
+    )
+    assert all(row["t"]["dtype"] == "torch.int64" for row in report["raw_replay_calls"])
+    assert all(row["seq_len"] == 1 for row in report["raw_replay_calls"])
+    for comparison in report["comparisons"]:
+        assert comparison["atol"] == 1 / 128 and comparison["rtol"] == 1 / 128
+    assert ObservedScheduler.step is original_step
+    assert not pipe.model._forward_hooks and not pipe.vae.model.decoder._forward_hooks
+    assert set(report["parameters"]["trainable"]) == {"float32"}
+    json.dumps(report, allow_nan=False)

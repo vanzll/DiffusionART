@@ -86,9 +86,15 @@ and the original `3e-5` fixed-perturbation affine gate at every position.
 Native sigmas, INT64 times, scheduler equations and production precision stay
 unchanged. The synthetic graph is a solver diagnostic, not model inference.
 
-The observer also has CPU-covered first-transition capture/cleanup support.
-The composed B1/pre-PEFT B4/post-PEFT B4 diagnostic remains unexposed pending
-its own integration coverage; it is not an available CLI execution mode yet.
+Alternatively, `--diagnostic-first-step` captures two serial official B1 first
+transitions and stops after each completed original scheduler call. It compares
+same-input raw B1 replay, pre-PEFT native B4, post-PEFT native B4 and adapter B4
+CFG branches/guided output with the existing frozen tolerances. It records
+original input/output/context/time dtypes, strides, kwargs, AMP scope and hashes
+of captured actual noise/text. The remaining49 steps and VAE decode are skipped.
+This mode and `--solver-audit-only` are mutually exclusive. CPU tests drive the
+composed path with real small linear projections, real optional PEFT LoRA and
+the real observation hooks; they do not prove actual native CUDA equivalence.
 
 All opt-in reports say `diagnostic_notaccepted`, even if all measured checks
 pass. They execute no optimizer or reward calls and cannot approve training.

@@ -153,7 +153,7 @@ def test_actual_variable_text_prefixes_pad_before_projection_without_implicit_re
         pad_contexts([torch.ones(513, 3)])
 
 
-@pytest.mark.parametrize("diagnostic", [None, "--solver-audit-only"])
+@pytest.mark.parametrize("diagnostic", [None, "--solver-audit-only", "--diagnostic-first-step"])
 def test_default_plan_runs_without_torch_native_or_optional_imports(tmp_path, diagnostic):
     code = """
 import runpy,sys

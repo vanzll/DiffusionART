@@ -134,6 +134,204 @@ def diagnose_solver(scheduler_class, *, device="cpu", amp_enabled=True, emulate_
     }
 
 
+def diagnose_first_step(pipe, pipeline_module, prompts, *, device, finetune, seed):
+    """Two serial original B1 first steps, then raw B1/prePEFTB4/postPEFTB4.
+
+    Raising after the original first scheduler.step skips remaining49 steps and
+    decoding. The original generate's context managers still exit normally.
+    """
+    import hashlib
+
+    import torch
+
+    from .models.finetune import FineTuneConfig, parameter_inventory, prepare_policy
+    from .models.wan_t2v import (
+        WAN_T2V_NATIVE_LORA_TARGETS,
+        WanT2VAdapter,
+        WanT2VConditioning,
+        WanT2VConfig,
+    )
+    from .small_video_wan_parity import (
+        OfficialWanPrefixCaptured,
+        compare_tensor,
+        observe_official_wan,
+        pad_contexts,
+        tensor_metadata,
+    )
+
+    traces = []
+    for row, prompt in enumerate(prompts):
+        print(f"Wan diagnostic: original B1 first-step capture {row + 1}/2", flush=True)
+        with observe_official_wan(
+            pipe, pipeline_module, stop_after_steps=1, capture_inputs=True
+        ) as trace:
+            try:
+                pipe.generate(
+                    prompt,
+                    size=(832, 480),
+                    frame_num=81,
+                    shift=8.0,
+                    sample_solver="unipc",
+                    sampling_steps=50,
+                    guide_scale=6.0,
+                    seed=seed + row,
+                    offload_model=True,
+                )
+            except OfficialWanPrefixCaptured:
+                pass
+            else:
+                raise ValueError("diagnostic prefix stop was not reached")
+        if len(trace.steps) != 1 or len(trace.forwards) != 2 or trace.raw_decode:
+            raise ValueError("diagnostic must capture exactly one native step without decode")
+        traces.append(trace)
+    base = pipe.model
+    if any(p.dtype != torch.float32 for p in base.parameters()):
+        raise ValueError("diagnostic requires unchanged official FP32 base parameters")
+    metrics, observations = [], []
+
+    def tensor_hash(value):
+        return hashlib.sha256(value.contiguous().view(torch.uint8).numpy().tobytes()).hexdigest()
+
+    # Conditional rows0/1 followed by unconditional rows0/1, matching adapter CFG.
+    ordered = [(trace, branch) for branch in (0, 1) for trace in traces]
+    expected = torch.stack([trace.forwards[branch]["velocity"] for trace, branch in ordered])
+    captured = [trace.first_inputs[branch] for trace, branch in ordered]
+
+    def raw_call(model, inputs):
+        kwargs = {
+            "t": inputs["t"].to(device),
+            "context": [x.to(device) for x in inputs["context"]],
+            "seq_len": inputs["seq_len"],
+        }
+        values = [x.to(device) for x in inputs["x"]]
+        observations.append(
+            {
+                "inputs": [tensor_metadata(x) for x in values],
+                "context": [tensor_metadata(x) for x in kwargs["context"]],
+                "t": tensor_metadata(kwargs["t"]),
+                "seq_len": kwargs["seq_len"],
+                "autocast_enabled": torch.is_autocast_enabled(torch.device(device).type),
+            }
+        )
+        output = model(values, **kwargs)
+        observations[-1]["outputs"] = [tensor_metadata(x) for x in output]
+        return torch.stack(output)
+
+    with torch.no_grad(), torch.autocast(torch.device(device).type, dtype=torch.bfloat16):
+        for index, inputs in enumerate(captured):
+            actual = raw_call(base, inputs)
+            metrics.append(
+                compare_tensor(
+                    f"original_B1_replay/branch{index}",
+                    expected[index : index + 1],
+                    actual,
+                    tolerance="bf16",
+                )
+            )
+        if len({x["seq_len"] for x in captured}) != 1:
+            raise ValueError("native diagnostic sequence lengths differ")
+        combined = {
+            "x": [x["x"][0] for x in captured],
+            "context": [x["context"][0] for x in captured],
+            "t": torch.cat([x["t"] for x in captured]),
+            "seq_len": captured[0]["seq_len"],
+        }
+        before = raw_call(base, combined)
+        metrics.append(compare_tensor("prePEFT_B4/branches", expected, before, tolerance="bf16"))
+    fine = (
+        FineTuneConfig("lora", rank=32, alpha=32, target_modules=WAN_T2V_NATIVE_LORA_TARGETS)
+        if finetune == "lora"
+        else FineTuneConfig("full")
+    )
+    with torch.random.fork_rng(devices=[]):
+        torch.random.default_generator.manual_seed(seed)
+        policy = prepare_policy(base, fine).to(device).eval()
+    adapter = WanT2VAdapter(policy, pipe.vae.model, WanT2VConfig()).eval()
+    positive, mask = pad_contexts([trace.positive for trace in traces])
+    negative, negative_mask = pad_contexts([trace.negative for trace in traces])
+    state = torch.stack([trace.steps[0]["state"] for trace in traces]).to(device)
+    time = traces[0].timesteps[0].expand(2).to(device)
+    conditioning = WanT2VConditioning(
+        positive.to(device), mask.to(device), negative.to(device), negative_mask.to(device), time
+    )
+    branch_outputs = []
+    handle = base.register_forward_hook(
+        lambda module, args, values: branch_outputs.append(torch.stack(values).detach().cpu())
+    )
+    try:
+        with torch.no_grad(), torch.autocast(torch.device(device).type, dtype=torch.bfloat16):
+            after = raw_call(policy, combined)
+            metrics.append(
+                compare_tensor("postPEFT_B4/branches_vs_prePEFT", before, after, tolerance="bf16")
+            )
+            guided = adapter.predict_velocity(state, traces[0].sigmas[0].expand(2), conditioning)
+            metrics.append(
+                compare_tensor(
+                    "adapter_B4/branches_vs_postPEFT", after, branch_outputs[-1], tolerance="bf16"
+                )
+            )
+            metrics.append(
+                compare_tensor(
+                    "adapter_B4/branches_vs_reference",
+                    expected,
+                    branch_outputs[-1],
+                    tolerance="bf16",
+                )
+            )
+            expected_guided = torch.stack([trace.steps[0]["velocity"] for trace in traces])
+            metrics.append(
+                compare_tensor(
+                    "adapter_B4/guided_vs_reference", expected_guided, guided, tolerance="bf16"
+                )
+            )
+            if finetune == "lora":
+                with policy.disable_adapter():
+                    disabled = adapter.predict_velocity(
+                        state, traces[0].sigmas[0].expand(2), conditioning
+                    )
+                metrics.append(
+                    compare_tensor("zero_lora/disabled", disabled, guided, tolerance="bf16")
+                )
+    finally:
+        handle.remove()
+    return {
+        "status": "diagnostic_notaccepted",
+        "comparisons": metrics,
+        "all_frozen_tolerances_passed": all(x["passed"] for x in metrics),
+        "parameters": parameter_inventory(policy),
+        "raw_replay_calls": observations,
+        "reference_forwards": [
+            {k: v for k, v in entry.items() if k not in ("velocity", "timestep")}
+            for trace in traces
+            for entry in trace.forwards
+        ],
+        "reference_step_dtypes": [
+            {
+                k: step[k]
+                for k in ("state_dtype", "velocity_dtype", "mean_dtype", "autocast_enabled")
+            }
+            for trace in traces
+            for step in trace.steps
+        ],
+        "text_token_lengths": [len(trace.positive) for trace in traces],
+        "negative_token_lengths": [len(trace.negative) for trace in traces],
+        "initial_noise_sha256": [tensor_hash(trace.steps[0]["state"]) for trace in traces],
+        "positive_context_sha256": [tensor_hash(trace.positive) for trace in traces],
+        "negative_context_sha256": [tensor_hash(trace.negative) for trace in traces],
+        "captured_noise_equals_model_inputs": all(
+            torch.equal(trace.steps[0]["state"], inputs["x"][0])
+            for trace in traces
+            for inputs in trace.first_inputs
+        ),
+        "sigmas": traces[0].sigmas.tolist(),
+        "timesteps": traces[0].timesteps.tolist(),
+        "reference_physical_batch": 1,
+        "candidate_cfg_branches": 4,
+        "native_steps_per_reference": 1,
+        "decode_executed": False,
+    }
+
+
 def run_wan_diagnostic(
     *,
     mode,
@@ -147,11 +345,11 @@ def run_wan_diagnostic(
     seed=42,
     **unused,
 ):
-    from .small_video_wan_parity import _atomic_json, parity_plan
+    from .small_video_wan_parity import CODE_REVISION, _atomic_json, parity_plan
 
     if device != "cuda":
         raise ValueError("Wan diagnostic execution requires explicit --device cuda")
-    if mode != "solver" or finetune not in ("lora", "full"):
+    if mode not in ("solver", "first_step") or finetune not in ("lora", "full"):
         raise ValueError("unsupported Wan diagnostic mode")
     if type(seed) is not int or seed < 0:
         raise ValueError("diagnostic seed must be a nonnegative integer")
@@ -197,6 +395,32 @@ def run_wan_diagnostic(
                 for enabled in (False, True)
             ]
             report["weights_loaded"] = False
+        else:
+            from .models.source_pin import import_pinned_source
+            from .models.wan_t2v_dependencies import check_native_wan_dependencies
+
+            report["native_dependencies"] = check_native_wan_dependencies()
+            import_pinned_source(sources["wan"], package="wan", revision=CODE_REVISION)
+            pipeline_module = importlib.import_module("wan.text2video")
+            config = importlib.import_module("wan.configs").t2v_1_3B
+            pipe = pipeline_module.WanT2V(
+                config, verified["assets"]["wan"], device_id=target.index, t5_cpu=True
+            )
+            import json
+
+            rows = [
+                json.loads(line) for line in Path(verified["data"]["path"]).read_text().splitlines()
+            ]
+            rows.sort(key=lambda row: (len(row["prompt"]), row["sample_id"]))
+            report["first_step"] = diagnose_first_step(
+                pipe,
+                pipeline_module,
+                [rows[0]["prompt"], rows[-1]["prompt"]],
+                device=target,
+                finetune=finetune,
+                seed=seed,
+            )
+            report["weights_loaded"] = True
         _atomic_json(output / "metrics.json", report)
         return report
     except Exception as exc:
