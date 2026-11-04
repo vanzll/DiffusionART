@@ -1,50 +1,39 @@
 # Small native T2V development progress
 
-Base: b51e6ecc9ec1c993144a0e21ec579b6dd062bd01.
-Branch: codex/small-video-8gpu-20261104; PR targets main, never auto-merge.
+Canonical base: `b51e6ecc9ec1c993144a0e21ec579b6dd062bd01`.
+Branch: `codex/small-video-8gpu-20261104`; draft PR: https://github.com/vanzll/DiffusionART/pull/11. Local coordinator reviews; no automatic merge.
 
-Binding acceptance is ten cumulative actual global optimizer calls per
-combination (five rollouts), including checkpoint4/fresh-load/remaining6.
-Base/post uses the same8 held-out prompts/seeds. Older50/200-rollout budgets
-are superseded. Protect existing unrelated scientific jobs/services/owners;
-only owned idle whole8GPU nodes are eligible for new GPU work.
+## Binding protocol and budget
 
-Native Wan1.3B T2V and LTX2B0.9.6 adapters, full native trajectory/replay math,
-pinned assets/preflight, complete checkpoint counters/RNG, Original/Flash
-configurations and the bounded runner are implemented. CPU integrated batch:
-231passed,1FFmpeg/ffprobe skip; later parity/config/checkpoint batch113passed.
-Split consolidated checks after phased scorer integration:232 new tests and261 affected legacy tests passed (493 total, no skips). The initial combined run exposed fixture-registration and test-spy errors; both corrected, original failures retained privately. Four added single-node/eight-GPU topology guards also passed (522 public tests covered); the private fenced adapter passed17 fake CPU tests and shell syntax checks, with no operational action. Independent review completed once; CUDA DDP placement and custom receipt-binding findings were fixed. GPU validation remains pending.
+Eight recipes cover native Wan2.1 T2V1.3B and LTX-Video2B0.9.6 distilled, each with LoRA/full and Original/Flash. Every cell is capped at ten cumulative actual global optimizer calls (five rollouts), including checkpoint4, fresh load, and the remaining six calls. Base/post evaluation uses the same eight held-out prompts and seeds. Historical 50/200-rollout budgets are superseded. Existing scientific image runs, reward services, supervisors and leases are protected; new work uses only verified available whole eight-GPU nodes through their original generation-fenced controller.
 
-Primary-code checks corrected LTX's rounded checkpoint allowlist into the
-actual LinearQuadratic physical sigma table, and its initial/decode RNG layout.
-Native UniPC stores true integer time conditions separately from physical
-sigma and preserves conditional frozen-history affine replay.
+P16 prompt groups × K8 videos are scored on complete groups. Raw VQ/MQ are separately group-standardized and averaged once; TA is monitoring only. Frozen covariance supplies disjoint K4/K4 windows, exactly two optimizer calls per rollout. A near-zero standardized reward mean is not evidence of improvement: report raw VQ, raw MQ and their equal raw mean, paired base/post changes and uncertainty. Ten calls provide short sanity evidence only.
 
-The named native normalized-mean/canonical-Q2-reference training contract
-requires a scientific decision. Checked-in profiles fail closed until that
-choice. This is distinct from the independent official base-parity gate.
+## Implemented and CPU checked
 
-All8 pretrained GPU/training/checkpoint/effectiveness cells remain pending.
-The observed allocation reports roughly140GiB per GPU and inconsistent
-name/PCI metadata; no8×H80080GB acceptance is claimed. CPU fixtures alone
-establish software/algebra properties, not a mature training recipe.
+Separate native backends, pinned assets and preflight, complete native rollout caches, pending scientific replay gate, variable-length batching, LoRA/full policies, bounded eight-GPU runner, separate canonical VideoReward environment, full policy/Adam/RNG/data/timestep-selection checkpoints, exports and generic held-out evaluation are implemented. New dependencies load optionally; old model defaults and checkpoint interfaces are preserved.
 
-See docs/small-video.md for protocol, commands, metrics and evidence limits.
+261 new CPU tests and 261 affected existing tests passed (522 public cases covered, no skips). These include native schedule/cache checks, denominator and partition-gradient equivalence, real two-rank CPU FSDP BF16/FP32-master/Adam/resume checks, and a nonzero PEFT save/load/export/disable roundtrip. One independent code review completed; device-placement and asset-receipt binding findings were fixed. CPU algebra and fixtures are not GPU or training acceptance.
 
-A real nonzero PEFT adapter roundtrip now verifies named export, strict fresh loading into the identical immutable base, output equality and disabled-adapter base parity. This adds one CPU test; it does not replace pretrained GPU acceptance.
+Both model and canonical reward environments were installed into fresh isolated Python3.10 venvs and passed dependency/import checks. Native Wan additionally pins FlashAttention2.7.4.post1 with Torch2.6/CUDA12.4 ABI=False and rejects a competing FA3 default. All 51 required asset files (52.44GB) passed fixed revision/checksum preflight. Real GPU reward evaluation remains pending.
 
-Cold Python3.10 model-environment installation, editable package import without PYTHONPATH, pip check, native LTX component imports and both model-free parity plans passed. The model lock excludes unused Decord (the separate reward reader remains pinned) and uses OpenCV4.10.0.84 headless to avoid a desktop libGL dependency. Official Wan imports query CUDA and await admitted GPU validation. The canonical reward environment is still a separate environment and has no new cold-install/GPU proof.
+## Actual native GPU evidence
 
-The first pretrained LTX LoRA B2 native-parity attempt failed, with identical
-inputs/RNG but disabled-adapter first-velocity max error0.03125 (fixed tolerance
-exceeded), then divergent recurrence/decode. Its reports and all four matched
-MP4s were retained. Native reference uses no global AMP; candidate AMP differed.
-The directed fix preserves native precision boundaries, keeps BF16 LoRA GEMMs
-and FP32 masters, and adds a task-local LTX full FSDP BF16 compute policy with
-FP32 reduction/time/coordinates. Old video sharding defaults remain unchanged.
-CPU evidence and the required fresh GPU retest are recorded separately; no
-training combination has performed an optimizer update yet.
+Passing native LTX source: `c015d8b23fd874e4937b974d6d2d14a0246e1f9f`.
 
-A second native LTX attempt completed inference/video generation but failed while serializing an observed hidden_dtype keyword. This was not a parity pass. Strict JSON metadata/error reporting was corrected and47 targeted CPU tests passed; mathematical paths and thresholds were unchanged. A fresh GPU retest is required.
+| Check | Evidence | Limit |
+| --- | --- | --- |
+| LTX LoRA pretrained native batch2 | 115/115 comparisons, maximum absolute error0; matched full-profile videos | Single-device inference, no backward |
+| LTX full pretrained native batch2 | 99/99 comparisons, maximum absolute error0; matched videos | Eval-only BF16 views retain FP32 masters; no distributed/backward proof |
+| Wan LoRA source47ed68a7d04e01614d6d5123ec03d7a7cd1ccab4 | 100/154 teacher comparisons failed; strict native frozen-history affine replay audit failed | No acceptance; diagnostic investigation remains open |
+| Eight-GPU end-to-end training | All eight cells remain0/10 actual optimizer calls | Reward/backward/checkpoint/resume/effectiveness evidence pending |
 
-Native Wan explicitly requires optional FlashAttention2.7.4.post1 on pinned Torch2.6/CUDA12.4 ABI=False. A lazy preflight now rejects missing/wrong binaries or a competing FA3 default before large model loading; the standard-library plan path stays model-free. All261 new CPU tests plus261 affected legacy tests are covered (522 total). Both model and canonical reward environments were installed into fresh isolated venvs; binary import and pip checks passed. Native Wan pretrained GPU retest remains pending.
+LTX uses native1216×704,153frames/30fps/eight stochastic transitions,CFG1/STG0 with actual random-draw and decode conditioning alignment. Wan uses832×480,81frames/16fps/50native UniPC transitions,CFG6/shift8. Actual inference transformer batch exceeds1. Failed attempts remain retained. Native samplers, dimensions and numerical thresholds were not changed to obtain passing LTX results.
+
+Wan's proposed frozen-history affine replay is proved only under the tested CPU arithmetic. The real CUDA AMP native solver failed its strict audit; current-velocity-dependent einsum rounding is a hypothesis under explicit diagnostic investigation, not an established root cause. The native multi-step trajectory must not be silently replaced by Euler or a different precision policy. Full base-parity mismatches also require separate localization.
+
+## Scientific and hardware limits
+
+The proposed native conditional normalized-mean regression with canonical Q2 reference masking requires an explicit scientific decision. This mask is not claimed as a native stochastic-kernel KL. Checked-in recipes fail closed before training. LTX's independent decision is pending; Wan's additional real-GPU replay failure must be resolved independently.
+
+The allocation reports H800 names but143771MiB and PCI device2335 (H200 in NVIDIA's driver table). This is not eight H80080GB validation. Successful native parity uses one device with physical batch2, not an eight-GPU recipe acceptance. No training reward trend or long-run stability is established. See `docs/small-video.md` for public commands, protocol and evidence requirements.

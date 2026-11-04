@@ -178,3 +178,35 @@ FP32 master gradients, checkpoint recomputation, strict save/load and copied
 method identity, and the restricted full-view helper with master restoration.
 They are explicitly **not** pretrained parity evidence. No real GPU execution
 is claimed by this document until a corresponding report and artifacts exist.
+
+## Existing-video reward diagnostic
+
+`--reward-only` scores exactly two existing, explicitly paired paths/prompts
+without loading a generator, policy or optimizer. It is diagnostic only and
+does not establish training/scientific acceptance. Both MP4 inputs and the new
+output must stay under the explicit nonsymlink owned root. Before querying CUDA,
+the tool checks counted frames, geometry and FPS against the full LTX profile
+(153frames,704×1216,30fps), and verifies the canonical asset receipt/source pins.
+
+After the existing resource owner admits the command onto its GPU:
+
+```bash
+export SMALL_VIDEO_REWARD_PYTHON="$SV_REWARD_ENV/bin/python"
+timeout -k 15s 1800s "$SV_MODEL_ENV/bin/python" -m visual_rl.small_video_parity \
+  --reward-only --device cuda --asset-root "$SMALL_VIDEO_ASSETS" \
+  --receipt "$SMALL_VIDEO_ASSETS/preflight-ltx.json" \
+  --owned-root "$OWNED_ROOT" --output "$OWNED_ROOT/new-reward-diagnostic" \
+  --reward-videos "$OWNED_ROOT/existing/matched-0.mp4" "$OWNED_ROOT/existing/matched-1.mp4" \
+  --reward-prompts "$PROMPT_0" "$PROMPT_1"
+```
+
+Supply the actual ordered prompts for those existing videos; prompts and full
+environments are never printed to stdout. `--reward-only --plan` performs no
+scoring or CUDA query. Default parity behavior is unchanged. The existing
+canonical one-shot `PhasedVideoReward` restricts its worker to the parent's
+visible physical GPU, waits for exit, and drains its own child on failure.
+There is no new persistent scorer service. The report records actual GPU UUID,
+visible-device binding, reward/source/backbone revisions, fixed4fps and
+`use_norm=False`, finite raw VQ/MQ/TA (including monitored TA), equal raw VQ/MQ
+mean, phase audit path and telemetry. Missing/nonfinite components fail hard;
+an error report and owned worker audit remain available.

@@ -13,6 +13,7 @@ from torch import nn
 
 from visual_rl.small_video_wan_parity import (
     TOLERANCES,
+    OfficialWanPrefixCaptured,
     compare_tensor,
     observe_official_wan,
     pad_contexts,
@@ -106,6 +107,28 @@ def test_observer_catches_raw_overflow_that_native_clamp_would_hide():
     assert not pipe.vae.model.decoder._forward_hooks
 
 
+def test_diagnostic_prefix_stops_after_original_step_and_restores_all_hooks():
+    pipe = ObservedPipe()
+    original = ObservedScheduler.step
+    with observe_official_wan(
+        pipe,
+        SimpleNamespace(FlowUniPCMultistepScheduler=ObservedScheduler),
+        stop_after_steps=1,
+        capture_inputs=True,
+    ) as trace:
+        with pytest.raises(OfficialWanPrefixCaptured):
+            pipe.generate(tokens=5)
+    assert len(trace.steps) == 1 and len(trace.forwards) == 2
+    assert trace.steps[0]["mean"].abs().max() > 1  # Original step did run, before native clamp.
+    assert not trace.raw_decode and trace.decoded is None
+    assert len(trace.first_inputs) == 2
+    assert trace.first_inputs[0]["context"][0].shape == (5, 3)
+    assert trace.forwards[0]["output_metadata"]["dtype"] == "torch.float32"
+    assert trace.forwards[0]["input_metadata"][0]["stride"] == [1, 1, 1, 1]
+    assert ObservedScheduler.step is original and not pipe.model._forward_hooks
+    assert not pipe.vae.model.decoder._forward_hooks
+
+
 def test_comparator_frozen_bf16_vs_fp32_tolerance_and_nonfinite_rejection():
     reference = torch.ones(2, 3)
     near = reference + 0.01
@@ -130,7 +153,8 @@ def test_actual_variable_text_prefixes_pad_before_projection_without_implicit_re
         pad_contexts([torch.ones(513, 3)])
 
 
-def test_default_plan_runs_without_torch_native_or_optional_imports(tmp_path):
+@pytest.mark.parametrize("diagnostic", [None, "--solver-audit-only"])
+def test_default_plan_runs_without_torch_native_or_optional_imports(tmp_path, diagnostic):
     code = """
 import runpy,sys
 class BlockModels:
@@ -138,11 +162,15 @@ class BlockModels:
         if fullname.split('.')[0] in {'torch','wan','diffusers','peft'}:
             raise AssertionError('plan imported model dependency: '+fullname)
 sys.meta_path.insert(0,BlockModels())
-sys.argv=['wan-parity','--plan']
+sys.argv=['wan-parity','--plan'] + DIAGNOSTIC
 runpy.run_module('visual_rl.small_video_wan_parity',run_name='__main__')
 """
     result = subprocess.run(
-        [sys.executable, "-c", code],
+        [
+            sys.executable,
+            "-c",
+            code.replace("DIAGNOSTIC", repr([diagnostic] if diagnostic else [])),
+        ],
         capture_output=True,
         text=True,
         timeout=10,
@@ -156,6 +184,8 @@ runpy.run_module('visual_rl.small_video_wan_parity',run_name='__main__')
     plan = json.loads(result.stdout)
     assert plan["reference_physical_batch"] == 1 and plan["candidate_physical_batch"] == 2
     assert plan["candidate_cfg_branches"] == 4 and not plan["training_acceptance"]
+    if diagnostic:
+        assert plan["status"] == "diagnostic_plan_notaccepted"
 
 
 def test_real_execution_needs_explicit_cuda_before_asset_or_model_loading(tmp_path):

@@ -87,6 +87,7 @@ class OfficialWanTrace:
     sigmas: object = None
     timesteps: object = None
     decoded: object = None
+    first_inputs: list = field(default_factory=list)
 
     def validate(self, *, steps=50):
         import torch
@@ -133,11 +134,27 @@ class OfficialWanTrace:
                     raise ValueError("official native reference contains nonfinite values")
 
 
+class OfficialWanPrefixCaptured(RuntimeError):
+    """Diagnostic-only stop after a completed original native transition."""
+
+
+def tensor_metadata(value):
+    return {
+        "shape": list(value.shape),
+        "dtype": str(value.dtype),
+        "stride": list(value.stride()),
+        "device": str(value.device),
+        "contiguous": value.is_contiguous(),
+    }
+
+
 @contextlib.contextmanager
-def observe_official_wan(pipe, pipeline_module):
+def observe_official_wan(pipe, pipeline_module, *, stop_after_steps=None, capture_inputs=False):
     """Observe original model calls/native step without replacing computations."""
     import torch
 
+    if stop_after_steps is not None and (type(stop_after_steps) is not int or stop_after_steps < 1):
+        raise ValueError("diagnostic stop must be a positive native step count")
     trace = OfficialWanTrace()
     scheduler = pipeline_module.FlowUniPCMultistepScheduler
     original_step = scheduler.step
@@ -156,7 +173,28 @@ def observe_official_wan(pipe, pipeline_module):
                 trace.positive = _cpu(context[0])
             else:
                 trace.negative = _cpu(context[0])
-        trace.forwards.append({"timestep": _cpu(kwargs["t"]), "velocity": _cpu(output[0])})
+            if capture_inputs:
+                trace.first_inputs.append(
+                    {
+                        "x": [_cpu(x) for x in inputs],
+                        "t": _cpu(kwargs["t"]),
+                        "context": [_cpu(x) for x in context],
+                        "seq_len": kwargs.get("seq_len"),
+                    }
+                )
+        trace.forwards.append(
+            {
+                "timestep": _cpu(kwargs["t"]),
+                "velocity": _cpu(output[0]),
+                "input_metadata": [tensor_metadata(x) for x in inputs],
+                "output_metadata": tensor_metadata(output[0]),
+                "context_metadata": [tensor_metadata(x) for x in kwargs["context"]],
+                "t_metadata": tensor_metadata(kwargs["t"]),
+                "seq_len": kwargs.get("seq_len"),
+                "autocast_enabled": torch.is_autocast_enabled(inputs[0].device.type),
+                "autocast_dtype": str(torch.get_autocast_dtype(inputs[0].device.type)),
+            }
+        )
 
     def step_hook(self, model_output, timestep, sample, *args, **kwargs):
         if len(sample) != 1:
@@ -167,8 +205,19 @@ def observe_official_wan(pipe, pipeline_module):
         result = original_step(self, model_output, timestep, sample, *args, **kwargs)
         mean = result[0] if isinstance(result, tuple) else result.prev_sample
         trace.steps.append(
-            {"state": state, "velocity": velocity, "mean": _cpu(mean[0]), "timestep": int(timestep)}
+            {
+                "state": state,
+                "velocity": velocity,
+                "mean": _cpu(mean[0]),
+                "timestep": int(timestep),
+                "state_dtype": str(sample.dtype),
+                "velocity_dtype": str(model_output.dtype),
+                "mean_dtype": str(mean.dtype),
+                "autocast_enabled": torch.is_autocast_enabled(sample.device.type),
+            }
         )
+        if stop_after_steps is not None and len(trace.steps) >= stop_after_steps:
+            raise OfficialWanPrefixCaptured("diagnostic native prefix captured; no decode")
         return result
 
     def raw_decode_hook(module, args, output):
@@ -585,6 +634,8 @@ def run_wan_parity(
         return report
     except Exception as exc:
         report.update(status="failed", error_type=type(exc).__name__)
+        if hasattr(exc, "diagnostics"):
+            report["native_affine_audit_failure"] = exc.diagnostics
         _atomic_json(output / "metrics.json", report)
         raise
 
@@ -592,6 +643,7 @@ def run_wan_parity(
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--plan", action="store_true")
+    parser.add_argument("--solver-audit-only", action="store_true")
     parser.add_argument("--device", choices=("cuda",))
     for key in ("asset-root", "receipt", "output", "owned-root", "asset-manifest"):
         parser.add_argument("--" + key)
@@ -602,13 +654,24 @@ def main(argv=None):
     parser.add_argument("--ffprobe", default="ffprobe")
     args = parser.parse_args(argv)
     if args.plan or args.device is None:
-        print(json.dumps(parity_plan(), indent=2))
+        plan = parity_plan()
+        if args.solver_audit_only:
+            plan.update(status="diagnostic_plan_notaccepted", diagnostic="solver_audit_only")
+        print(json.dumps(plan, indent=2))
         return 0
     if any(
         getattr(args, name) is None for name in ("asset_root", "receipt", "output", "owned_root")
     ):
         parser.error("CUDA execution requires asset-root, receipt, output and owned-root")
-    run_wan_parity(**{key: value for key, value in vars(args).items() if key != "plan"})
+    options = {
+        key: value for key, value in vars(args).items() if key not in ("plan", "solver_audit_only")
+    }
+    if args.solver_audit_only:
+        from .small_video_wan_diagnostics import run_wan_diagnostic
+
+        run_wan_diagnostic(mode="solver", **options)
+    else:
+        run_wan_parity(**options)
     return 0
 
 

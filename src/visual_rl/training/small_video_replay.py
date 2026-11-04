@@ -6,6 +6,8 @@ with canonical sigma weights/restoration and the canonical Q2 REFERENCE mask.
 The Q2 reference metric is not a KL for either native transition kernel.
 """
 
+import json
+import math
 from dataclasses import dataclass, field
 
 import torch
@@ -24,6 +26,70 @@ from ..models.wan_t2v_schedule import (
 )
 
 NATIVE_AFFINE_ART_CONTRACT = "native_affine_normalized_mean_canonical_q2_reference_v1"
+
+
+class NativeAffineAuditError(ValueError):
+    def __init__(self, diagnostics):
+        self.diagnostics = diagnostics
+        super().__init__(
+            "native frozen-history affine replay audit failed: "
+            + json.dumps(diagnostics, sort_keys=True, allow_nan=False)
+        )
+
+
+def audit_native_unipc_affine(
+    snapshot, velocity, mean, coefficient, *, index, sigma, scheduler_factory
+):
+    """Distinguish exact frozen-history reconstruction from finite-precision affinity.
+
+    Retain the caller's native autocast scope and the existing3e-5 gate.
+    Replay the unchanged velocity only after failure, to classify the error
+    without adding work to successful production audits.
+    """
+    delta = torch.full_like(velocity, 0.125)
+    perturbed = replay_native_unipc(snapshot, velocity + delta, scheduler_factory=scheduler_factory)
+    expected = mean.float() + coefficient.to(velocity.device) * delta.float()
+    error = float((perturbed.float() - expected).abs().max())
+    scale = float(expected.abs().max().clamp_min(1))
+    enabled = torch.is_autocast_enabled(velocity.device.type)
+    diagnostics = {
+        "index": index,
+        "sigma": float(sigma),
+        "coefficient": float(coefficient),
+        "max_abs_error": error,
+        "scale": scale,
+        "relative_max_error": error / scale,
+        "threshold": 3e-5,
+        "perturbation": 0.125,
+        "velocity_dtype": str(velocity.dtype),
+        "mean_dtype": str(mean.dtype),
+        "snapshot_state_dtype": str(snapshot.state.dtype),
+        "device": str(velocity.device),
+        "snapshot_step_index": snapshot.history.get("_step_index"),
+        "previous_order": snapshot.history.get("this_order"),
+        "history_dtypes": [
+            None if x is None else str(x.dtype) for x in snapshot.history["model_outputs"]
+        ],
+        "autocast_enabled": enabled,
+        "autocast_dtype": str(torch.get_autocast_dtype(velocity.device.type)) if enabled else None,
+        "restore_policy": "sigmas_on_cpu; tensor_history/state_to_velocity_device; preserve_dtype",
+    }
+    if not torch.isfinite(perturbed).all() or error > 3e-5 * scale:
+        restored = replay_native_unipc(snapshot, velocity, scheduler_factory=scheduler_factory)
+        identity_error = float((restored.float() - mean.float()).abs().max())
+        identity_scale = float(mean.float().abs().max().clamp_min(1))
+        diagnostics.update(identity_max_abs_error=identity_error, identity_scale=identity_scale)
+        diagnostics["failure_kind"] = (
+            "snapshot_identity"
+            if not torch.isfinite(restored).all() or identity_error > 3e-5 * identity_scale
+            else "finite_precision_affinity"
+        )
+        diagnostics = {
+            key: str(value) if isinstance(value, float) and not math.isfinite(value) else value
+            for key, value in diagnostics.items()
+        }
+        raise NativeAffineAuditError(diagnostics)
+    return diagnostics
 
 
 @dataclass(frozen=True)
@@ -206,17 +272,26 @@ def collect_native_video(
                 )[0]
                 next_state = mean
                 if snapshot is not None:
-                    # Fixed deterministic perturbation consumes no sampling RNG.
-                    delta = torch.full_like(velocity, 0.125)
-                    perturbed = replay_native_unipc(
-                        snapshot, velocity + delta, scheduler_factory=scheduler_factory
-                    )
-                    expected = mean.float() + coefficients[index].to(state.device) * delta.float()
-                    error = float((perturbed.float() - expected).abs().max())
-                    scale = float(expected.abs().max().clamp_min(1))
-                    max_error = max(max_error, error / scale)
-                    if error > 3e-5 * scale:
-                        raise ValueError("native frozen-history affine replay audit failed")
+                    try:
+                        diagnostics = audit_native_unipc_affine(
+                            snapshot,
+                            velocity,
+                            mean,
+                            coefficients[index],
+                            index=index,
+                            sigma=sigmas[index],
+                            scheduler_factory=scheduler_factory,
+                        )
+                    except NativeAffineAuditError as exc:
+                        if progress is not None:
+                            progress(
+                                native_position=index,
+                                microbatch_start=start,
+                                microbatch_stop=stop,
+                                affine_audit_failure=exc.diagnostics,
+                            )
+                        raise
+                    max_error = max(max_error, diagnostics["relative_max_error"])
             else:
                 innovation = draw_ltx_transition_innovation(state)
                 transition = ltx_video_stochastic_transition(

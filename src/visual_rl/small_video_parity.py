@@ -13,8 +13,12 @@ import hashlib
 import importlib
 import inspect
 import json
+import math
+import os
+import subprocess
 import sys
 from dataclasses import dataclass, field
+from fractions import Fraction
 from pathlib import Path
 
 import torch
@@ -308,6 +312,210 @@ def write_error_report(path, report):
         )
         text = json.dumps(retained, indent=2, allow_nan=False)
     Path(path).write_text(text + "\n")
+
+
+def _reward_owned_path(path, root, *, existing=False):
+    path = Path(path)
+    if (
+        not path.is_absolute()
+        or not path.is_relative_to(root)
+        or not path.resolve().is_relative_to(root)
+        or any(item.is_symlink() for item in (path, *path.parents))
+    ):
+        raise ValueError(
+            "reward diagnostic paths must stay under the explicit nonsymlink owned root"
+        )
+    if existing and not path.is_file():
+        raise ValueError("reward diagnostic requires existing regular MP4 files")
+    return path
+
+
+def _reward_video_profile(path, *, ffprobe):
+    result = subprocess.run(
+        [
+            ffprobe,
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-count_frames",
+            "-show_entries",
+            "stream=width,height,avg_frame_rate,nb_read_frames",
+            "-of",
+            "json",
+            str(path),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=120,
+    )
+    streams = json.loads(result.stdout).get("streams", [])
+    if (
+        len(streams) != 1
+        or streams[0].get("width") != PROFILE["width"]
+        or streams[0].get("height") != PROFILE["height"]
+        or int(streams[0].get("nb_read_frames", "-1")) != PROFILE["num_frames"]
+        or not math.isclose(
+            float(Fraction(streams[0]["avg_frame_rate"])),
+            PROFILE["frame_rate"],
+            rel_tol=0,
+            abs_tol=1e-6,
+        )
+    ):
+        raise ValueError("reward-only input must retain native LTX704x1216/153frames/30fps")
+    return streams[0]
+
+
+def _reward_device_identity():
+    from .rewards.small_video_process import physical_visible_device
+
+    if not torch.cuda.is_available():
+        raise RuntimeError("explicit CUDA reward diagnostic requested but CUDA is unavailable")
+    device = torch.device("cuda", torch.cuda.current_device())
+    identifier = str(torch.cuda.get_device_properties(device).uuid)
+    if not identifier.startswith(("GPU-", "MIG-")):
+        raise ValueError("reward diagnostic requires an actual GPU UUID")
+    return device, {"gpu_uuid": identifier, "visible_device": physical_visible_device(device)}
+
+
+@torch.no_grad()
+def run_reward_only(
+    *,
+    asset_root,
+    receipt,
+    output,
+    owned_root,
+    videos,
+    prompts,
+    device="cpu",
+    manifest=None,
+    ffprobe="ffprobe",
+):
+    """Score two existing native videos; no generator/policy/optimizer is loaded."""
+    if str(device) != "cuda":
+        raise ValueError("reward-only diagnostic requires explicit --device cuda")
+    root = Path(owned_root)
+    if not root.is_absolute() or not root.is_dir() or root.is_symlink() or root.resolve() != root:
+        raise ValueError("reward-only requires an existing absolute nonsymlink owned root")
+    if (
+        not isinstance(videos, (list, tuple))
+        or len(videos) != 2
+        or not isinstance(prompts, (list, tuple))
+        or len(prompts) != 2
+        or any(not isinstance(prompt, str) or not prompt.strip() for prompt in prompts)
+    ):
+        raise ValueError(
+            "reward-only requires exactly two explicit videos and matching nonempty prompts"
+        )
+    paths = [_reward_owned_path(path, root, existing=True) for path in videos]
+    if len(set(paths)) != 2 or any(path.suffix.lower() != ".mp4" for path in paths):
+        raise ValueError("reward-only requires two distinct existing MP4 paths")
+    output = _reward_owned_path(output, root)
+    if output.exists():
+        raise FileExistsError(output)
+    profiles = [_reward_video_profile(path, ffprobe=ffprobe) for path in paths]
+    python = os.environ.get("SMALL_VIDEO_REWARD_PYTHON")
+    if not python or not Path(python).is_file() or not os.access(python, os.X_OK):
+        raise ValueError(
+            "export SMALL_VIDEO_REWARD_PYTHON to the existing canonical reward interpreter"
+        )
+    from .rewards.small_video_process import (
+        REWARD_REVISION,
+        REWARD_SOURCE_REVISION,
+        PhasedVideoReward,
+    )
+
+    spec = load_manifest() if manifest is None else load_manifest(manifest)
+    snapshots = {entry["id"]: entry["revision"] for entry in spec["snapshots"]}
+    sources = {entry["id"]: entry["revision"] for entry in spec["sources"]}
+    backbone_revision = "895c3a49bc3fa70a340399125c650a463535e71c"
+    if (
+        snapshots.get("reward") != REWARD_REVISION
+        or snapshots.get("reward_backbone") != backbone_revision
+        or sources.get("dancegrpo") != REWARD_SOURCE_REVISION
+    ):
+        raise ValueError("reward-only requires pinned canonical reward/source/backbone")
+    verified = verify_receipt(spec, asset_root, receipt, profile="ltx")
+    # All path/video/asset preflight above precedes even a CUDA availability query.
+    target, hardware = _reward_device_identity()
+    output.mkdir(parents=True, exist_ok=False)
+    report = {
+        "schema_version": "ltx-existing-video-reward-diagnostic/v1",
+        "status": "running",
+        "diagnostic_only": True,
+        "training_acceptance": False,
+        "optimizer_calls": 0,
+        "profile": PROFILE,
+        "hardware": hardware,
+        "asset_receipt_checksum": verified["checksum"],
+        "reward_revision": REWARD_REVISION,
+        "reward_source_revision": REWARD_SOURCE_REVISION,
+        "backbone_revision": backbone_revision,
+        "reward_fps": 4.0,
+        "use_norm": False,
+        "space": "raw",
+        "weights": {"VQ": 0.5, "MQ": 0.5, "TA": 0.0},
+        "inputs": [
+            {
+                "path": str(path),
+                "profile": profile,
+                "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
+            }
+            for path, profile, prompt in zip(paths, profiles, prompts)
+        ],
+    }
+    scorer = None
+    try:
+        scorer = (
+            PhasedVideoReward(
+                python=python,
+                native_root=verified["sources"]["dancegrpo"],
+                checkpoint=verified["assets"]["reward"],
+                backbone=verified["assets"]["reward_backbone"],
+                revision=REWARD_REVISION,
+                video_fps=PROFILE["frame_rate"],
+                reward_fps=4.0,
+                ffprobe=ffprobe,
+                scratch=output / "reward-phases",
+            )
+            .to(target)
+            .eval()
+        )
+        scores = scorer.score_paths(paths, prompts)
+        if set(scores.raw) != {"VQ", "MQ", "TA"} or scores.space != "raw":
+            raise ValueError("canonical reward diagnostic requires raw VQ/MQ/TA")
+        for key, values in scores.raw.items():
+            if (
+                not isinstance(values, torch.Tensor)
+                or values.shape != (2,)
+                or not torch.isfinite(values).all()
+            ):
+                raise ValueError(f"reward-only nonfinite/missing raw component: {key}")
+        report["rows"] = [
+            {
+                "index": row,
+                **{key: float(values[row]) for key, values in scores.raw.items()},
+                "raw_VQ_MQ_mean": float((scores.raw["VQ"][row] + scores.raw["MQ"][row]) / 2),
+            }
+            for row in range(2)
+        ]
+        report.update(
+            status="passed", reward_phase=str(scorer.last_phase), metrics=scorer.last_metrics
+        )
+        (output / "report.json").write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
+        return report
+    except BaseException as error:
+        report.update(status="error", error_type=type(error).__name__, error=str(error))
+        if scorer is not None:
+            report["reward_phase"] = str(scorer.last_phase)
+        write_error_report(output / "report.json", report)
+        raise
+    finally:
+        # Existing one-shot score_paths owns bounded child drainage on errors
+        # and returns only after exit. There is no persistent service to close.
+        if scorer is not None:
+            scorer.to("cpu")
 
 
 def forward_precision(args, kwargs):
@@ -1171,8 +1379,43 @@ def main(argv=None):
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--ffmpeg", default="ffmpeg")
     parser.add_argument("--ffprobe", default="ffprobe")
+    parser.add_argument("--reward-only", action="store_true")
+    parser.add_argument("--owned-root", type=Path)
+    parser.add_argument("--reward-videos", nargs=2, type=Path)
+    parser.add_argument("--reward-prompts", nargs=2)
     args = parser.parse_args(argv)
+    if not args.reward_only and any(
+        value is not None for value in (args.owned_root, args.reward_videos, args.reward_prompts)
+    ):
+        parser.error("reward input options require explicit --reward-only")
+    if args.reward_only and (args.finetune != "base" or args.save_tensors):
+        parser.error("reward-only does not prepare a policy or save model trajectories")
     if args.plan:
+        if args.reward_only:
+            print(
+                json.dumps(
+                    {
+                        "reward_only": True,
+                        "diagnostic_only": True,
+                        "training_acceptance": False,
+                        "optimizer_calls": 0,
+                        "gpu_execution": False,
+                        "required": [
+                            "--device cuda",
+                            "--owned-root",
+                            "--reward-videos PATH1 PATH2",
+                            "--reward-prompts TEXT1 TEXT2",
+                            "--output",
+                            "SMALL_VIDEO_REWARD_PYTHON",
+                        ],
+                        "profile": PROFILE,
+                        "reward_fps": 4.0,
+                        "use_norm": False,
+                    },
+                    indent=2,
+                )
+            )
+            return 0
         print(
             json.dumps(
                 {
@@ -1194,6 +1437,24 @@ def main(argv=None):
         parser.error(
             "real pretrained parity requires explicit --device cuda and a new --output; use --plan otherwise"
         )
+    if args.reward_only:
+        if args.owned_root is None or args.reward_videos is None or args.reward_prompts is None:
+            parser.error(
+                "reward-only requires explicit --owned-root, two videos and two matching prompts"
+            )
+        result = run_reward_only(
+            asset_root=args.asset_root,
+            receipt=args.receipt or args.asset_root / "preflight-ltx.json",
+            output=args.output,
+            owned_root=args.owned_root,
+            videos=args.reward_videos,
+            prompts=args.reward_prompts,
+            device=args.device,
+            manifest=args.manifest,
+            ffprobe=args.ffprobe,
+        )
+        print(json.dumps({"status": result["status"], "report": str(args.output / "report.json")}))
+        return 0 if result["status"] == "passed" else 1
     result = run_ltx_parity(
         asset_root=args.asset_root,
         receipt=args.receipt or args.asset_root / "preflight-ltx.json",

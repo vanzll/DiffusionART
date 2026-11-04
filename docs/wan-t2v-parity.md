@@ -75,3 +75,23 @@ synthetic scheduler is an instrumentation fixture, not a native UniPC proof.
 Neither these tests nor fixed-input pretrained inference parity alone validate
 ART replay,8GPU training, checkpoint correctness, reward improvements or80GB
 hardware capacity. Those require their own evidence.
+
+An opt-in localizes failures without changing the default parity path.
+Add `--solver-audit-only` to the same explicit CUDA/receipt/output
+arguments to import only the pinned native solver file: no T5, transformer,
+VAE or FlashAttention is loaded. It runs a deterministic small B2 tensor through
+all50 native transitions with AMP disabled and BF16 AMP enabled. It records
+native `einsum` input/output dtypes, unchanged-velocity snapshot replay identity,
+and the original `3e-5` fixed-perturbation affine gate at every position.
+Native sigmas, INT64 times, scheduler equations and production precision stay
+unchanged. The synthetic graph is a solver diagnostic, not model inference.
+
+The observer also has CPU-covered first-transition capture/cleanup support.
+The composed B1/pre-PEFT B4/post-PEFT B4 diagnostic remains unexposed pending
+its own integration coverage; it is not an available CLI execution mode yet.
+
+All opt-in reports say `diagnostic_notaccepted`, even if all measured checks
+pass. They execute no optimizer or reward calls and cannot approve training.
+CPU tests additionally offer a clearly labeled, test-only emulation of CUDA's
+BF16 `einsum` policy. CPU autocast policies differ from CUDA; neither CPU
+algebra nor that emulation proves the native CUDA solver affine.
