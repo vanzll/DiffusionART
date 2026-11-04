@@ -19,7 +19,8 @@
     "reward_UUID_and_parity_passed": 71,
     "namespace_source_and_worker_passed": 57,
     "cold_native_import_without_CUDA": "passed",
-    "explicit_reward_checkpoint11352_constructor_binding_without_CUDA": "passed"
+    "explicit_reward_checkpoint11352_constructor_binding_without_CUDA": "passed",
+    "wan_first_step_targeted_passed": 28
   },
   "native_LTX_parity": [
     {
@@ -234,5 +235,189 @@
     "Wan native AMP fails strict affine equivalence; actual native mean objective requires a separate scientific decision and implementation, or Wan stays blocked.",
     "Wan official serial-base versus batch comparisons also remain failed."
   ],
-  "short_run_limits": "No training reward or paired base/post trend exists;10updates cannot demonstrate long-run stability or generalization."
+  "short_run_limits": "No training reward or paired base/post trend exists;10updates cannot demonstrate long-run stability or generalization.",
+  "wan_first_step_batch_localization": {
+    "status": "diagnostic_notaccepted",
+    "source_SHA": "0061b74e9ba3c3ecac8297ed0d4970557e2c61cf",
+    "report_sha256": "be7f77856027ad3491f6817ad58a053c6763b864295956dd94df5e7fd72da3cc",
+    "native_profile_unchanged": true,
+    "thresholds_unchanged": true,
+    "optimizer_steps": 0,
+    "decode_executed": false,
+    "comparisons": [
+      {
+        "atol": 0.0078125,
+        "max_abs_error": 0.0,
+        "max_reference_abs": 5.25,
+        "name": "original_B1_replay/branch0",
+        "passed": true,
+        "rms_error": 0.0,
+        "rtol": 0.0078125,
+        "shape": [
+          1,
+          16,
+          21,
+          60,
+          104
+        ],
+        "tolerance": "bf16"
+      },
+      {
+        "atol": 0.0078125,
+        "max_abs_error": 0.0,
+        "max_reference_abs": 5.34375,
+        "name": "original_B1_replay/branch1",
+        "passed": true,
+        "rms_error": 0.0,
+        "rtol": 0.0078125,
+        "shape": [
+          1,
+          16,
+          21,
+          60,
+          104
+        ],
+        "tolerance": "bf16"
+      },
+      {
+        "atol": 0.0078125,
+        "max_abs_error": 0.0,
+        "max_reference_abs": 5.1875,
+        "name": "original_B1_replay/branch2",
+        "passed": true,
+        "rms_error": 0.0,
+        "rtol": 0.0078125,
+        "shape": [
+          1,
+          16,
+          21,
+          60,
+          104
+        ],
+        "tolerance": "bf16"
+      },
+      {
+        "atol": 0.0078125,
+        "max_abs_error": 0.0,
+        "max_reference_abs": 5.3125,
+        "name": "original_B1_replay/branch3",
+        "passed": true,
+        "rms_error": 0.0,
+        "rtol": 0.0078125,
+        "shape": [
+          1,
+          16,
+          21,
+          60,
+          104
+        ],
+        "tolerance": "bf16"
+      },
+      {
+        "atol": 0.0078125,
+        "max_abs_error": 0.10595703125,
+        "max_reference_abs": 5.34375,
+        "name": "prePEFT_B4/branches",
+        "passed": false,
+        "rms_error": 0.0024785222113126197,
+        "rtol": 0.0078125,
+        "shape": [
+          4,
+          16,
+          21,
+          60,
+          104
+        ],
+        "tolerance": "bf16"
+      },
+      {
+        "atol": 0.0078125,
+        "max_abs_error": 0.0,
+        "max_reference_abs": 5.34375,
+        "name": "postPEFT_B4/branches_vs_prePEFT",
+        "passed": true,
+        "rms_error": 0.0,
+        "rtol": 0.0078125,
+        "shape": [
+          4,
+          16,
+          21,
+          60,
+          104
+        ],
+        "tolerance": "bf16"
+      },
+      {
+        "atol": 0.0078125,
+        "max_abs_error": 0.0,
+        "max_reference_abs": 5.34375,
+        "name": "adapter_B4/branches_vs_postPEFT",
+        "passed": true,
+        "rms_error": 0.0,
+        "rtol": 0.0078125,
+        "shape": [
+          4,
+          16,
+          21,
+          60,
+          104
+        ],
+        "tolerance": "bf16"
+      },
+      {
+        "atol": 0.0078125,
+        "max_abs_error": 0.10595703125,
+        "max_reference_abs": 5.34375,
+        "name": "adapter_B4/branches_vs_reference",
+        "passed": false,
+        "rms_error": 0.0024785222113126197,
+        "rtol": 0.0078125,
+        "shape": [
+          4,
+          16,
+          21,
+          60,
+          104
+        ],
+        "tolerance": "bf16"
+      },
+      {
+        "atol": 0.0078125,
+        "max_abs_error": 0.880859375,
+        "max_reference_abs": 7.5625,
+        "name": "adapter_B4/guided_vs_reference",
+        "passed": false,
+        "rms_error": 0.019481115794553937,
+        "rtol": 0.0078125,
+        "shape": [
+          2,
+          16,
+          21,
+          60,
+          104
+        ],
+        "tolerance": "bf16"
+      },
+      {
+        "atol": 0.0078125,
+        "max_abs_error": 0.0,
+        "max_reference_abs": 7.5625,
+        "name": "zero_lora/disabled",
+        "passed": true,
+        "rms_error": 0.0,
+        "rtol": 0.0078125,
+        "shape": [
+          2,
+          16,
+          21,
+          60,
+          104
+        ],
+        "tolerance": "bf16"
+      }
+    ],
+    "reference_physical_batch": 1,
+    "candidate_cfg_branches": 4,
+    "interpretation": "Difference exists in native prePEFT B4 versus original B1; same-B1 replay exact, nativeB4/postPEFT/adapterB4 exact. Specific internal kernel cause is not established. Full pretrained parity gate remains failed."
+  }
 }
