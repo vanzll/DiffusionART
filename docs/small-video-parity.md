@@ -34,8 +34,12 @@ official pipeline call and native sampler unchanged.
 The official unwrapped base completes its entire reference run **before** the
 candidate is changed. LoRA then uses the shared`prepare_policy` with rank32,
 alpha32, dropout0, Gaussian A and verified zero B. Full mode makes every
-original transformer parameter trainable FP32. Candidate forwards use BF16
-autocast for LoRA/full under`no_grad`; no optimizer is constructed or called.
+original transformer parameter trainable FP32. Native BF16 forwards disable
+outer global autocast, matching the official`mixed_precision=False` reference.
+Only existing LoRA A/B Linear GEMMs enable BF16 autocast; their trainable
+master weights remain FP32. The permanent branch wrappers preserve PEFT
+module types, parameter names and checkpoint identity and run again during
+activation-checkpoint recomputation. No optimizer is constructed or called.
 T5 and VAE must remain frozen and in evaluation mode throughout.
 
 The report records actual trainable/frozen dtype/count inventories and all
@@ -44,9 +48,15 @@ so each suffix`to_q`,`to_k`,`to_v`,`to_out.0` must match56 projections,224 total
 LoRA additionally checks eight batch2 disabled-adapter forwards against the
 captured official base and compares zero-enabled output to disabled output
 exactly. Full mode checks that every original parameter is trainable FP32.
-FP32 full-mode inputs are compared after their effective BF16 autocast at the
-first projection; their raw input dtypes are also recorded. Tolerances below
-are unchanged across all three candidate modes.
+Single-device full parity uses explicitly reported BF16 parameter/buffer views
+of the FP32 masters through`torch.func.functional_call` on the actual native
+transformer. This helper rejects gradients, train mode, checkpointing and
+DDP/FSDP wrappers. It restores original master identities even after an
+exception. It is an inference-only simulation of compute precision, never a
+production training fallback or full-backward/distributed acceptance claim.
+The production full path requires its separately validated BF16-compute FSDP
+contract. Actual packed inputs are explicitly BF16; coordinate/time kwargs
+remain FP32. Tolerances below are unchanged across all three candidate modes.
 
 Observation wrappers capture the actual initial latents and post-initial global
 RNG, transformer inputs/kwargs/velocity, native scheduler state/x0/noise/mean/
@@ -82,6 +92,17 @@ Two primary-code pitfalls are checked explicitly:
   generator, then unpacked. Transitions use global`randn_like(packed_state)`;
   decode uses global`randn_like(unpacked_endpoint)`. Strides determine the
   assignment of random values, so equal shapes/seeds alone are insufficient.
+
+The first real LoRA run exposed an additional implementation discrepancy:
+candidate global autocast was enabled while the unwrapped official reference
+used`mixed_precision=False`. Disabled LoRA and zero-enabled LoRA matched each
+other exactly but already differed from the official first velocity, before
+trajectory divergence. This identifies a precision-contract mismatch; it does
+not establish which individual internal operator first diverged. The corrected
+tool records actual input dtype/stride/autocast and metadata-only hooks at
+native normalization/projection and representative A/B boundaries for the next
+real comparison. The original failed report remains evidence; no GPU pass is
+claimed for the correction before a new report exists.
 
 ## Commands
 
@@ -132,7 +153,11 @@ it is not a claim of bitwise model equality. All outputs must be finite.
 
 `report.json` records the result, asset/source identity, seeds, profile,
 actual physical batch counts, layout, memory, concrete parameter/target
-inventories and per-step errors. Default output contains this report and four
+inventories and per-step errors. The`forward_precision` and`precision_boundaries`
+sections record actual call
+dtypes/strides/autocast plus boundary outputs and stored parameter dtypes,
+including FP32 LoRA masters with BF16 branch results. Default output contains
+the report and four
 matched MP4s. Optional`--save-tensors` writes`trace.pt` with the actual observed
 native trajectory, all innovations, RNG states, teacher-forced and disabled
 predictions and candidate cache. Four matched MP4 files contain
@@ -148,5 +173,8 @@ mapping, signature checks and the no-GPU default gate with small fixtures.
 They also exercise real PEFT zero/disabled parity, exact target coverage and
 full FP32 parameter/frozen-service contracts on small CPU modules when PEFT is
 available.
+Targeted tests also cover outer-autocast isolation, actual BF16 A/B results,
+FP32 master gradients, checkpoint recomputation, strict save/load and copied
+method identity, and the restricted full-view helper with master restoration.
 They are explicitly **not** pretrained parity evidence. No real GPU execution
 is claimed by this document until a corresponding report and artifacts exist.

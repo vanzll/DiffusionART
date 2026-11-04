@@ -85,6 +85,39 @@ def test_real_batch_variable_length_text_masks_positions_and_sigma():
     assert c.select([1]).attention_mask.shape == (1, 2)
 
 
+def test_bf16_native_forward_overrides_outer_amp_and_explicitly_casts_cached_states():
+    model = adapter()
+    model.transformer.bfloat16()
+    observed = []
+    hook = model.transformer.register_forward_pre_hook(
+        lambda module, args, kwargs: observed.append(
+            (
+                torch.is_autocast_enabled("cpu"),
+                args[0].dtype,
+                args[0].stride(),
+                kwargs["encoder_hidden_states"].dtype,
+                kwargs["timestep"].dtype,
+            )
+        ),
+        with_kwargs=True,
+    )
+    # Collector states are FP32; native packed inputs remain explicitly BF16.
+    packed = torch.arange(16.0).reshape(2, 4, 2)
+    latents = packed.reshape(2, 1, 2, 2, 2).permute(0, 4, 1, 2, 3)
+    c = LTXVideoConditioning(torch.ones(2, 2, 3).bfloat16(), torch.ones(2, 2))
+    expected = model.predict_velocity(latents, 0.725, c)
+    with torch.autocast("cpu", dtype=torch.bfloat16):
+        assert torch.is_autocast_enabled("cpu")
+        actual = model.predict_velocity(latents, 0.725, c)
+        assert torch.is_autocast_enabled("cpu")
+    hook.remove()
+    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+    assert len(observed) == 2 and observed[0] == observed[1]
+    enabled, dtype, stride, text_dtype, time_dtype = observed[1]
+    assert not enabled and dtype == text_dtype == torch.bfloat16
+    assert time_dtype == torch.float32 and stride == (8, 2, 1)
+
+
 def test_valid_five_second_native_grid_and_causal_compression():
     assert ltx_video_latent_shape(2) == (2, 128, 20, 22, 38)
     assert 153 / 30 == 5.1

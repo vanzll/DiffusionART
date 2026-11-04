@@ -110,3 +110,18 @@ resident allocation are recorded separately. Available NVML figures are actual
 total-device snapshots after loading/scoring; they are not sampled peak usage.
 The parent Torch allocator alone does not measure scorer-process memory, and
 these metrics do not establish an8×80GB hardware result.
+
+
+For a fresh **inference export** load, `visual_rl.small_video_export.verify_final`
+checks the complete inventory and identity; `load_final_into_adapter(config,
+final_directory, prepared_adapter)` loads only policy weights into the matching
+fresh native base/LoRA structure. It restores no Adam, RNG or training counter.
+Use the full resumable checkpoint interface above for training continuation.
+For LTX full inference on a single device, cast the freshly loaded transformer
+to BF16 and use its explicit native BF16 forward contract. This inference-only
+cast is not the full training path: full training uses the LTX-specific FSDP
+BF16 compute parameters, FP32 optimizer masters/reduction, and FP32 times and
+position coordinates. LoRA keeps FP32 adapter masters and scopes BF16 autocast
+only to its A/B GEMMs; do not cast all its trainable parameters to BF16.
+Wan retains its separate native FP32-parameter/BF16-autocast time/rotary path.
+These precision contracts are included in the resolved protocol and its hash.

@@ -23,6 +23,7 @@ from .models.finetune import FineTuneConfig, parameter_inventory, prepare_policy
 from .models.ltx_video import (
     LTX_VIDEO_LORA_TARGETS,
     encode_ltx_video_prompts,
+    install_ltx_video_lora_precision,
     load_ltx_video_components,
     ltx_video_latent_shape,
     read_ltx_video_checkpoint_config,
@@ -102,6 +103,8 @@ def prepare_parity_candidate(
             )
         )
         model = prepare_policy(model, options)
+        if finetune == "lora":
+            install_ltx_video_lora_precision(model)
         adapter.transformer = model
     model.eval()
     trainable = {name: p for name, p in model.named_parameters() if p.requires_grad}
@@ -155,6 +158,7 @@ def prepare_parity_candidate(
             "zero_B_verified": True,
             "adapter_layers": len(layers),
             "B_parameter_names": list(b_parameters),
+            "A_B_gemm_precision": "bf16_autocast_only_inside_existing_linear_branches",
         }
     if any(
         p.requires_grad or p.grad is not None
@@ -177,8 +181,74 @@ def prepare_parity_candidate(
         "vae_eval": not adapter.vae.training,
         "text_encoder_eval": not encoder.training,
         "optimizer_calls": 0,
-        "candidate_autocast": "bf16" if finetune != "base" else "native_bf16",
+        "candidate_autocast": "disabled_native_bf16",
+        "full_forward": (
+            "parity_only_no_grad_bf16_parameter_views" if finetune == "full" else None
+        ),
+        "full_backward_validated": False,
+        "distributed_validated": False,
     }
+
+
+def predict_full_bf16_views(adapter, state, sigma, conditioning):
+    """Parity-only simulation of BF16 compute parameters with FP32 masters.
+
+    Never a production training fallback. Actual full backward/sharding and
+    checkpoint recomputation require the separately validated FSDP path.
+    """
+    native = adapter.transformer
+    if (
+        torch.is_grad_enabled()
+        or adapter.training
+        or native.training
+        or adapter.native_forward_dtype != torch.bfloat16
+        or any(
+            getattr(module, "gradient_checkpointing", False)
+            or type(module).__module__.startswith(("torch.distributed.fsdp", "torch.nn.parallel"))
+            for module in native.modules()
+        )
+    ):
+        raise ValueError(
+            "BF16 parameter views are parity-only: eval/no_grad/no checkpoint/DDP/FSDP"
+        )
+    parameters = dict(native.named_parameters())
+    buffers = dict(native.named_buffers())
+    if not parameters or any(
+        p.dtype != torch.float32 or p.grad is not None for p in parameters.values()
+    ):
+        raise ValueError("full parity requires untouched FP32 master parameters with no gradients")
+    before = {
+        name: (id(value), value.data_ptr(), value.dtype)
+        for name, value in {**parameters, **buffers}.items()
+    }
+    views = {
+        name: value.to(torch.bfloat16) if value.is_floating_point() else value
+        for name, value in {**parameters, **buffers}.items()
+    }
+
+    class ComputeProxy(torch.nn.Module):
+        def forward(self, *args, **kwargs):
+            # The real transformer Module owns the observed official boundaries.
+            return torch.func.functional_call(native, views, args, kwargs, strict=True)
+
+    # A proxy changes only this single-threaded no-grad call. No hooks or views
+    # survive it, and real transformer master identities must be restored even
+    # when a native forward raises. A/B precision wrappers are not used in full.
+    proxy = ComputeProxy().eval()
+    adapter.transformer = proxy
+    try:
+        return adapter.predict_velocity(state, sigma, conditioning)
+    finally:
+        adapter.transformer = native
+        after = {
+            name: (id(value), value.data_ptr(), value.dtype)
+            for name, value in {
+                **dict(native.named_parameters()),
+                **dict(native.named_buffers()),
+            }.items()
+        }
+        if after != before:
+            raise ValueError("parity BF16 views did not restore FP32 master identities")
 
 
 def _cpu(value):
@@ -189,6 +259,83 @@ def _cpu(value):
     if isinstance(value, (tuple, list)):
         return type(value)(_cpu(item) for item in value)
     return value
+
+
+def tensor_metadata(value):
+    """Observe actual call precision/layout without copying large activations."""
+    if isinstance(value, torch.Tensor):
+        return {
+            "shape": list(value.shape),
+            "stride": list(value.stride()),
+            "dtype": str(value.dtype),
+            "device_type": value.device.type,
+        }
+    if isinstance(value, dict):
+        return {key: tensor_metadata(item) for key, item in value.items()}
+    if isinstance(value, (tuple, list)):
+        return [tensor_metadata(item) for item in value]
+    return value
+
+
+def forward_precision(args, kwargs):
+    device = args[0].device.type
+    return {
+        "autocast_enabled": torch.is_autocast_enabled(device),
+        "autocast_dtype": str(torch.get_autocast_dtype(device)),
+        "args": tensor_metadata(args),
+        "kwargs": tensor_metadata(kwargs),
+    }
+
+
+@contextlib.contextmanager
+def observe_precision_boundaries(transformer):
+    """Metadata-only hooks on native normalization/projection boundaries."""
+    native = transformer.get_base_model() if hasattr(transformer, "get_base_model") else transformer
+    names = {
+        "adaln_single",
+        "caption_projection",
+        "norm_out",
+        "proj_out",
+        "transformer_blocks.0.norm1",
+        "transformer_blocks.0.norm2",
+    }
+    names.update(
+        f"transformer_blocks.0.attn1.{name}"
+        for name in (
+            "to_q",
+            "q_norm",
+            "to_k",
+            "k_norm",
+            "to_v",
+            "to_out.0",
+            "to_q.lora_A.default",
+            "to_q.lora_B.default",
+        )
+    )
+    records, handles = [], []
+    for name, module in native.named_modules():
+        if name not in names:
+            continue
+
+        def observed(module, args, kwargs, result, name=name):
+            records.append(
+                {
+                    "module": name,
+                    **forward_precision(args, kwargs),
+                    "output": tensor_metadata(result),
+                    "parameter_dtypes": {
+                        key: str(value.dtype)
+                        for key, value in module.named_parameters(recurse=False)
+                    },
+                }
+            )
+
+        handles.append(module.register_forward_hook(observed, with_kwargs=True))
+    try:
+        yield records
+    finally:
+        for handle in handles:
+            handle.remove()
 
 
 def _rng(device):
@@ -255,6 +402,7 @@ class OfficialLTXTrace:
     decoded: torch.Tensor | None = None
     decode_kwargs: dict | None = None
     scheduler_timesteps: torch.Tensor | None = None
+    precision_boundaries: list = field(default_factory=list)
 
 
 @contextlib.contextmanager
@@ -286,7 +434,13 @@ def observe_official_ltx(pipe, pipeline_module, *, device):
     def before_transformer(module, args, kwargs):
         if len(args) != 1:
             raise ValueError("unsupported official transformer calling convention")
-        trace.forwards.append({"hidden_states": _cpu(args[0]), "kwargs": _cpu(kwargs)})
+        trace.forwards.append(
+            {
+                "hidden_states": _cpu(args[0]),
+                "kwargs": _cpu(kwargs),
+                "precision": forward_precision(args, kwargs),
+            }
+        )
 
     def after_transformer(module, args, kwargs, result):
         trace.forwards[-1]["velocity"] = _cpu(result[0])
@@ -347,6 +501,9 @@ def observe_official_ltx(pipe, pipeline_module, *, device):
         )
 
     with contextlib.ExitStack() as stack:
+        trace.precision_boundaries = stack.enter_context(
+            observe_precision_boundaries(pipe.transformer)
+        )
         for obj, name, value in (
             (pipe, "prepare_latents", prepare_observed),
             (pipe, "encode_prompt", encode_observed),
@@ -633,8 +790,9 @@ def run_ltx_parity(
         transformer = adapter.transformer
 
         def candidate_prediction(state, sigma, conditioning):
-            with torch.autocast(target.type, dtype=torch.bfloat16, enabled=finetune != "base"):
-                return adapter.predict_velocity(state, sigma, conditioning)
+            if finetune == "full":
+                return predict_full_bf16_views(adapter, state, sigma, conditioning)
+            return adapter.predict_velocity(state, sigma, conditioning)
 
         metrics = [
             compare_tensor(
@@ -657,18 +815,24 @@ def run_ltx_parity(
                 compare_tensor("text_mask", trace.text[1], c.attention_mask, tolerance="exact"),
             )
         )
-        disabled_predictions, disabled_batches = [], []
+        disabled_predictions, disabled_batches, disabled_precision = [], [], []
         if finetune == "lora":
             print(
                 "Checking disabled LoRA against the already-captured official base",
                 file=sys.stderr,
                 flush=True,
             )
-            disabled_hook = transformer.register_forward_pre_hook(
-                lambda module, args: disabled_batches.append(len(args[0]))
-            )
+
+            def disabled_pre(module, args, kwargs):
+                disabled_batches.append(len(args[0]))
+                disabled_precision.append(forward_precision(args, kwargs))
+
+            disabled_hook = transformer.register_forward_pre_hook(disabled_pre, with_kwargs=True)
             try:
-                with transformer.disable_adapter():
+                with (
+                    transformer.disable_adapter(),
+                    observe_precision_boundaries(transformer) as disabled_boundaries,
+                ):
                     for index, item in enumerate(trace.steps):
                         prediction = candidate_prediction(
                             unpack_ltx_latents(item["state"], shape).to(target),
@@ -691,61 +855,80 @@ def run_ltx_parity(
         frozen_predictions, adapter_forwards = [], []
 
         def adapter_pre(module, args, kwargs):
-            adapter_forwards.append({"hidden_states": _cpu(args[0]), "kwargs": _cpu(kwargs)})
+            adapter_forwards.append(
+                {
+                    "hidden_states": _cpu(args[0]),
+                    "kwargs": _cpu(kwargs),
+                    "precision": forward_precision(args, kwargs),
+                }
+            )
 
         observer = transformer.register_forward_pre_hook(adapter_pre, with_kwargs=True)
         try:
-            for index, item in enumerate(trace.steps):
-                state = unpack_ltx_latents(item["state"], shape).to(target)
-                sigma = item["sigma"].flatten()[0].to(target).expand(2)
-                prediction = candidate_prediction(state, sigma, c)
-                frozen_predictions.append(_cpu(prediction))
-                metrics.append(
-                    compare_tensor(
-                        f"teacher_forced/{index}/velocity",
-                        unpack_ltx_latents(item["velocity"], shape),
-                        prediction,
-                        tolerance="bf16",
-                    )
-                )
-                if finetune == "lora":
+            with observe_precision_boundaries(transformer) as candidate_boundaries:
+                for index, item in enumerate(trace.steps):
+                    state = unpack_ltx_latents(item["state"], shape).to(target)
+                    sigma = item["sigma"].flatten()[0].to(target).expand(2)
+                    prediction = candidate_prediction(state, sigma, c)
+                    frozen_predictions.append(_cpu(prediction))
                     metrics.append(
                         compare_tensor(
-                            f"lora_zero_enabled/{index}/disabled",
-                            disabled_predictions[index],
+                            f"teacher_forced/{index}/velocity",
+                            unpack_ltx_latents(item["velocity"], shape),
                             prediction,
-                            tolerance="exact",
+                            tolerance="bf16",
                         )
                     )
-                forwarded, candidate = trace.forwards[index], adapter_forwards[index]
-                # Full FP32 parameters accept FP32 latents, while autocast casts
-                # inputs at the first projection. Compare effective BF16 values
-                # exactly; report the raw call dtype separately below.
-                metrics.append(
-                    compare_tensor(
-                        f"teacher_forced/{index}/effective_bf16_model_input",
-                        forwarded["hidden_states"],
-                        candidate["hidden_states"].to(torch.bfloat16),
-                        tolerance="exact",
-                    )
-                )
-                for key in (
-                    "indices_grid",
-                    "encoder_hidden_states",
-                    "encoder_attention_mask",
-                    "timestep",
-                ):
+                    if finetune == "lora":
+                        metrics.append(
+                            compare_tensor(
+                                f"lora_zero_enabled/{index}/disabled",
+                                disabled_predictions[index],
+                                prediction,
+                                tolerance="exact",
+                            )
+                        )
+                    forwarded, candidate = trace.forwards[index], adapter_forwards[index]
+                    # Full parity explicitly supplies BF16 compute views;
+                    # record raw dtype/layout separately, including inner norms.
+                    if (
+                        candidate["hidden_states"].dtype != forwarded["hidden_states"].dtype
+                        or candidate["precision"]["args"][0]["stride"]
+                        != forwarded["precision"]["args"][0]["stride"]
+                    ):
+                        raise ValueError("candidate actual packed model input dtype/stride differs")
                     metrics.append(
                         compare_tensor(
-                            f"teacher_forced/{index}/{key}",
-                            forwarded["kwargs"][key],
-                            candidate["kwargs"][key],
+                            f"teacher_forced/{index}/effective_bf16_model_input",
+                            forwarded["hidden_states"],
+                            candidate["hidden_states"],
                             tolerance="exact",
                         )
                     )
+                    for key in (
+                        "indices_grid",
+                        "encoder_hidden_states",
+                        "encoder_attention_mask",
+                        "timestep",
+                    ):
+                        if candidate["kwargs"][key].dtype != forwarded["kwargs"][key].dtype:
+                            raise ValueError(f"candidate actual {key} dtype differs from official")
+                        metrics.append(
+                            compare_tensor(
+                                f"teacher_forced/{index}/{key}",
+                                forwarded["kwargs"][key],
+                                candidate["kwargs"][key],
+                                tolerance="exact",
+                            )
+                        )
         finally:
             observer.remove()
-        rollout_layouts, rollout_forward_batches = [], []
+        (
+            rollout_layouts,
+            rollout_forward_batches,
+            rollout_state_precision,
+            rollout_forward_precision,
+        ) = [], [], [], []
 
         def predict(state, sigma, rows, index):
             print(
@@ -754,11 +937,14 @@ def run_ltx_parity(
                 flush=True,
             )
             rollout_layouts.append(list(pack_ltx_latents(state).stride()))
+            rollout_state_precision.append(tensor_metadata(state))
             return candidate_prediction(state, sigma, c.select(rows))
 
-        rollout_hook = transformer.register_forward_pre_hook(
-            lambda module, args: rollout_forward_batches.append(len(args[0]))
-        )
+        def rollout_pre(module, args, kwargs):
+            rollout_forward_batches.append(len(args[0]))
+            rollout_forward_precision.append(forward_precision(args, kwargs))
+
+        rollout_hook = transformer.register_forward_pre_hook(rollout_pre, with_kwargs=True)
         try:
             with torch.random.fork_rng(devices=_fork_devices(target)):
                 _set_rng(trace.rng_after_initial, target)
@@ -862,6 +1048,18 @@ def run_ltx_parity(
             str(item["hidden_states"].dtype) for item in adapter_forwards
         ]
         report["lora_disabled_physical_batches"] = disabled_batches
+        report["forward_precision"] = {
+            "reference": [item["precision"] for item in trace.forwards],
+            "candidate_teacher_forced": [item["precision"] for item in adapter_forwards],
+            "lora_disabled": disabled_precision,
+            "candidate_rollout": rollout_forward_precision,
+            "collector_states": rollout_state_precision,
+        }
+        report["precision_boundaries"] = {
+            "reference": trace.precision_boundaries,
+            "candidate_teacher_forced": candidate_boundaries,
+            "lora_disabled": disabled_boundaries if finetune == "lora" else [],
+        }
         if report["adapter_teacher_forced_physical_batches"] != [2] * 8:
             raise ValueError("adapter did not execute one physical batch2 call per transition")
         report["decode_stride"] = decode_draws[0]["stride"]

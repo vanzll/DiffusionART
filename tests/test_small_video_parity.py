@@ -1,5 +1,7 @@
 """Observation/comparison contract tests only; these are NOT model parity evidence."""
 
+import copy
+import io
 from types import SimpleNamespace
 
 import pytest
@@ -7,6 +9,7 @@ import torch
 from torch import nn
 
 from visual_rl import small_video_parity as parity
+from visual_rl.models.ltx_video import LTXVideoAdapter, LTXVideoConditioning, LTXVideoConfig
 from visual_rl.training.small_video_replay import collect_native_video
 
 
@@ -206,7 +209,7 @@ class ProjectionPolicy(nn.Module):
         super().__init__()
         self.attn1, self.attn2 = ProjectionAttention(), ProjectionAttention()
 
-    def forward(self, value):
+    def forward(self, value, **kwargs):
         return self.attn2(self.attn1(value))
 
 
@@ -241,7 +244,9 @@ def test_full_candidate_has_all_original_fp32_parameters_and_frozen_services():
     assert report["attention_target_counts"] == dict.fromkeys(
         ("to_q", "to_k", "to_v", "to_out.0"), 2
     )
-    assert report["optimizer_calls"] == 0 and report["candidate_autocast"] == "bf16"
+    assert report["optimizer_calls"] == 0 and report["candidate_autocast"] == "disabled_native_bf16"
+    assert report["full_forward"] == "parity_only_no_grad_bf16_parameter_views"
+    assert not report["full_backward_validated"] and not report["distributed_validated"]
     assert not report["vae"]["trainable"] and not report["text_encoder"]["trainable"]
     assert all(
         p.dtype == torch.float32 and p.requires_grad and p.grad is None
@@ -271,6 +276,214 @@ def test_real_lora_zero_enabled_disable_base_parity_and_exact_attention_coverage
     assert all(parameter.grad is None for parameter in adapter.transformer.parameters())
     assert all(
         not p.requires_grad for module in (adapter.vae, encoder) for p in module.parameters()
+    )
+
+
+def test_ltx_lora_bf16_gemms_fp32_gradients_checkpoint_recompute_and_fresh_load():
+    pytest.importorskip("peft")
+    from torch.utils.checkpoint import checkpoint
+
+    class NativeProjectionPolicy(ProjectionPolicy):
+        def forward(self, value, **kwargs):
+            return (super().forward(value),)
+
+    def fresh():
+        standin, encoder = candidate_fixture()
+        standin.transformer = NativeProjectionPolicy().bfloat16().requires_grad_(False).eval()
+        actual = LTXVideoAdapter(
+            standin.transformer,
+            standin.vae,
+            LTXVideoConfig(latent_channels=4, caption_channels=4, per_channel_normalize=False),
+            native_forward_dtype=torch.bfloat16,
+        )
+        parity.prepare_parity_candidate(
+            actual, encoder, "lora", reference_captured=True, expected_attention_layers=1
+        )
+        return actual
+
+    # ProjectionPolicy is an interface fixture, not official-model parity proof.
+    model = fresh()
+    params = dict(model.transformer.named_parameters())
+    keys = set(model.transformer.state_dict())
+    for name, parameter in params.items():
+        if ".lora_B." in name:
+            parameter.data.fill_(0.125)
+    branches = [
+        m for m in model.transformer.modules() if getattr(m, "_ltx_video_bf16_lora_gemm", False)
+    ]
+    assert len(branches) == 16
+    observations, native_amp = [], []
+    hooks = [
+        branch.register_forward_hook(
+            lambda module, args, result: observations.append(
+                (args[0].dtype, module.weight.dtype, result.dtype)
+            )
+        )
+        for branch in branches
+    ]
+    hooks.append(
+        model.transformer.register_forward_pre_hook(
+            lambda module, args: native_amp.append(torch.is_autocast_enabled("cpu"))
+        )
+    )
+    latent = torch.arange(32.0).reshape(2, 4, 1, 2, 2) / 17
+    c = LTXVideoConditioning(torch.ones(2, 2, 4).bfloat16(), torch.ones(2, 2))
+    with torch.autocast("cpu", dtype=torch.bfloat16):
+        regular = model.predict_velocity(latent, 0.725, c)
+        assert torch.is_autocast_enabled("cpu")
+    regular.float().square().sum().backward()
+    grads = {
+        name: parameter.grad.clone()
+        for name, parameter in params.items()
+        if parameter.requires_grad
+    }
+    assert not any(native_amp) and observations
+    assert all(
+        weight == torch.float32 and result == torch.bfloat16 for _, weight, result in observations
+    )
+    assert any(dtype == torch.float32 for dtype, _, _ in observations)
+    assert all(
+        parameter.dtype == torch.float32
+        and parameter.grad is not None
+        and parameter.grad.dtype == torch.float32
+        and torch.isfinite(parameter.grad).all()
+        for parameter in params.values()
+        if parameter.requires_grad
+    )
+    for suffix in (".lora_A.", ".lora_B."):
+        assert any(torch.count_nonzero(grad) for name, grad in grads.items() if suffix in name)
+    model.zero_grad(set_to_none=True)
+    count = len(observations)
+    recomputed = checkpoint(
+        lambda x: model.predict_velocity(x, 0.725, c), latent, use_reentrant=False
+    )
+    recomputed.float().square().sum().backward()
+    assert len(observations) > count + len(branches)  # actual A/B recomputation occurred
+    torch.testing.assert_close(recomputed, regular, rtol=0, atol=0)
+    for name, parameter in params.items():
+        if parameter.requires_grad:
+            torch.testing.assert_close(parameter.grad, grads[name], rtol=0, atol=0)
+    for hook in hooks:
+        hook.remove()
+    # No temporary per-call monkeypatch; copied methods bind copied modules.
+    duplicate = copy.deepcopy(model)
+    for branch in duplicate.transformer.modules():
+        if getattr(branch, "_ltx_video_bf16_lora_gemm", False):
+            assert branch.forward.__self__ is branch
+    torch.testing.assert_close(
+        duplicate.predict_velocity(latent, 0.725, c), regular, rtol=0, atol=0
+    )
+    buffer = io.BytesIO()
+    torch.save(model.transformer.state_dict(), buffer)
+    buffer.seek(0)
+    restored = fresh()
+    restored.transformer.load_state_dict(torch.load(buffer, weights_only=True), strict=True)
+    assert set(restored.transformer.state_dict()) == keys
+    assert not any("_ltx_video" in key for key in keys)
+    torch.testing.assert_close(restored.predict_velocity(latent, 0.725, c), regular, rtol=0, atol=0)
+    assert not torch.is_autocast_enabled("cpu")
+    with pytest.raises(RuntimeError):
+        branches[0](torch.ones(2, 5))
+    assert not torch.is_autocast_enabled("cpu")
+    assert all(parameter.grad is None for parameter in model.vae.parameters())
+
+
+def test_precision_metadata_hooks_observe_actual_dtype_layout_amp_and_restore():
+    class Boundaries(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.norm_out = nn.LayerNorm(4).bfloat16()
+            self.proj_out = nn.Linear(4, 4).bfloat16()
+
+        def forward(self, value):
+            return self.proj_out(self.norm_out(value))
+
+    model = Boundaries()
+    x = torch.arange(8.0).reshape(4, 2).t().bfloat16()
+    with torch.autocast("cpu", dtype=torch.bfloat16):
+        expected = model(x)
+        with parity.observe_precision_boundaries(model) as records:
+            actual = model(x)
+    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+    assert [item["module"] for item in records] == ["norm_out", "proj_out"]
+    assert records[0]["args"][0]["stride"] == list(x.stride())
+    assert records[0]["args"][0]["dtype"] == "torch.bfloat16"
+    assert all(item["autocast_enabled"] for item in records)
+    assert not model.norm_out._forward_hooks and not model.proj_out._forward_hooks
+    with pytest.raises(RuntimeError, match="injected"):
+        with parity.observe_precision_boundaries(model):
+            raise RuntimeError("injected")
+    assert not model.norm_out._forward_hooks and not model.proj_out._forward_hooks
+
+
+def test_full_bf16_views_are_no_grad_parity_only_and_restore_master_identity():
+    class NativeProjectionPolicy(ProjectionPolicy):
+        def forward(self, value, **kwargs):
+            if getattr(self, "fail_forward", False):
+                raise RuntimeError("injected native failure")
+            return (super().forward(value),)
+
+    standin, encoder = candidate_fixture()
+    model = LTXVideoAdapter(
+        NativeProjectionPolicy().bfloat16(),
+        standin.vae,
+        LTXVideoConfig(latent_channels=4, caption_channels=4, per_channel_normalize=False),
+        native_forward_dtype=torch.bfloat16,
+    ).eval()
+    latent = torch.arange(32.0).reshape(2, 4, 1, 2, 2) / 17
+    c = LTXVideoConditioning(torch.ones(2, 2, 4).bfloat16(), torch.ones(2, 2))
+    with torch.no_grad():
+        expected = model.predict_velocity(latent, 0.725, c)
+    parity.prepare_parity_candidate(
+        model, encoder, "full", reference_captured=True, expected_attention_layers=1
+    )
+    original = model.transformer
+    masters = {
+        name: (parameter, parameter.clone()) for name, parameter in original.named_parameters()
+    }
+    with pytest.raises(ValueError, match="parity-only"):
+        parity.predict_full_bf16_views(model, latent, 0.725, c)
+    # FP32 masters cannot silently take the former global-AMP fallback.
+    with torch.no_grad(), pytest.raises(RuntimeError):
+        model.predict_velocity(latent, 0.725, c)
+    calls = []
+    hook = original.register_forward_pre_hook(
+        lambda module, args, kwargs: calls.append(
+            (
+                args[0].dtype,
+                kwargs["indices_grid"].dtype,
+                kwargs["timestep"].dtype,
+                torch.is_autocast_enabled("cpu"),
+                next(module.parameters()).dtype,
+            )
+        ),
+        with_kwargs=True,
+    )
+    with torch.no_grad(), torch.autocast("cpu", dtype=torch.bfloat16):
+        actual = parity.predict_full_bf16_views(model, latent, 0.725, c)
+    hook.remove()
+    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+    assert calls == [(torch.bfloat16, torch.float32, torch.float32, False, torch.bfloat16)]
+    assert model.transformer is original
+    for name, parameter in original.named_parameters():
+        old, values = masters[name]
+        assert parameter is old and parameter.dtype == torch.float32 and parameter.grad is None
+        torch.testing.assert_close(parameter, values, rtol=0, atol=0)
+    original.gradient_checkpointing = True
+    with torch.no_grad(), pytest.raises(ValueError, match="parity-only"):
+        parity.predict_full_bf16_views(model, latent, 0.725, c)
+    original.gradient_checkpointing = False
+    model.train()
+    with torch.no_grad(), pytest.raises(ValueError, match="parity-only"):
+        parity.predict_full_bf16_views(model, latent, 0.725, c)
+    model.eval()
+    original.fail_forward = True
+    with torch.no_grad(), pytest.raises(RuntimeError, match="injected native failure"):
+        parity.predict_full_bf16_views(model, latent, 0.725, c)
+    assert model.transformer is original
+    assert all(
+        parameter is masters[name][0] and parameter.dtype == torch.float32
+        for name, parameter in original.named_parameters()
     )
 
 

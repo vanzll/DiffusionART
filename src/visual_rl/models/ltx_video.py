@@ -8,8 +8,10 @@ separate. LTX-2, 2.5, 13B and later checkpoints are outside this ABI.
 import importlib
 import json
 import struct
+from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
+from types import MethodType
 
 import torch
 from torch import Tensor, nn
@@ -37,6 +39,46 @@ from .source_pin import import_pinned_source
 LTX_VIDEO_LORA_TARGETS = ("to_q", "to_k", "to_v", "to_out.0")
 LTX_VIDEO_TEXT_ENCODER_ID = "PixArt-alpha/PixArt-XL-2-1024-MS"
 LTX_VIDEO_TEXT_ENCODER_REVISION = "b89adadeccd9ead2adcb9fa2825d3fabec48d404"
+
+
+def _ltx_bf16_lora_linear_forward(module, value):
+    # Keep FP32 trainable masters and PEFT's module/state-dict identity. This
+    # permanent method also executes during activation-checkpoint recomputation.
+    with torch.autocast(device_type=value.device.type, dtype=torch.bfloat16):
+        return torch.nn.functional.linear(value, module.weight, module.bias)
+
+
+def install_ltx_video_lora_precision(transformer):
+    """Confine BF16 autocast to existing PEFT A/B GEMMs, never native norms."""
+    if getattr(transformer, "_ltx_video_lora_precision_installed", False):
+        return
+    branches = []
+    for module in transformer.modules():
+        if not hasattr(module, "lora_A") or not hasattr(module, "lora_B"):
+            continue
+        if (
+            not isinstance(module.lora_A, nn.ModuleDict)
+            or not isinstance(module.lora_B, nn.ModuleDict)
+            or set(module.lora_A) != set(module.lora_B)
+        ):
+            raise ValueError("native LTX requires matching linear PEFT A/B branches")
+        for name in module.lora_A:
+            for linear in (module.lora_A[name], module.lora_B[name]):
+                if not isinstance(linear, nn.Linear):
+                    raise ValueError("native LTX LoRA BF16 GEMMs require existing Linear branches")
+                if linear.weight.dtype != torch.float32:
+                    raise ValueError("native LTX LoRA trainable masters must remain FP32")
+                if "forward" in vars(linear) and not getattr(
+                    linear, "_ltx_video_bf16_lora_gemm", False
+                ):
+                    raise ValueError("refuse to replace an unknown LoRA Linear forward override")
+                branches.append(linear)
+    # Validate the entire set before mutating; failed validation installs none.
+    for linear in branches:
+        linear.forward = MethodType(_ltx_bf16_lora_linear_forward, linear)
+        linear._ltx_video_bf16_lora_gemm = True
+    if branches:
+        transformer._ltx_video_lora_precision_installed = True
 
 
 @dataclass(frozen=True)
@@ -126,7 +168,9 @@ def ltx_video_coordinates(shape, *, frame_rate=30.0, device=None, config=LTXVide
 
 
 class LTXVideoAdapter(VelocityAdapter):
-    def __init__(self, transformer, vae, config=LTXVideoConfig()):
+    def __init__(self, transformer, vae, config=LTXVideoConfig(), *, native_forward_dtype=None):
+        if native_forward_dtype not in (None, torch.bfloat16):
+            raise ValueError("native checkpoint forward precision must be explicit BF16")
         check_component_config(
             transformer,
             in_channels=config.latent_channels,
@@ -140,6 +184,9 @@ class LTXVideoAdapter(VelocityAdapter):
         )
         super().__init__(transformer, vae)
         self.config = config
+        # Explicit factory/FSDP contract; FP32 master parameters do not reveal
+        # the compute dtype supplied by a sharding wrapper during its forward.
+        self.native_forward_dtype = native_forward_dtype
         if config.per_channel_normalize:
             for name in ("mean_of_means", "std_of_means"):
                 stats = getattr(vae, name, None)
@@ -169,17 +216,29 @@ class LTXVideoAdapter(VelocityAdapter):
         coords = ltx_video_coordinates(
             latents.shape, frame_rate=c.frame_rate, device=latents.device, config=self.config
         )
-        dtype = module_dtype(self.transformer, latents.dtype)
+        dtype = self.native_forward_dtype or module_dtype(self.transformer, latents.dtype)
+        install_ltx_video_lora_precision(self.transformer)
+        # Official mixed_precision=False uses BF16 weights/inputs without a
+        # global autocast context. CUDA autocast can upcast normalization and
+        # change subsequent modulation rounding even when every input matches.
+        # Preserve that native policy for a BF16 backbone, including PEFT with
+        # FP32 adapter parameters. PEFT handles its own branch input casting.
+        precision = (
+            torch.autocast(device_type=latents.device.type, enabled=False)
+            if dtype == torch.bfloat16
+            else nullcontext()
+        )
         # One real physical batch call. Do not loop over prompts here.
-        tokens = self.transformer(
-            pack_ltx_latents(latents).to(dtype),
-            indices_grid=coords,
-            encoder_hidden_states=c.prompt_embeds.to(dtype),
-            encoder_attention_mask=mask,
-            timestep=t,
-            skip_layer_mask=None,
-            return_dict=False,
-        )[0]
+        with precision:
+            tokens = self.transformer(
+                pack_ltx_latents(latents).to(dtype),
+                indices_grid=coords,
+                encoder_hidden_states=c.prompt_embeds.to(dtype),
+                encoder_attention_mask=mask,
+                timestep=t,
+                skip_layer_mask=None,
+                return_dict=False,
+            )[0]
         output = unpack_ltx_latents(tokens, latents.shape)
         return checked_velocity(output, latents)
 
@@ -334,8 +393,9 @@ def load_ltx_video_components(
     """Explicit optional load, without prompt enhancers or scheduler substitution.
 
     Supply a clean native source checkout at the exact recorded code revision.
-    The caller places/fine-tunes the transformer and owns autocast, optimizer,
-    sharding and checkpoint identity. Remote T5 assets require their exact
+    The caller places/fine-tunes the transformer and owns optimizer, sharding
+    and checkpoint identity. Native forward explicitly requires BF16 compute
+    parameters/inputs without outer global autocast. Remote T5 assets require their exact
     pinned repository/revision; local assets require the caller's asset receipt.
     """
     read_ltx_video_checkpoint_config(checkpoint)
@@ -376,4 +436,6 @@ def load_ltx_video_components(
     ).to(device, torch.bfloat16)
     encoder.requires_grad_(False).eval()
     tokenizer = T5Tokenizer.from_pretrained(text_encoder_path, subfolder="tokenizer", **options)
-    return LTXVideoComponents(LTXVideoAdapter(transformer, vae), encoder, tokenizer)
+    return LTXVideoComponents(
+        LTXVideoAdapter(transformer, vae, native_forward_dtype=torch.bfloat16), encoder, tokenizer
+    )

@@ -247,6 +247,21 @@ def resolved_protocol(c):
             "grad_clip": c.training.grad_clip,
         },
         "finetune": c.model.options["finetune"],
+        "native_forward_precision": {
+            "backbone": "BF16",
+            "optimizer_masters": "FP32",
+            "global_autocast": c.model.name != "ltx_video_2b_distilled",
+            "lora_gemm": "BF16",
+            "full_fsdp_compute_parameters": "BF16"
+            if c.model.name == "ltx_video_2b_distilled"
+            else "FP32_with_native_BF16_autocast",
+            "full_fsdp_gradient_reduction": "FP32",
+            "physical_sigma": "FP32",
+            "time_condition": "INT64" if c.model.name == "wan_t2v_1_3b" else "FP32",
+            "position_encoding": "native_Wan_complex_rope"
+            if c.model.name == "wan_t2v_1_3b"
+            else "FP32_coordinates",
+        },
         "reward_weights": c.reward.weights,
         "reward_normalization": "independent_complete_K8_population_std_plus1e-4_then_equal_mean_once",
         "reward_revision": c.reward.revision,

@@ -13,7 +13,7 @@ Native Wan1.3B T2V and LTX2B0.9.6 adapters, full native trajectory/replay math,
 pinned assets/preflight, complete checkpoint counters/RNG, Original/Flash
 configurations and the bounded runner are implemented. CPU integrated batch:
 231passed,1FFmpeg/ffprobe skip; later parity/config/checkpoint batch113passed.
-Split consolidated checks after phased scorer integration:232 new tests and261 affected legacy tests passed (493 total, no skips). The initial combined run exposed fixture-registration and test-spy errors; both corrected, original failures retained privately. Four added single-node/eight-GPU topology guards also passed (498 public tests covered); the private fenced adapter passed17 fake CPU tests and shell syntax checks, with no operational action. Independent review completed once; CUDA DDP placement and custom receipt-binding findings were fixed. GPU validation remains pending.
+Split consolidated checks after phased scorer integration:232 new tests and261 affected legacy tests passed (493 total, no skips). The initial combined run exposed fixture-registration and test-spy errors; both corrected, original failures retained privately. Four added single-node/eight-GPU topology guards also passed (505 public tests covered); the private fenced adapter passed17 fake CPU tests and shell syntax checks, with no operational action. Independent review completed once; CUDA DDP placement and custom receipt-binding findings were fixed. GPU validation remains pending.
 
 Primary-code checks corrected LTX's rounded checkpoint allowlist into the
 actual LinearQuadratic physical sigma table, and its initial/decode RNG layout.
@@ -34,3 +34,13 @@ See docs/small-video.md for protocol, commands, metrics and evidence limits.
 A real nonzero PEFT adapter roundtrip now verifies named export, strict fresh loading into the identical immutable base, output equality and disabled-adapter base parity. This adds one CPU test; it does not replace pretrained GPU acceptance.
 
 Cold Python3.10 model-environment installation, editable package import without PYTHONPATH, pip check, native LTX component imports and both model-free parity plans passed. The model lock excludes unused Decord (the separate reward reader remains pinned) and uses OpenCV4.10.0.84 headless to avoid a desktop libGL dependency. Official Wan imports query CUDA and await admitted GPU validation. The canonical reward environment is still a separate environment and has no new cold-install/GPU proof.
+
+The first pretrained LTX LoRA B2 native-parity attempt failed, with identical
+inputs/RNG but disabled-adapter first-velocity max error0.03125 (fixed tolerance
+exceeded), then divergent recurrence/decode. Its reports and all four matched
+MP4s were retained. Native reference uses no global AMP; candidate AMP differed.
+The directed fix preserves native precision boundaries, keeps BF16 LoRA GEMMs
+and FP32 masters, and adds a task-local LTX full FSDP BF16 compute policy with
+FP32 reduction/time/coordinates. Old video sharding defaults remain unchanged.
+CPU evidence and the required fresh GPU retest are recorded separately; no
+training combination has performed an optimizer update yet.

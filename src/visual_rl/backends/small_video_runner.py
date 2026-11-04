@@ -437,7 +437,12 @@ def train_loop(
 def _wrap(c, parts, session):
     policy = parts.adapter.trainable_module
     if c.runtime.distributed == "fsdp":
-        return wrap_video_policy(
+        wrap = wrap_video_policy
+        if c.model.name == "ltx_video_2b_distilled":
+            from ..training.small_video_sharding import wrap_ltx_native_full_policy
+
+            wrap = wrap_ltx_native_full_policy
+        return wrap(
             policy,
             device=session.device,
             block_types=parts.block_types,
