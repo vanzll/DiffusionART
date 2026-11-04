@@ -433,10 +433,11 @@ def run_reward_only(
     if (
         snapshots.get("reward") != REWARD_REVISION
         or snapshots.get("reward_backbone") != backbone_revision
-        or sources.get("dancegrpo") != REWARD_SOURCE_REVISION
+        or sources.get("reward") != REWARD_SOURCE_REVISION
     ):
         raise ValueError("reward-only requires pinned canonical reward/source/backbone")
     verified = verify_receipt(spec, asset_root, receipt, profile="ltx")
+    verified_sources = {row["id"]: row["path"] for row in verified["sources"]}
     # All path/video/asset preflight above precedes even a CUDA availability query.
     target, hardware = _reward_device_identity()
     output.mkdir(parents=True, exist_ok=False)
@@ -470,7 +471,7 @@ def run_reward_only(
         scorer = (
             PhasedVideoReward(
                 python=python,
-                native_root=verified["sources"]["dancegrpo"],
+                native_root=verified_sources["reward"],
                 checkpoint=verified["assets"]["reward"],
                 backbone=verified["assets"]["reward_backbone"],
                 revision=REWARD_REVISION,

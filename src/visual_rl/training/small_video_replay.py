@@ -337,8 +337,9 @@ class NativeARTObjective:
 
     This implementation evaluates velocity residuals directly instead of
     subtracting nearly equal native means and dividing by small native a.
-    That is native normalized mean regression with identical canonical target,
-    sigma weight, restoration and corrective mask. Training launch authorization
+    This equals native normalized mean regression only when the native
+    frozen-history affine audit passes. Native CUDA AMP UniPC can fail this
+    condition; no equivalence follows from CPU algebra alone. Training launch authorization
     is separate from this pure objective's implementation and CPU proofs.
     """
 

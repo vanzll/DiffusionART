@@ -49,7 +49,7 @@ def runtime(inputs, monkeypatch):
                 {"id": "reward", "revision": R.REWARD_REVISION},
                 {"id": "reward_backbone", "revision": "895c3a49bc3fa70a340399125c650a463535e71c"},
             ],
-            "sources": [{"id": "dancegrpo", "revision": R.REWARD_SOURCE_REVISION}],
+            "sources": [{"id": "reward", "revision": R.REWARD_SOURCE_REVISION}],
         },
     )
     monkeypatch.setattr(
@@ -58,7 +58,14 @@ def runtime(inputs, monkeypatch):
         lambda *args, **kwargs: {
             "checksum": "c" * 64,
             "assets": {"reward": "fake/reward", "reward_backbone": "fake/backbone"},
-            "sources": {"dancegrpo": "fake/canonical-source"},
+            "sources": [
+                {
+                    "id": "reward",
+                    "path": "fake/canonical-source",
+                    "revision": R.REWARD_SOURCE_REVISION,
+                    "package": "fastvideo",
+                }
+            ],
         },
     )
     monkeypatch.setattr(
@@ -160,6 +167,26 @@ def test_reward_only_raw_components_pins_and_cpu_reset_without_prompt_stdout(
     assert calls[-1] == ("to", "cpu")
     assert "private prompt" not in json.dumps(result) and not capsys.readouterr().out
     json.dumps(json.loads((inputs["output"] / "report.json").read_text()), allow_nan=False)
+
+
+def test_reward_uses_real_default_manifest_and_actual_receipt_source_shape(
+    inputs, runtime, monkeypatch
+):
+    from visual_rl.small_video_assets import load_manifest
+
+    # Actual published default manifest; no asset reads/downloads or GPU calls.
+    # Receipt metadata retains the real list-of-records public schema.
+    monkeypatch.setattr(P, "load_manifest", load_manifest)
+    spec = load_manifest()
+    source = next(row for row in spec["sources"] if row["id"] == "reward")
+    assert source["revision"] == R.REWARD_SOURCE_REVISION
+    assert source["package"] == "fastvideo"
+    result = P.run_reward_only(**inputs)
+    calls, _ = runtime
+    init = next(call[1] for call in calls if call[0] == "init")
+    assert init["native_root"] == "fake/canonical-source"
+    assert result["status"] == "passed"
+    assert result["reward_source_revision"] == source["revision"]
 
 
 def test_reward_wrong_source_pin_fails_before_cuda_or_worker(inputs, runtime, monkeypatch):
