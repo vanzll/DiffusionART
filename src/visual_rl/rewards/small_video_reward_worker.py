@@ -154,9 +154,9 @@ def _nvml_used(torch, device):
     if device.type != "cuda":
         return None
     try:
-        identifier = str(torch.cuda.get_device_properties(0).uuid)
-        if not identifier.startswith(("GPU-", "MIG-")):
-            return None
+        from visual_rl.rewards.gpu_uuid import normalize_cuda_uuid
+
+        identifier, _ = normalize_cuda_uuid(torch.cuda.get_device_properties(0).uuid)
         library = ctypes.CDLL("libnvidia-ml.so.1")
         if library.nvmlInit_v2() != 0:
             return None
@@ -174,7 +174,7 @@ def _nvml_used(torch, device):
             return int(memory.used)
         finally:
             library.nvmlShutdown()
-    except (OSError, AttributeError):
+    except (OSError, AttributeError, ValueError):
         return None
 
 

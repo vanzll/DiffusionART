@@ -368,15 +368,18 @@ def _reward_video_profile(path, *, ffprobe):
 
 
 def _reward_device_identity():
+    from .rewards.gpu_uuid import normalize_cuda_uuid
     from .rewards.small_video_process import physical_visible_device
 
     if not torch.cuda.is_available():
         raise RuntimeError("explicit CUDA reward diagnostic requested but CUDA is unavailable")
     device = torch.device("cuda", torch.cuda.current_device())
-    identifier = str(torch.cuda.get_device_properties(device).uuid)
-    if not identifier.startswith(("GPU-", "MIG-")):
-        raise ValueError("reward diagnostic requires an actual GPU UUID")
-    return device, {"gpu_uuid": identifier, "visible_device": physical_visible_device(device)}
+    identifier, raw = normalize_cuda_uuid(torch.cuda.get_device_properties(device).uuid)
+    return device, {
+        "gpu_uuid": identifier,
+        "torch_uuid_raw": raw,
+        "visible_device": physical_visible_device(device),
+    }
 
 
 @torch.no_grad()

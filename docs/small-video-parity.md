@@ -210,3 +210,8 @@ visible-device binding, reward/source/backbone revisions, fixed4fps and
 `use_norm=False`, finite raw VQ/MQ/TA (including monitored TA), equal raw VQ/MQ
 mean, phase audit path and telemetry. Missing/nonfinite components fail hard;
 an error report and owned worker audit remain available.
+Torch2.6 represents its CUDA UUID as a native `_CUuuid` whose string is a bare
+canonical128-bit UUID, rather than an NVML-prefixed string. Diagnostic metadata
+strictly validates that UUID and, when available, its16 original bytes before
+adding the display prefix; the original Torch string and visible-device binding
+are retained. Optional worker NVML snapshots use the same normalization.
