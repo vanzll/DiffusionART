@@ -152,6 +152,8 @@ full denoising schedule. Rollout stage still follows the complete trajectory to 
 Enable with `training.timestep_selection: high_noise`.
 See the [Flash guide and example configs](docs/art-flash.md).
 
+**Note**: The idea of high-noise selection is similar to Flow-GRPO-Fast vs Flow-GRPO. However, we found that DiffusionART-Flash is not sensitive to the timestep selection, while Flow-GRPO-Fast does, in video tasks. This is because DiffusionART significantly mitigates the credit-assignment issue, compared with conventional reverse-process RL. To the extreme case, only training the first timestep (t=0) in DiffusionART-Flash is already sufficient in terms of the convergence speed and stability.
+
 ### Key Advantages
 
 - ✅ **ODE solver:** deterministic rollouts, with no reverse-transition likelihood.
