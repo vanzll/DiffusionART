@@ -1,5 +1,24 @@
 # Third-Party Notices
 
+## New small-video native adapters
+
+Wan2.1-T2V-1.3B integration references Alibaba Wan Team's Apache-2.0 source at
+[`9737cba9c1c3c4d04b33fcad41c111989865d315`](https://github.com/Wan-Video/Wan2.1/tree/9737cba9c1c3c4d04b33fcad41c111989865d315).
+Its native UniPC implementation credits Diffusers v0.31.0. The native model
+snapshot `Wan-AI/Wan2.1-T2V-1.3B@37ec512624d61f7aa208f7ea8140a131f93afc9a`
+also declares Apache-2.0. These adapters do not bundle model weights.
+
+The LTX-Video adapters and stochastic sampling helpers reference the
+[Apache-2.0 native source](https://github.com/Lightricks/LTX-Video/blob/50f0aef1297574a4b29acbdb874e3a363a6d5f2e/LICENSE).
+**The LTX model weights have a separate license, not Apache-2.0.** The exact
+`ltxv-2b-0.9.6-distilled-04-25.safetensors` snapshot at
+`Lightricks/LTX-Video@8984fa25007f376c1a299016d0957a37a2f797bb` refers to
+the [LTXV Open Weights License 0.X](https://huggingface.co/Lightricks/LTX-Video/blob/8984fa25007f376c1a299016d0957a37a2f797bb/LTX-Video-Open-Weights-License-0.X.txt),
+and the checkpoint contains its model-specific license. Users must comply with
+the applicable model terms; no license is accepted and no weights are
+redistributed by this repository. See `docs/ltx-video.md` for the pinned
+license metadata and source distinctions.
+
 Original project code is licensed under the Apache License, Version 2.0; see
 `LICENSE` and `NOTICE`. Third-party portions retain the terms and notices below.
 The project license does not grant rights over model weights or datasets.

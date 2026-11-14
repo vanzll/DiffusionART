@@ -1,0 +1,4 @@
+# Native Wan T2V only; deliberately separate from the shared Wan/LTX model lock.
+# Install the pinned CUDA Torch build and build tools first. Then run pip with
+# --no-build-isolation --no-deps so this add-on cannot replace the model stack.
+flash-attn==2.7.4.post1

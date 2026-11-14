@@ -1,0 +1,423 @@
+{
+  "schema_version": 1,
+  "status": "draft_not_training_accepted",
+  "canonical_base": "b51e6ecc9ec1c993144a0e21ec579b6dd062bd01",
+  "hardware": {
+    "reported_name": "NVIDIA H800",
+    "reported_total_MiB": 143771,
+    "torch_total_bytes": 150142189568,
+    "PCI_device": "0x233510DE",
+    "driver": "560.35.03",
+    "NVIDIA_identification": "H200",
+    "validated_on_8_H800_80GB": false,
+    "primary_identification_source": "https://download.nvidia.com/XFree86/Linux-x86_64/560.35.03/README/supportedchips.html"
+  },
+  "CPU": {
+    "previous_public_unique_cases_covered": 522,
+    "later_targeted_batches_do_not_sum_to_unique_total": true,
+    "wan_solver_diagnostic_passed": 25,
+    "reward_UUID_and_parity_passed": 71,
+    "namespace_source_and_worker_passed": 57,
+    "cold_native_import_without_CUDA": "passed",
+    "explicit_reward_checkpoint11352_constructor_binding_without_CUDA": "passed",
+    "wan_first_step_targeted_passed": 28
+  },
+  "native_LTX_parity": [
+    {
+      "finetune": "lora",
+      "source_SHA": "c015d8b23fd874e4937b974d6d2d14a0246e1f9f",
+      "status": "passed",
+      "comparisons": 115,
+      "failed_comparisons": 0,
+      "maximum_absolute_error": 0.0,
+      "physical_transformer_batch": 2,
+      "peak_memory": {
+        "allocated_bytes": 45643260416,
+        "reserved_bytes": 63782780928
+      },
+      "report_sha256": "f7f25d5a2030d2caa5774f7e37e14c5aad543ac83f6828535074ee240613cef9",
+      "training_acceptance": false
+    },
+    {
+      "finetune": "full",
+      "source_SHA": "c015d8b23fd874e4937b974d6d2d14a0246e1f9f",
+      "status": "passed",
+      "comparisons": 99,
+      "failed_comparisons": 0,
+      "maximum_absolute_error": 0.0,
+      "physical_transformer_batch": 2,
+      "peak_memory": {
+        "allocated_bytes": 68606523392,
+        "reserved_bytes": 72081211392
+      },
+      "report_sha256": "e850de70b632feb36512bad8fbd5959562834adba1637d53854f4caedff3a3f4",
+      "training_acceptance": false
+    }
+  ],
+  "wan_native_CUDA_affine_diagnostic": {
+    "source_sha": "d5971bcdd05212bf740b5932d09331a06888ea2d",
+    "status": "diagnostic_confirms_native_CUDA_AMP_not_strictly_affine",
+    "training_acceptance": false,
+    "optimizer_steps": 0,
+    "weights_loaded": false,
+    "threshold": 3e-05,
+    "production_precision_changed": false,
+    "runs": [
+      {
+        "amp_enabled": false,
+        "device": "cuda:0",
+        "steps": 50,
+        "failed_indices": [],
+        "all_same_velocity_exact": true,
+        "max_relative_error": 2.3820543646739432e-07,
+        "einsum_output_dtypes": [
+          "torch.float32"
+        ]
+      },
+      {
+        "amp_enabled": true,
+        "device": "cuda:0",
+        "steps": 50,
+        "failed_indices": [
+          46,
+          47,
+          48
+        ],
+        "all_same_velocity_exact": true,
+        "max_relative_error": 6.701188566054657e-05,
+        "einsum_output_dtypes": [
+          "torch.bfloat16"
+        ]
+      }
+    ],
+    "report_sha256": "b52e8ea8a08fcdcb1339a6edbb1aa9348b19294802d4f1e16c7abf8b9f7b61e1"
+  },
+  "reward_existing_video_diagnostic": {
+    "status": "passed",
+    "source_SHA": "1e0a31d37bb4659892d82956045838378295241a",
+    "report_sha256": "c6f24fcc6dfc7e0e6f72541ace9ce5303ede032f65af8713a4a3a51d6f4a35a7",
+    "physical_devices": 1,
+    "videos": 2,
+    "video_shape": [
+      153,
+      704,
+      1216
+    ],
+    "FPS": 30,
+    "reward_FPS": 4,
+    "use_norm": false,
+    "checkpoint_step": 11352,
+    "rows": [
+      {
+        "index": 0,
+        "MQ": 0.27734375,
+        "TA": -2.96875,
+        "VQ": 2.21875,
+        "raw_VQ_MQ_mean": 1.248046875
+      },
+      {
+        "index": 1,
+        "MQ": 1.109375,
+        "TA": -0.9375,
+        "VQ": 2.6875,
+        "raw_VQ_MQ_mean": 1.8984375
+      }
+    ],
+    "metrics": {
+      "reward/phase_seconds": 22.31577231362462,
+      "memory/scorer_parent_resident_allocated_bytes": 0,
+      "memory/scorer_parent_resident_reserved_bytes": 0,
+      "memory/scorer_nvml_total_used_after_load_bytes": 6194266112,
+      "memory/scorer_nvml_total_used_after_score_bytes": 7664369664,
+      "memory/scorer_peak_allocated_bytes": 5261754880,
+      "memory/scorer_peak_reserved_bytes": 6325010432,
+      "reward/load_seconds": 18.308718521147966,
+      "reward/scoring_seconds": 2.8556817956268787,
+      "reward/worker_total_seconds": 21.16679034754634
+    },
+    "training_updates": 0,
+    "reward_growth_claim": false,
+    "same_device_UUID_sha256": "888718427b80f80d5abe84a2b7b03a1fcd68f6845e0b87cc86efab46bcd726b5"
+  },
+  "training_matrix": [
+    {
+      "model": "wan_t2v_1_3b",
+      "finetune": "lora",
+      "timesteps": "original",
+      "actual_global_optimizer_steps": 0,
+      "cumulative_step_cap": 10,
+      "rollout_cap": 5,
+      "paired_base_post_prompts": 8,
+      "status": "pending_explicit_model_specific_scientific_decision",
+      "checkpoint_resume_GPU_accepted": false
+    },
+    {
+      "model": "wan_t2v_1_3b",
+      "finetune": "lora",
+      "timesteps": "flash",
+      "actual_global_optimizer_steps": 0,
+      "cumulative_step_cap": 10,
+      "rollout_cap": 5,
+      "paired_base_post_prompts": 8,
+      "status": "pending_explicit_model_specific_scientific_decision",
+      "checkpoint_resume_GPU_accepted": false
+    },
+    {
+      "model": "wan_t2v_1_3b",
+      "finetune": "full",
+      "timesteps": "original",
+      "actual_global_optimizer_steps": 0,
+      "cumulative_step_cap": 10,
+      "rollout_cap": 5,
+      "paired_base_post_prompts": 8,
+      "status": "pending_explicit_model_specific_scientific_decision",
+      "checkpoint_resume_GPU_accepted": false
+    },
+    {
+      "model": "wan_t2v_1_3b",
+      "finetune": "full",
+      "timesteps": "flash",
+      "actual_global_optimizer_steps": 0,
+      "cumulative_step_cap": 10,
+      "rollout_cap": 5,
+      "paired_base_post_prompts": 8,
+      "status": "pending_explicit_model_specific_scientific_decision",
+      "checkpoint_resume_GPU_accepted": false
+    },
+    {
+      "model": "ltx_video_2b_distilled",
+      "finetune": "lora",
+      "timesteps": "original",
+      "actual_global_optimizer_steps": 0,
+      "cumulative_step_cap": 10,
+      "rollout_cap": 5,
+      "paired_base_post_prompts": 8,
+      "status": "pending_explicit_model_specific_scientific_decision",
+      "checkpoint_resume_GPU_accepted": false
+    },
+    {
+      "model": "ltx_video_2b_distilled",
+      "finetune": "lora",
+      "timesteps": "flash",
+      "actual_global_optimizer_steps": 0,
+      "cumulative_step_cap": 10,
+      "rollout_cap": 5,
+      "paired_base_post_prompts": 8,
+      "status": "pending_explicit_model_specific_scientific_decision",
+      "checkpoint_resume_GPU_accepted": false
+    },
+    {
+      "model": "ltx_video_2b_distilled",
+      "finetune": "full",
+      "timesteps": "original",
+      "actual_global_optimizer_steps": 0,
+      "cumulative_step_cap": 10,
+      "rollout_cap": 5,
+      "paired_base_post_prompts": 8,
+      "status": "pending_explicit_model_specific_scientific_decision",
+      "checkpoint_resume_GPU_accepted": false
+    },
+    {
+      "model": "ltx_video_2b_distilled",
+      "finetune": "full",
+      "timesteps": "flash",
+      "actual_global_optimizer_steps": 0,
+      "cumulative_step_cap": 10,
+      "rollout_cap": 5,
+      "paired_base_post_prompts": 8,
+      "status": "pending_explicit_model_specific_scientific_decision",
+      "checkpoint_resume_GPU_accepted": false
+    }
+  ],
+  "WandB_training_runs": [],
+  "science_limits": [
+    "LTX requires explicit decision on native normalized conditional mean with canonical Q2 reference mask; it is not native-kernel KL.",
+    "Wan native AMP fails strict affine equivalence; actual native mean objective requires a separate scientific decision and implementation, or Wan stays blocked.",
+    "Wan official serial-base versus batch comparisons also remain failed."
+  ],
+  "short_run_limits": "No training reward or paired base/post trend exists;10updates cannot demonstrate long-run stability or generalization.",
+  "wan_first_step_batch_localization": {
+    "status": "diagnostic_notaccepted",
+    "source_SHA": "0061b74e9ba3c3ecac8297ed0d4970557e2c61cf",
+    "report_sha256": "be7f77856027ad3491f6817ad58a053c6763b864295956dd94df5e7fd72da3cc",
+    "native_profile_unchanged": true,
+    "thresholds_unchanged": true,
+    "optimizer_steps": 0,
+    "decode_executed": false,
+    "comparisons": [
+      {
+        "atol": 0.0078125,
+        "max_abs_error": 0.0,
+        "max_reference_abs": 5.25,
+        "name": "original_B1_replay/branch0",
+        "passed": true,
+        "rms_error": 0.0,
+        "rtol": 0.0078125,
+        "shape": [
+          1,
+          16,
+          21,
+          60,
+          104
+        ],
+        "tolerance": "bf16"
+      },
+      {
+        "atol": 0.0078125,
+        "max_abs_error": 0.0,
+        "max_reference_abs": 5.34375,
+        "name": "original_B1_replay/branch1",
+        "passed": true,
+        "rms_error": 0.0,
+        "rtol": 0.0078125,
+        "shape": [
+          1,
+          16,
+          21,
+          60,
+          104
+        ],
+        "tolerance": "bf16"
+      },
+      {
+        "atol": 0.0078125,
+        "max_abs_error": 0.0,
+        "max_reference_abs": 5.1875,
+        "name": "original_B1_replay/branch2",
+        "passed": true,
+        "rms_error": 0.0,
+        "rtol": 0.0078125,
+        "shape": [
+          1,
+          16,
+          21,
+          60,
+          104
+        ],
+        "tolerance": "bf16"
+      },
+      {
+        "atol": 0.0078125,
+        "max_abs_error": 0.0,
+        "max_reference_abs": 5.3125,
+        "name": "original_B1_replay/branch3",
+        "passed": true,
+        "rms_error": 0.0,
+        "rtol": 0.0078125,
+        "shape": [
+          1,
+          16,
+          21,
+          60,
+          104
+        ],
+        "tolerance": "bf16"
+      },
+      {
+        "atol": 0.0078125,
+        "max_abs_error": 0.10595703125,
+        "max_reference_abs": 5.34375,
+        "name": "prePEFT_B4/branches",
+        "passed": false,
+        "rms_error": 0.0024785222113126197,
+        "rtol": 0.0078125,
+        "shape": [
+          4,
+          16,
+          21,
+          60,
+          104
+        ],
+        "tolerance": "bf16"
+      },
+      {
+        "atol": 0.0078125,
+        "max_abs_error": 0.0,
+        "max_reference_abs": 5.34375,
+        "name": "postPEFT_B4/branches_vs_prePEFT",
+        "passed": true,
+        "rms_error": 0.0,
+        "rtol": 0.0078125,
+        "shape": [
+          4,
+          16,
+          21,
+          60,
+          104
+        ],
+        "tolerance": "bf16"
+      },
+      {
+        "atol": 0.0078125,
+        "max_abs_error": 0.0,
+        "max_reference_abs": 5.34375,
+        "name": "adapter_B4/branches_vs_postPEFT",
+        "passed": true,
+        "rms_error": 0.0,
+        "rtol": 0.0078125,
+        "shape": [
+          4,
+          16,
+          21,
+          60,
+          104
+        ],
+        "tolerance": "bf16"
+      },
+      {
+        "atol": 0.0078125,
+        "max_abs_error": 0.10595703125,
+        "max_reference_abs": 5.34375,
+        "name": "adapter_B4/branches_vs_reference",
+        "passed": false,
+        "rms_error": 0.0024785222113126197,
+        "rtol": 0.0078125,
+        "shape": [
+          4,
+          16,
+          21,
+          60,
+          104
+        ],
+        "tolerance": "bf16"
+      },
+      {
+        "atol": 0.0078125,
+        "max_abs_error": 0.880859375,
+        "max_reference_abs": 7.5625,
+        "name": "adapter_B4/guided_vs_reference",
+        "passed": false,
+        "rms_error": 0.019481115794553937,
+        "rtol": 0.0078125,
+        "shape": [
+          2,
+          16,
+          21,
+          60,
+          104
+        ],
+        "tolerance": "bf16"
+      },
+      {
+        "atol": 0.0078125,
+        "max_abs_error": 0.0,
+        "max_reference_abs": 7.5625,
+        "name": "zero_lora/disabled",
+        "passed": true,
+        "rms_error": 0.0,
+        "rtol": 0.0078125,
+        "shape": [
+          2,
+          16,
+          21,
+          60,
+          104
+        ],
+        "tolerance": "bf16"
+      }
+    ],
+    "reference_physical_batch": 1,
+    "candidate_cfg_branches": 4,
+    "interpretation": "Difference exists in native prePEFT B4 versus original B1; same-B1 replay exact, nativeB4/postPEFT/adapterB4 exact. Specific internal kernel cause is not established. Full pretrained parity gate remains failed."
+  }
+}

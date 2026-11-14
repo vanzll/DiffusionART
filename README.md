@@ -193,6 +193,11 @@ Each model card includes its inference setup, base-model requirements and exampl
 | **Feedback** | ✅ Scalar rewards<br>✅ Pairwise preferences (Hunyuan ART)<br>✅ Configurable rollout groups: K = 2, 4, 8 |
 | **Training** | ✅ LoRA / full-parameter tuning<br>✅ DDP / FSDP<br>✅ Checkpoint resume / local evaluation artifacts |
 
+Experimental **Wan2.1-T2V-1.3B** and **LTX-Video 2B 0.9.6 distilled**
+[small-video recipes](docs/small-video.md) add LoRA (default) and full tuning,
+with separate Original ART / Flash switches. Native replay decisions and GPU
+acceptance status are documented explicitly; these are development recipes.
+
 ## Quick Start
 
 ### 1. Install

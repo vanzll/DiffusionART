@@ -1,0 +1,411 @@
+{
+  "schema_version": "small-video-assets/v1",
+  "snapshots": [
+    {
+      "id": "wan",
+      "env": "SMALL_VIDEO_WAN",
+      "repo_id": "Wan-AI/Wan2.1-T2V-1.3B",
+      "revision": "37ec512624d61f7aa208f7ea8140a131f93afc9a",
+      "repo_type": "model",
+      "profiles": [
+        "wan"
+      ],
+      "files": [
+        {
+          "path": "LICENSE.txt",
+          "size": 11357,
+          "git_blob_sha1": "261eeb9e9f8b2b4b0d119366dda99c6fd7d35c64"
+        },
+        {
+          "path": "README.md",
+          "size": 16913,
+          "git_blob_sha1": "fbbf7c13900d37f3179c546d09372aeb52e0fae1"
+        },
+        {
+          "path": "Wan2.1_VAE.pth",
+          "size": 507609880,
+          "sha256": "38071ab59bd94681c686fa51d75a1968f64e470262043be31f7a094e442fd981"
+        },
+        {
+          "path": "config.json",
+          "size": 249,
+          "git_blob_sha1": "d203bef600b2f3c64fe1f5f53d70a2087f4ccd2f"
+        },
+        {
+          "path": "diffusion_pytorch_model.safetensors",
+          "size": 5676070424,
+          "sha256": "96b6b242ca1c2f24e9d02cd6596066fab6d310e2d7538f33ae267cb18d957e8f"
+        },
+        {
+          "path": "google/umt5-xxl/special_tokens_map.json",
+          "size": 6623,
+          "git_blob_sha1": "14855e7052ffbb595057dfd791d293c1c940db2c"
+        },
+        {
+          "path": "google/umt5-xxl/spiece.model",
+          "size": 4548313,
+          "sha256": "e3909a67b780650b35cf529ac782ad2b6b26e6d1f849d3fbb6a872905f452458"
+        },
+        {
+          "path": "google/umt5-xxl/tokenizer.json",
+          "size": 16837417,
+          "sha256": "6e197b4d3dbd71da14b4eb255f4fa91c9c1f2068b20a2de2472967ca3d22602b"
+        },
+        {
+          "path": "google/umt5-xxl/tokenizer_config.json",
+          "size": 61728,
+          "git_blob_sha1": "4e1cc1cd85599ce0b47fd0a746af188fe4043ff2"
+        },
+        {
+          "path": "models_t5_umt5-xxl-enc-bf16.pth",
+          "size": 11361920418,
+          "sha256": "7cace0da2b446bbbbc57d031ab6cf163a3d59b366da94e5afe36745b746fd81d"
+        }
+      ]
+    },
+    {
+      "id": "ltx",
+      "env": "SMALL_VIDEO_LTX",
+      "repo_id": "Lightricks/LTX-Video",
+      "revision": "8984fa25007f376c1a299016d0957a37a2f797bb",
+      "repo_type": "model",
+      "profiles": [
+        "ltx"
+      ],
+      "files": [
+        {
+          "path": "LTX-Video-Open-Weights-License-0.X.txt",
+          "size": 14536,
+          "git_blob_sha1": "f4957bf5f24d46019a68ec26eb1299bb80738c32"
+        },
+        {
+          "path": "README.md",
+          "size": 21065,
+          "git_blob_sha1": "6ca967542d4a5c36aa0ad96283468e0e57f467d9"
+        },
+        {
+          "path": "ltxv-2b-0.9.6-distilled-04-25.safetensors",
+          "size": 6340744028,
+          "sha256": "94891bd4bd08de30d484befbfc54fdcffe6d1596a131baad700b9baa5e1de86b"
+        }
+      ]
+    },
+    {
+      "id": "ltx_text",
+      "env": "SMALL_VIDEO_LTX_TEXT",
+      "repo_id": "PixArt-alpha/PixArt-XL-2-1024-MS",
+      "revision": "b89adadeccd9ead2adcb9fa2825d3fabec48d404",
+      "repo_type": "model",
+      "profiles": [
+        "ltx"
+      ],
+      "files": [
+        {
+          "path": "README.md",
+          "size": 6846,
+          "git_blob_sha1": "ffaaac612e4e0bc15ee62a60e9f54ed0ed77e948"
+        },
+        {
+          "path": "text_encoder/config.json",
+          "size": 788,
+          "git_blob_sha1": "66b2e09153a0724b96cc601aa877048e6293a420"
+        },
+        {
+          "path": "text_encoder/model-00001-of-00002.safetensors",
+          "size": 9989150328,
+          "sha256": "eb529f693f4b17773a24e787fcba29486d5e1700dadcc20bb91e4c8b00212d08"
+        },
+        {
+          "path": "text_encoder/model-00002-of-00002.safetensors",
+          "size": 9060119392,
+          "sha256": "58f33f4acba7a5502b6b3e4cb7863f8fd503d5012016428099bb460c98e2fe77"
+        },
+        {
+          "path": "text_encoder/model.safetensors.index.json",
+          "size": 19886,
+          "git_blob_sha1": "4065a5b676f48d0128f6f2563c2dfc7e2bd4f568"
+        },
+        {
+          "path": "tokenizer/added_tokens.json",
+          "size": 2634,
+          "git_blob_sha1": "109f87fd12f4dc7a2b03af5ea270290c192d352d"
+        },
+        {
+          "path": "tokenizer/special_tokens_map.json",
+          "size": 2201,
+          "git_blob_sha1": "2c19eb6e3b583f52d34b903b5978d3d30b6b7682"
+        },
+        {
+          "path": "tokenizer/spiece.model",
+          "size": 791656,
+          "sha256": "d60acb128cf7b7f2536e8f38a5b18a05535c9e14c7a355904270e15b0945ea86"
+        },
+        {
+          "path": "tokenizer/tokenizer_config.json",
+          "size": 20509,
+          "git_blob_sha1": "c78e8c7596481b5ece8ec21f659a2ba64d411d90"
+        }
+      ]
+    },
+    {
+      "id": "reward",
+      "env": "SMALL_VIDEO_REWARD",
+      "repo_id": "KlingTeam/VideoReward",
+      "revision": "4f26600130683e6f1de9f5d463887f28e8ef995c",
+      "repo_type": "model",
+      "profiles": [
+        "wan",
+        "ltx"
+      ],
+      "files": [
+        {
+          "path": "README.md",
+          "size": 2074,
+          "git_blob_sha1": "520b00163fa851a075f2fc0b2e1d34a451f7ee8f"
+        },
+        {
+          "path": "checkpoint-11352/model.pth",
+          "size": 5031072529,
+          "sha256": "48375908e6112de9f0248402db156a23b480709a6960b091c598c6f4c88d21b9"
+        },
+        {
+          "path": "checkpoint-11352/tokenizer/added_tokens.json",
+          "size": 473,
+          "git_blob_sha1": "edd5876c9c063b82c3b1f68d2521215c202fcbac"
+        },
+        {
+          "path": "checkpoint-11352/tokenizer/merges.txt",
+          "size": 1671853,
+          "git_blob_sha1": "31349551d90c7606f325fe0f11bbb8bd5fa0d7c7"
+        },
+        {
+          "path": "checkpoint-11352/tokenizer/special_tokens_map.json",
+          "size": 770,
+          "git_blob_sha1": "3c5d1dd34d6d6a5b5d12e84248ad9ff2db9db3b2"
+        },
+        {
+          "path": "checkpoint-11352/tokenizer/tokenizer.json",
+          "size": 11420941,
+          "sha256": "a05e80818b958b49531b8e1f758c4ae65f090fdec80e6d8408963f70ae3f737d"
+        },
+        {
+          "path": "checkpoint-11352/tokenizer/tokenizer_config.json",
+          "size": 4623,
+          "git_blob_sha1": "c9381c34809c2587d81b9ae792f1101735cc7706"
+        },
+        {
+          "path": "checkpoint-11352/tokenizer/vocab.json",
+          "size": 2776833,
+          "git_blob_sha1": "4783fe10ac3adce15ac8f358ef5462739852c569"
+        },
+        {
+          "path": "model_config.json",
+          "size": 7113,
+          "git_blob_sha1": "e304037b4e1fc63d30ba99edea9f18c5de4ebd14"
+        }
+      ]
+    },
+    {
+      "id": "reward_backbone",
+      "env": "SMALL_VIDEO_REWARD_BACKBONE",
+      "repo_id": "Qwen/Qwen2-VL-2B-Instruct",
+      "revision": "895c3a49bc3fa70a340399125c650a463535e71c",
+      "repo_type": "model",
+      "profiles": [
+        "wan",
+        "ltx"
+      ],
+      "files": [
+        {
+          "path": "LICENSE",
+          "size": 11343,
+          "git_blob_sha1": "6634c8cc3133b3848ec74b9f275acaaa1ea618ab"
+        },
+        {
+          "path": "README.md",
+          "size": 17392,
+          "git_blob_sha1": "069d978f02c1c1eb03153ef9d986334b77168182"
+        },
+        {
+          "path": "chat_template.json",
+          "size": 1050,
+          "git_blob_sha1": "732bd68bc5427d1fb6c06a59b3bf2456b2155d24"
+        },
+        {
+          "path": "config.json",
+          "size": 1196,
+          "git_blob_sha1": "8e922d54443e7d2ad46c01baea1b772ecbc6228e"
+        },
+        {
+          "path": "generation_config.json",
+          "size": 272,
+          "git_blob_sha1": "896384ee102f9a2696e2f6eb02ba5a143f198fac"
+        },
+        {
+          "path": "merges.txt",
+          "size": 1671839,
+          "git_blob_sha1": "20024bfe7c83998e9aeaf98a0cd6a2ce6306c2f0"
+        },
+        {
+          "path": "model-00001-of-00002.safetensors",
+          "size": 3988609112,
+          "sha256": "994ac2b03f97de8bc647d0fe5eba2e4b632b3e28dc03574c29bdfc36cf47e1b9"
+        },
+        {
+          "path": "model-00002-of-00002.safetensors",
+          "size": 429441656,
+          "sha256": "92540d8353c8d226a589a3b179bdb33851c970ee2cc2ac7ba035f79425e7b833"
+        },
+        {
+          "path": "model.safetensors.index.json",
+          "size": 56411,
+          "git_blob_sha1": "293d54cd8408e82d1bdd2eabd07d9311eb406b52"
+        },
+        {
+          "path": "preprocessor_config.json",
+          "size": 347,
+          "git_blob_sha1": "c8bf52bdaee98b049e28da3ef94119f896b03a8d"
+        },
+        {
+          "path": "tokenizer.json",
+          "size": 7029741,
+          "git_blob_sha1": "f5195cf97e3c90290b670d48a7c46fef5f145ebc"
+        },
+        {
+          "path": "tokenizer_config.json",
+          "size": 4190,
+          "git_blob_sha1": "ecbc13d75ff851c4f1e57990064f81303b2494f6"
+        },
+        {
+          "path": "vocab.json",
+          "size": 2776833,
+          "git_blob_sha1": "4783fe10ac3adce15ac8f358ef5462739852c569"
+        }
+      ]
+    },
+    {
+      "id": "prompts",
+      "env": "SMALL_VIDEO_PROMPTS",
+      "repo_id": "vanzl/DiffusionART-Prompts",
+      "revision": "9d947fb510d67a8e5334ec1d8c7d8927f7658c08",
+      "repo_type": "dataset",
+      "profiles": [
+        "wan",
+        "ltx"
+      ],
+      "files": [
+        {
+          "path": "README.md",
+          "size": 3286,
+          "git_blob_sha1": "90db80972e962799ea8dd47752f84f352e8a6e7d",
+          "sha256": "802e84f478e6d7bb92a5dd771a52f3524c9e44936dbbb5e8f3eaaadd872bf5ff"
+        },
+        {
+          "path": "attribution/DanceGRPO-Apache-2.0.txt",
+          "size": 10757,
+          "git_blob_sha1": "a7b8b5e6a6dc555ad43165aa5b8f65c120032468"
+        },
+        {
+          "path": "attribution/FlowGRPO-MIT.txt",
+          "size": 1064,
+          "git_blob_sha1": "125f60c74ae39daa4dba271f5da928cd732ea8a3"
+        },
+        {
+          "path": "attribution/VidProM-README.md",
+          "size": 8049,
+          "git_blob_sha1": "4f4671e50745c0104ac8121c33886b091a7a1459"
+        },
+        {
+          "path": "provenance.json",
+          "size": 58632,
+          "git_blob_sha1": "615821067f2eaf3a80222879d764a36dfb4ec9df"
+        },
+        {
+          "path": "t2v/train.jsonl",
+          "size": 5989736,
+          "git_blob_sha1": "88ecaad93faf4ec7516fd15fe128898c58e8283f",
+          "sha256": "b54fe7c10e7530d24e5f928f3f40f9d6c160191301631235463945575b499194"
+        },
+        {
+          "path": "t2v/validation.jsonl",
+          "size": 22796,
+          "git_blob_sha1": "df0074f8e7d9a58bde01abc110e0d7e158c1d162",
+          "sha256": "af1cecf6f794db3bbcd85d90cbca0e10cb196bc8f043a2a3724c00635383e70f"
+        }
+      ]
+    }
+  ],
+  "sources": [
+    {
+      "id": "wan",
+      "repo": "https://github.com/Wan-Video/Wan2.1.git",
+      "revision": "9737cba9c1c3c4d04b33fcad41c111989865d315",
+      "package": "wan",
+      "profiles": [
+        "wan"
+      ]
+    },
+    {
+      "id": "ltx",
+      "repo": "https://github.com/Lightricks/LTX-Video.git",
+      "revision": "50f0aef1297574a4b29acbdb874e3a363a6d5f2e",
+      "package": "ltx_video",
+      "profiles": [
+        "ltx"
+      ]
+    },
+    {
+      "id": "reward",
+      "repo": "https://github.com/XueZeyue/DanceGRPO.git",
+      "revision": "15cc71d53cc2e6e18a68ee607d5fb6ba9a99e344",
+      "package": "fastvideo",
+      "profiles": [
+        "wan",
+        "ltx"
+      ]
+    }
+  ],
+  "data": {
+    "asset": "prompts",
+    "train": "t2v/train.jsonl",
+    "validation": "t2v/validation.jsonl",
+    "train_count": 50000,
+    "validation_count": 100,
+    "train_sha256": "b54fe7c10e7530d24e5f928f3f40f9d6c160191301631235463945575b499194",
+    "validation_sha256": "af1cecf6f794db3bbcd85d90cbca0e10cb196bc8f043a2a3724c00635383e70f",
+    "eval_count": 8,
+    "eval_seed": 42,
+    "eval_sha256": "06fb7106c1fa00cbe91c5f4b6e79cb3eb99c90d13f3c7995fb62d8486148c9ff",
+    "eval_sample_ids": [
+      "5825c99703ab392a65b9c2bbac15d143dc79167698af384b85caeb74ea62b095",
+      "6f764f37b99e4798ed8585e88bcd580e166e4d72463008f99e8b3478d64e59d1",
+      "3455b04a9236f9a8af9b5c5415ad095c01b964fb3dcf3233aca323c699ea3660",
+      "39e3b565ea7e75a432ecc0cc2c8a6bc287f64537b234904fec4b5258cea136f2",
+      "9c72dbef66d1102627435ceefb10c1e24b9e0475375242f42670dc63945892d6",
+      "47b8f2b995ebe8fbebbf754a9c6d3f7a46857613008f2fd35ee73884f296a6c2",
+      "fe1ac5e929ed54f74595633b35644fda1e3d2c8dcf46e33008cc2f48e4864176",
+      "a9289940917d253e2cb92341fadb007e7f4c9d53c7ea878b50012623b8127f82"
+    ],
+    "normalization": "NFKC/casefold/whitespace",
+    "expected_train_validation_overlap": 0
+  },
+  "runtime_policy": {
+    "native_art_replay": "pending explicit scientific decision; asset preflight is not training acceptance",
+    "max_cumulative_actual_global_optimizer_steps": 10,
+    "rollouts": 5,
+    "paired_base_post_prompts": 8,
+    "reward_fps": 4,
+    "reward_use_norm": false,
+    "reward_components": [
+      "VQ",
+      "MQ",
+      "TA"
+    ],
+    "training_reward_weights": {
+      "VQ": 0.5,
+      "MQ": 0.5,
+      "TA": 0.0
+    },
+    "reward_source": "canonical DanceGRPO15cc; do not substitute H3 vendored VideoAlign"
+  }
+}

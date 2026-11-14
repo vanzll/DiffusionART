@@ -1,0 +1,4 @@
+extends: wan_t2v_1_3b_full.yaml
+name: wan_t2v_1_3b_full_flash
+training:
+  timestep_selection: high_noise

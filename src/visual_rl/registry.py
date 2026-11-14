@@ -138,3 +138,14 @@ register_backend(
         config_validator="visual_rl.backends.tensor_fixture:validate_config",
     )
 )
+
+
+for _small_video_model in ("wan_t2v_1_3b", "ltx_video_2b_distilled"):
+    register_backend(Backend(
+        name=_small_video_model, tasks=frozenset({"t2v"}),
+        algorithms=frozenset({"diffusionart"}), rewards=frozenset({"video_reward"}),
+        precisions=frozenset({"bf16"}), distributed=frozenset({"none", "ddp", "fsdp"}),
+        entrypoint="visual_rl.backends.small_video:run",
+        config_validator="visual_rl.backends.small_video:validate_config",
+        status="development native T2V; scientific replay decision and GPU acceptance pending",
+    ))

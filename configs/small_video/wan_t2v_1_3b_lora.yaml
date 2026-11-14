@@ -1,0 +1,23 @@
+extends: common.yaml
+name: wan_t2v_1_3b_lora_original
+model:
+  name: wan_t2v_1_3b
+  checkpoint: ${SMALL_VIDEO_ASSETS}/models/wan/37ec512624d61f7aa208f7ea8140a131f93afc9a
+  revision: 37ec512624d61f7aa208f7ea8140a131f93afc9a
+  options:
+    native_root: ${SMALL_VIDEO_ASSETS}/sources/wan
+    asset_root: ${SMALL_VIDEO_ASSETS}
+    asset_receipt: ${SMALL_VIDEO_ASSETS}/preflight-wan.json
+    finetune: {mode: lora, rank: 32, alpha: 32, target_modules: [q, k, v, o]}
+    gradient_checkpointing: true
+    allow_tf32: false
+    ffmpeg: ffmpeg
+    ffprobe: ffprobe
+    replay_contract: pending_scientific_decision
+sampling: {steps: 50, guidance_scale: 6.0, height: 480, width: 832, frames: 81, fps: 16.0, options: {solver: unipc_order2_bh2_predict_x0, shift: 8.0}}
+training:
+  learning_rate: 0.0001
+evaluation:
+  fps: 16.0
+runtime:
+  distributed: ddp
