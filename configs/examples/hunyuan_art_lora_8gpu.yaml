@@ -5,6 +5,11 @@ algorithm:
   options:
     restore_zero_signal: true
     old_velocity_source: rollout
+    trajectory_dtype: bf16
+    shuffle_updates: true
+    covariance:
+      direction_mode: normalized_aggregate
+      zero_signal_mode: source_precision
 model:
   revision: e8c2aaa66fe3742a32c11a6766aecbf07c56e773
   options:

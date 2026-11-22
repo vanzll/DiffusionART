@@ -193,6 +193,8 @@ Each model card includes its inference setup, base-model requirements and exampl
 | **Feedback** | ✅ Scalar rewards<br>✅ Pairwise preferences (Hunyuan ART)<br>✅ Configurable rollout groups: K = 2, 4, 8 |
 | **Training** | ✅ LoRA / full-parameter tuning<br>✅ DDP / FSDP<br>✅ Checkpoint resume / local evaluation artifacts |
 
+Train **HunyuanVideo-13B on one 8-GPU node** with LoRA and first-frame PickScore. Choose [DiffusionART](configs/examples/hunyuan_art_lora_8gpu.yaml), [DiffusionNFT](configs/examples/hunyuan_nft_lora_8gpu.yaml) or [Flow-GRPO-Fast](configs/examples/hunyuan_fast_lora_8gpu.yaml). [Setup and training commands](docs/hunyuan-runner.md#single-node-hunyuanvideo-lora)
+
 ## Quick Start
 
 ### 1. Install

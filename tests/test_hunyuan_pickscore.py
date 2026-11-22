@@ -4,10 +4,10 @@ import shutil
 import pytest
 import torch
 import yaml
+from test_hunyuan_runner import VAE, Transformer, config_file
+from test_pickscore import Model, Processor
 from torch import nn
 
-from test_hunyuan_runner import Transformer, VAE, config_file
-from test_pickscore import Model, Processor
 from visual_rl.backends import hunyuan
 from visual_rl.config import ConfigError, load_config
 from visual_rl.evaluation.manifest import EvaluationManifest, audit_manifest
