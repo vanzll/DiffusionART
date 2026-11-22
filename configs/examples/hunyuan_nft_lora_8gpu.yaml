@@ -1,0 +1,13 @@
+extends: hunyuan_art_lora_8gpu.yaml
+name: hunyuan-nft-lora-8gpu
+algorithm:
+  name: diffusionnft
+  options:
+    old_policy: {mode: slow-ema, rate: 0.00125, maximum: 0.6}
+    advantage_epsilon: 0.0001
+    loss: {nft_beta: 1.0, adv_clip_max: 5.0, adv_mode: all, eps: 0.00001}
+training:
+  max_updates: 100
+runtime:
+  output_dir: outputs/hunyuan-nft-lora-8gpu
+  checkpoint_every: 25

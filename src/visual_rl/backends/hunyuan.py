@@ -56,12 +56,24 @@ def validate_config(c, *, model_name="hunyuan_public", task="t2v", extra_model_k
         raise ConfigError("native Hunyuan integrates ART/NFT/ReFL/Fast-SDE/Dance T2V with VideoReward and BF16 autocast")
     if not c.data or not c.model.checkpoint or not c.model.revision or not c.reward.checkpoint or not c.reward.revision:
         raise ConfigError("explicit model/reward identities and hashed prompt data are required")
-    if set(c.model.options) != {"native_root", "finetune", "gradient_checkpointing", "ffmpeg", "ffprobe", "allow_tf32", *extra_model_keys}:
+    optional_model_keys = set()
+    if model_name == "hunyuan_public":
+        optional_model_keys = {"embedded_guidance_raw", "continuous_timesteps"} & c.model.options.keys()
+        guidance = c.model.options.get("embedded_guidance_raw", 6018.0)
+        if type(guidance) not in (int, float) or not math.isfinite(guidance) or guidance < 0:
+            raise ConfigError("embedded_guidance_raw must be finite and nonnegative")
+        if type(c.model.options.get("continuous_timesteps", False)) is not bool:
+            raise ConfigError("continuous_timesteps must be boolean")
+    if set(c.model.options) != {*optional_model_keys, "native_root", "finetune", "gradient_checkpointing", "ffmpeg", "ffprobe", "allow_tf32", *extra_model_keys}:
         raise ConfigError("Hunyuan requires native_root, finetune, gradient_checkpointing, ffmpeg, ffprobe, allow_tf32")
     if set(c.reward.options) != {"backbone"} or set(c.reward.weights) != {"VQ", "MQ", "TA"}:
         raise ConfigError("VideoReward requires backbone and explicit VQ/MQ/TA weights")
     if c.algorithm.name == "diffusionart":
         allowed = {"covariance", "loss", "restore_zero_signal"}
+        if model_name == "hunyuan_public" and "old_velocity_source" in c.algorithm.options:
+            allowed.add("old_velocity_source")
+            if c.algorithm.options["old_velocity_source"] not in ("ode_mean", "rollout"):
+                raise ConfigError("old_velocity_source must be ode_mean or rollout")
         if video_pairwise.enabled(c):
             allowed.add("pairwise")
         if set(c.algorithm.options) != allowed:
@@ -96,8 +108,8 @@ def validate_config(c, *, model_name="hunyuan_public", task="t2v", extra_model_k
     if any(type(c.model.options[key]) is not bool for key in ("gradient_checkpointing", "allow_tf32")):
         raise ConfigError("gradient_checkpointing and allow_tf32 must be boolean")
     if c.sampling.guidance_scale != 1:
-        raise ConfigError("public Hunyuan uses embedded guidance 6018 and no external CFG")
-    if c.runtime.distributed == "fsdp" and c.model.options["finetune"].get("mode") != "full":
+        raise ConfigError("native video uses embedded guidance and requires external guidance_scale=1")
+    if model_name != "hunyuan_public" and c.runtime.distributed == "fsdp" and c.model.options["finetune"].get("mode") != "full":
         raise ConfigError("native Hunyuan FSDP requires full-weight training")
     updates = updates_per_rollout(c)
     if ((c.algorithm.name != "refl" and c.sampling.samples_per_prompt < 2)
@@ -112,7 +124,8 @@ def validate_config(c, *, model_name="hunyuan_public", task="t2v", extra_model_k
         if value % 16:
             raise ConfigError("Hunyuan dimensions must divide by 16; no implicit codec resizing")
     pool, count = c.sampling.options["train_timestep_pool"], c.sampling.options["train_timestep_count"]
-    stop = c.sampling.steps if c.algorithm.name in ("diffusionnft", "refl") else c.sampling.steps - 1
+    terminal_ode = model_name == "hunyuan_public" and c.algorithm.name == "diffusionart" and not video_pairwise.enabled(c)
+    stop = c.sampling.steps if terminal_ode or c.algorithm.name in ("diffusionnft", "refl") else c.sampling.steps - 1
     if (not isinstance(pool, list) or not pool or pool != sorted(set(pool))
             or any(type(i) is not int or not 0 <= i < stop for i in pool)
             or type(count) is not int or not 1 <= count <= len(pool)):
@@ -250,7 +263,8 @@ def prepare_objective(c, parts, cache, predict, scores, global_scores, device):
                else torch.zeros(count, dtype=torch.bool))
     objective = ARTObjective(cache, predict, covariance["group_directions"][groups],
         covariance["group_guidance_magnitudes"][groups], anchors, device,
-        options=c.algorithm.options["loss"], reconstruct_old_from_mean=True)
+        options=c.algorithm.options["loss"],
+        reconstruct_old_from_mean=c.algorithm.options.get("old_velocity_source", "ode_mean") == "ode_mean")
     return objective, prompt_disjoint_windows(groups, len(cache.selected))
 
 

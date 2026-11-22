@@ -1,0 +1,93 @@
+# HunyuanVideo-1.0 13B, one node with eight H800s. Shared by NFT and Fast.
+extends: hunyuan_art.yaml
+name: hunyuan-art-lora-8gpu
+algorithm:
+  options:
+    restore_zero_signal: true
+    old_velocity_source: rollout
+model:
+  revision: e8c2aaa66fe3742a32c11a6766aecbf07c56e773
+  options:
+    embedded_guidance_raw: 1000.0
+    continuous_timesteps: true
+    finetune:
+      mode: lora
+      rank: 64
+      alpha: 256
+      target_modules: [attn.to_q, attn.to_k, attn.to_v, attn.to_out.0,
+                       attn.add_q_proj, attn.add_k_proj, attn.add_v_proj, attn.to_add_out,
+                       ff.net.0.proj, ff.net.2, ff_context.net.0.proj, ff_context.net.2]
+reward:
+  name: pickscore
+  checkpoint: ${PICKSCORE_MODEL}
+  revision: a4e4367c6dfa7288a00c550414478f865b875800
+  normalization: fixed
+  weights: {pickscore: 1.0}
+  options:
+    processor: ${PICKSCORE_PROCESSOR}
+    processor_revision: 1c2b8495b28150b8a4922ee1c8edee224c284c0c
+    microbatch: 8
+sampling:
+  steps: 10
+  prompts_per_rollout: 8
+  samples_per_prompt: 8
+  microbatch: 1
+  height: 720
+  width: 1280
+  frames: 5
+  options:
+    shift: 5.0
+    train_timestep_count: 10
+    train_timestep_pool: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+training:
+  max_updates: 200
+  learning_rate: 0.0003
+  microbatch: 1
+  optimizer: adamw
+  betas: [0.9, 0.999]
+  epsilon: 0.00000001
+  weight_decay: 0.0
+evaluation:
+  every_updates: 0
+  manifest: null
+  manifest_sha256: null
+  height: null
+  width: null
+runtime:
+  output_dir: outputs/hunyuan-art-lora-8gpu
+  checkpoint_every: 50
+provenance:
+  kind: single_node_video_lora
+assets:
+  snapshots:
+    - env: HUNYUAN_MODEL
+      repo_id: hunyuanvideo-community/HunyuanVideo
+      revision: e8c2aaa66fe3742a32c11a6766aecbf07c56e773
+    - env: PICKSCORE_MODEL
+      repo_id: yuvalkirstain/PickScore_v1
+      revision: a4e4367c6dfa7288a00c550414478f865b875800
+    - env: PICKSCORE_PROCESSOR
+      repo_id: laion/CLIP-ViT-H-14-laion2B-s32B-b79K
+      revision: 1c2b8495b28150b8a4922ee1c8edee224c284c0c
+      allow_patterns: [preprocessor_config.json, tokenizer_config.json, tokenizer.json, vocab.json, merges.txt, special_tokens_map.json, config.json]
+  prompts:
+    - env: HUNYUAN_TRAIN_RAW_MANIFEST
+      sha_env: HUNYUAN_TRAIN_RAW_SHA256
+      for_env: HUNYUAN_TRAIN_MANIFEST
+      url: https://huggingface.co/datasets/vanzl/DiffusionART-Prompts/resolve/9d947fb510d67a8e5334ec1d8c7d8927f7658c08/sources/84b2fc9bb85c-train.txt
+      source_sha256: 2f425adcbb9a6d0feee7c6c448e1cb83a1f71deca9434b803907e2578eca837f
+      sha256: 25ec5eb3d187edc109f9191eb173e03c6cdeea41acd35486ece2ad494189c8b0
+      prefix: train
+      format: text
+  transformations:
+    - action: hunyuan_text_view
+      env: HUNYUAN_TEXT_MODEL
+      model_env: HUNYUAN_MODEL
+    - action: hunyuan_conditioning
+      env: HUNYUAN_TRAIN_MANIFEST
+      sha_env: HUNYUAN_TRAIN_SHA256
+      source_env: HUNYUAN_TRAIN_RAW_MANIFEST
+      source_sha_env: HUNYUAN_TRAIN_RAW_SHA256
+      model_env: HUNYUAN_TEXT_MODEL
+      native_env: DANCEGRPO_ROOT
+      device: cuda
