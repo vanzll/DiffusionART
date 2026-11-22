@@ -46,7 +46,8 @@ def wrap_policy(c, parts, session):
 
     return wrap_video_policy(parts.adapter.trainable_module, device=session.device,
         block_types=(HunyuanVideoSingleTransformerBlock, HunyuanVideoTransformerBlock),
-        activation_checkpointing=c.model.options["gradient_checkpointing"])
+        activation_checkpointing=c.model.options["gradient_checkpointing"],
+        lora=c.model.options["finetune"]["mode"] == "lora")
 
 
 @torch.no_grad()
@@ -171,7 +172,7 @@ def _run(session, c, p, k, resume, *, backend=hunyuan, resume_rewind=False, eval
         # them in a local-error all_reduce that could mismatch a peer's forward.
         model = wrap_policy(c, parts, session)
         parts.adapter.transformer = model
-        optimizer = torch.optim.AdamW(model.parameters(), lr=c.training.learning_rate,
+        optimizer = torch.optim.AdamW((p for p in model.parameters() if p.requires_grad), lr=c.training.learning_rate,
             betas=c.training.betas, eps=c.training.epsilon, weight_decay=c.training.weight_decay)
         torch.manual_seed(c.seed + rank)
         random.seed(c.seed + rank)
@@ -207,7 +208,8 @@ def _run(session, c, p, k, resume, *, backend=hunyuan, resume_rewind=False, eval
                 _atomic_json(root / "run.json", {"kind": f"{c.model.name}_native_development",
                     "config_sha256": c.fingerprint(), "parameters": inventory, "device": str(session.device),
                     "data_sha256": data.sha256, "dp_world_size": world, "local_prompts": p,
-                    "samples_per_prompt": k, "strategy": "full_shard_fp32_masters",
+                    "samples_per_prompt": k, "strategy": ("full_shard_bf16_base_fp32_lora" if getattr(model, "_visual_rl_lora_shards", False)
+                                                          else "full_shard_fp32_masters"),
                     "ordering": "global-prompt-stream/rank-local-seed-and-disjoint-windows-v1"})
 
             session.primary("run identity", publish_run)
@@ -280,7 +282,7 @@ def _run(session, c, p, k, resume, *, backend=hunyuan, resume_rewind=False, eval
                         continue
                 else:
                     loss_fn, windows = session.local("objective preparation", lambda: backend.prepare_objective(
-                        c, parts, cache, predict, scores, global_scores, session.device))
+                        c, parts, cache, predict, scores, global_scores, session.device, attempt=progress.attempts, rank=rank))
                     if c.algorithm.name == "diffusionart":
                         active = session.local("scalar ART activity", lambda: torch.tensor(
                             int(loss_fn.has_training_signal), dtype=torch.int32, device=session.device))

@@ -24,7 +24,35 @@ fixture exercises orchestration and real FFmpeg, not native model execution.
 Use [native video setup](video-installation.md) for the pinned environment and
 asset preparation commands.
 
-## Scientific Contract
+## Single-node HunyuanVideo LoRA
+
+These recipes follow the [UniRL HunyuanVideo 1.0 ART configuration](https://github.com/vanzll/UniRL/blob/8db96cd/examples/diffusion/hunyuan_video10/hunyuan_video10_t2v_art_trainside.yaml). Each rollout generates 5 frames at 1280×720 for 8 prompts with 8 independent samples per prompt. All three use 10 denoising transitions, shift 5, guidance 1, rank-64 LoRA (alpha 256), AdamW at 3e-4 and rollout/update microbatch 1 per GPU. PickScore scores the **first decoded frame** against its prompt, with a fixed divisor of 26. This metric measures image–text preference on that frame.
+
+| Recipe | Update samples from each trajectory | Optimizer updates per rollout | Default budget |
+|---|---|---:|---:|
+| [DiffusionART](../configs/examples/hunyuan_art_lora_8gpu.yaml) | All 10 ODE transitions. Each prompt contributes four trajectories to each update. Both updates reuse frozen rollout velocities and full-group guidance. | 2 | 100 rollouts |
+| [DiffusionNFT](../configs/examples/hunyuan_nft_lora_8gpu.yaml) | Re-noise the endpoint at all 10 training noise levels. The old policy follows the native slow EMA. | 1 | 100 rollouts |
+| [Flow-GRPO-Fast](../configs/examples/hunyuan_fast_lora_8gpu.yaml) | Sample two SDE transitions from the first six, with noise level 0.8. The remaining rollout transitions use the ODE. | 2 | 100 rollouts |
+
+Install the [native CUDA environment](video-installation.md) and select one recipe per job.
+
+```bash
+export VENV="$HOME/envs/visual-rl-hunyuan"
+bash scripts/install_video_environment.sh hunyuan "$VENV"
+source "$VENV/bin/activate"
+export DANCEGRPO_ROOT="$VENV/third_party/DanceGRPO"
+
+visual-rl --config configs/examples/hunyuan_art_lora_8gpu.yaml --nproc-per-node 8
+# Or choose one of the baselines:
+# visual-rl --config configs/examples/hunyuan_nft_lora_8gpu.yaml --nproc-per-node 8
+# visual-rl --config configs/examples/hunyuan_fast_lora_8gpu.yaml --nproc-per-node 8
+```
+
+The three jobs share pinned model assets and cached training prompts. Set `VISUAL_RL_ASSET_ROOT` to a persistent volume before the first launch. Preparing the 25,432 text conditions uses approximately 50 GiB for embeddings alone. Allow enough host RAM for the eight processes to load the frozen transformer before sharding (approximately 191 GiB combined for BF16 base weights alone). The native backend caches FP16 text embeddings. ART keeps its trajectory in BF16 at each ODE step and uses continuous model timesteps.
+
+Each recipe has its own output directory, logs training rewards locally, disables scheduled evaluation and checkpoints every 25 rollouts. Append `--resume latest` to the same eight-rank launch to restore adapters, optimizer state and NFT's EMA where applicable.
+
+## Full-parameter VideoReward recipes
 
 - FP32 policy parameters with BF16 autocast; FP32-only execution is rejected
   because native conditioning and attention require the mixed-precision path.

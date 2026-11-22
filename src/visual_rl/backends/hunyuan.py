@@ -20,7 +20,7 @@ from ..algorithms import art_loss, art_scalar_covariance, clipped_grpo_loss
 from ..config import ConfigError
 from ..data import PromptDataset, PromptStream
 from ..evaluation import SampleRecord
-from ..evaluation.video import encode_video
+from ..evaluation.video import encode_video, quantize_rgb
 from ..models.base import checked_vae_decode
 from ..models.finetune import FineTuneConfig, parameter_inventory
 from ..models.hunyuan import HunyuanVideoConditioning
@@ -51,17 +51,49 @@ def validate_config(c, *, model_name="hunyuan_public", task="t2v", extra_model_k
     if c.training.allow_tf32 is not None:
         raise ConfigError("native video uses model.options.allow_tf32, not training.allow_tf32")
     if (c.task != task or c.model.name != model_name or c.algorithm.name not in ("diffusionart", "diffusionnft", "refl", *VIDEO_GRPO)
-            or c.reward.name != "video_reward" or c.runtime.distributed not in ("none", "fsdp")
+            or c.runtime.distributed not in ("none", "fsdp")
             or c.training.precision != "bf16"):
-        raise ConfigError("native Hunyuan integrates ART/NFT/ReFL/Fast-SDE/Dance T2V with VideoReward and BF16 autocast")
+        raise ConfigError("native Hunyuan integrates ART/NFT/ReFL/Fast-SDE/Dance T2V with BF16 autocast")
     if not c.data or not c.model.checkpoint or not c.model.revision or not c.reward.checkpoint or not c.reward.revision:
         raise ConfigError("explicit model/reward identities and hashed prompt data are required")
-    if set(c.model.options) != {"native_root", "finetune", "gradient_checkpointing", "ffmpeg", "ffprobe", "allow_tf32", *extra_model_keys}:
+    optional_model_keys = set()
+    if model_name == "hunyuan_public":
+        optional_model_keys = {"embedded_guidance_raw", "continuous_timesteps"} & c.model.options.keys()
+        guidance = c.model.options.get("embedded_guidance_raw", 6018.0)
+        if type(guidance) not in (int, float) or not math.isfinite(guidance) or guidance < 0:
+            raise ConfigError("embedded_guidance_raw must be finite and nonnegative")
+        if type(c.model.options.get("continuous_timesteps", False)) is not bool:
+            raise ConfigError("continuous_timesteps must be boolean")
+    if set(c.model.options) != {*optional_model_keys, "native_root", "finetune", "gradient_checkpointing", "ffmpeg", "ffprobe", "allow_tf32", *extra_model_keys}:
         raise ConfigError("Hunyuan requires native_root, finetune, gradient_checkpointing, ffmpeg, ffprobe, allow_tf32")
-    if set(c.reward.options) != {"backbone"} or set(c.reward.weights) != {"VQ", "MQ", "TA"}:
+    if c.reward.name == "pickscore":
+        from ..rewards.image_factory import validate_image_reward
+
+        if (c.model.name != "hunyuan_public" or video_pairwise.enabled(c)
+                or c.algorithm.name not in ("diffusionart", "diffusionnft", "flow_grpo_fast")):
+            raise ConfigError("first-frame PickScore supports Hunyuan scalar ART, NFT and Fast")
+        validate_image_reward(c.reward)
+        if (c.reward.normalization != "fixed" or c.reward.options["microbatch"] != 8
+                or set(c.reward.options) != {"processor", "processor_revision", "microbatch"}):
+            raise ConfigError("first-frame PickScore requires fixed normalization and only "
+                              "processor, processor_revision and microbatch=8")
+    elif (c.reward.name != "video_reward" or set(c.reward.options) != {"backbone"}
+          or set(c.reward.weights) != {"VQ", "MQ", "TA"}):
         raise ConfigError("VideoReward requires backbone and explicit VQ/MQ/TA weights")
     if c.algorithm.name == "diffusionart":
         allowed = {"covariance", "loss", "restore_zero_signal"}
+        if model_name == "hunyuan_public" and "old_velocity_source" in c.algorithm.options:
+            allowed.add("old_velocity_source")
+            if c.algorithm.options["old_velocity_source"] not in ("ode_mean", "rollout"):
+                raise ConfigError("old_velocity_source must be ode_mean or rollout")
+        if model_name == "hunyuan_public" and "shuffle_updates" in c.algorithm.options:
+            allowed.add("shuffle_updates")
+            if type(c.algorithm.options["shuffle_updates"]) is not bool or video_pairwise.enabled(c):
+                raise ConfigError("shuffle_updates requires scalar ART and a boolean value")
+        if model_name == "hunyuan_public" and "trajectory_dtype" in c.algorithm.options:
+            allowed.add("trajectory_dtype")
+            if c.algorithm.options["trajectory_dtype"] != "bf16":
+                raise ConfigError("explicit ART trajectory_dtype must be bf16")
         if video_pairwise.enabled(c):
             allowed.add("pairwise")
         if set(c.algorithm.options) != allowed:
@@ -71,9 +103,10 @@ def validate_config(c, *, model_name="hunyuan_public", task="t2v", extra_model_k
         if video_pairwise.enabled(c):
             video_pairwise.validate_options(c)
         else:
+            zero_modes = ("exact", "source_precision") if model_name == "hunyuan_public" else ("exact",)
             if (not isinstance(c.algorithm.options["covariance"], dict)
-                    or c.algorithm.options["covariance"].get("zero_signal_mode", "exact") != "exact"):
-                raise ConfigError("scalar ART requires exact zero-signal protection")
+                    or c.algorithm.options["covariance"].get("zero_signal_mode", "exact") not in zero_modes):
+                raise ConfigError("scalar ART requires exact or source-precision zero-signal protection")
     elif c.algorithm.name == "diffusionnft":
         video_nft.validate_options(c)
     elif c.algorithm.name == "refl":
@@ -96,9 +129,11 @@ def validate_config(c, *, model_name="hunyuan_public", task="t2v", extra_model_k
     if any(type(c.model.options[key]) is not bool for key in ("gradient_checkpointing", "allow_tf32")):
         raise ConfigError("gradient_checkpointing and allow_tf32 must be boolean")
     if c.sampling.guidance_scale != 1:
-        raise ConfigError("public Hunyuan uses embedded guidance 6018 and no external CFG")
+        raise ConfigError("native video uses embedded guidance and requires external guidance_scale=1")
     if c.runtime.distributed == "fsdp" and c.model.options["finetune"].get("mode") != "full":
-        raise ConfigError("native Hunyuan FSDP requires full-weight training")
+        if (model_name != "hunyuan_public" or video_pairwise.enabled(c)
+                or c.algorithm.name not in ("diffusionart", "diffusionnft", "flow_grpo_fast")):
+            raise ConfigError("native video FSDP LoRA supports Hunyuan scalar ART, NFT and Fast")
     updates = updates_per_rollout(c)
     if ((c.algorithm.name != "refl" and c.sampling.samples_per_prompt < 2)
             or c.sampling.prompts_per_rollout * c.sampling.samples_per_prompt % updates):
@@ -112,7 +147,8 @@ def validate_config(c, *, model_name="hunyuan_public", task="t2v", extra_model_k
         if value % 16:
             raise ConfigError("Hunyuan dimensions must divide by 16; no implicit codec resizing")
     pool, count = c.sampling.options["train_timestep_pool"], c.sampling.options["train_timestep_count"]
-    stop = c.sampling.steps if c.algorithm.name in ("diffusionnft", "refl") else c.sampling.steps - 1
+    terminal_ode = model_name == "hunyuan_public" and c.algorithm.name == "diffusionart" and not video_pairwise.enabled(c)
+    stop = c.sampling.steps if terminal_ode or c.algorithm.name in ("diffusionnft", "refl") else c.sampling.steps - 1
     if (not isinstance(pool, list) or not pool or pool != sorted(set(pool))
             or any(type(i) is not int or not 0 <= i < stop for i in pool)
             or type(count) is not int or not 1 <= count <= len(pool)):
@@ -234,50 +270,75 @@ def collect_training(c, parts, predict, plan, sigmas, device):
         return video_nft.collect(predict, plan, sigmas, microbatch=c.sampling.microbatch, device=device)
     noise, selected, _ = plan
     return collect_rollout(predict, noise.to(device), sigmas, selected=selected[0].tolist(),
-                           row_selected=selected, microbatch=c.sampling.microbatch)
+                           row_selected=selected, microbatch=c.sampling.microbatch,
+                           preserve_state_dtype=c.algorithm.options.get("trajectory_dtype") == "bf16")
 
 
-def prepare_objective(c, parts, cache, predict, scores, global_scores, device):
+def prepare_objective(c, parts, cache, predict, scores, global_scores, device, *, attempt=0, rank=0):
     parts.adapter.transformer.train(c.algorithm.name != "flow_grpo_fast")
     if c.algorithm.name in VIDEO_GRPO:
         return video_grpo.prepare_objective(c, cache, predict, scores, global_scores, device)
     k = c.sampling.samples_per_prompt
     count = len(cache.endpoints)
     groups = torch.arange(count) // k
-    covariance = art_scalar_covariance(cache.endpoints, scores.weighted, groups, count // k,
+    endpoints = cache.endpoints
+    if c.algorithm.options.get("trajectory_dtype") == "bf16":
+        # The rollout cache holds losslessly upcast BF16 endpoints. Pass their
+        # native precision to the covariance cancellation check.
+        endpoints = endpoints.to(torch.bfloat16)
+    covariance = art_scalar_covariance(endpoints, scores.weighted, groups, count // k,
         **{"zero_signal_mode": "exact", **c.algorithm.options["covariance"]})
     anchors = (~covariance["group_active"][groups] if c.algorithm.options["restore_zero_signal"]
                else torch.zeros(count, dtype=torch.bool))
     objective = ARTObjective(cache, predict, covariance["group_directions"][groups],
         covariance["group_guidance_magnitudes"][groups], anchors, device,
-        options=c.algorithm.options["loss"], reconstruct_old_from_mean=True)
-    return objective, prompt_disjoint_windows(groups, len(cache.selected))
+        options=c.algorithm.options["loss"],
+        reconstruct_old_from_mean=c.algorithm.options.get("old_velocity_source", "ode_mean") == "ode_mean")
+    order = None
+    if c.algorithm.options.get("shuffle_updates"):
+        generator = torch.Generator().manual_seed((c.seed + 2_000_033 * attempt + 20_011 * rank) % (2**63 - 1))
+        order = torch.randperm(count, generator=generator).tolist()
+    return objective, prompt_disjoint_windows(groups, len(cache.selected), order=order)
 
 
 @torch.no_grad()
 def score_videos(c, parts, endpoints, prompts, directory, device, *, evaluation=False, decode_bf16=True):
     directory.mkdir(parents=True, exist_ok=False)
-    paths = []
+    pickscore = c.reward.name == "pickscore"
+    if pickscore:
+        from PIL import Image
+
+    paths, first_frames = [], []
     vae = parts.adapter.vae
+    # UniRL decodes Hunyuan PickScore inputs in FP32. The native adapter loads FP32 VAE weights.
+    autocast_vae = decode_bf16 and not pickscore and c.training.precision == "bf16"
     try:
         vae.to(device).eval()
         for index, endpoint in enumerate(endpoints):
-            with torch.autocast(device.type, dtype=torch.bfloat16, enabled=decode_bf16 and c.training.precision == "bf16"):
+            with torch.autocast(device.type, dtype=torch.bfloat16, enabled=autocast_vae):
                 raw = parts.adapter.to_vae_latents(endpoint[None].to(device))
                 decoded = checked_vae_decode(vae, raw).clamp(-1, 1)
             expected = _shape(c, 1, evaluation=evaluation)
             if decoded.shape != (1, 3, c.sampling.frames, expected[-2] * 8, expected[-1] * 8):
                 raise ValueError("VAE output differs from configured video geometry")
-            paths.append(encode_video(decoded[0].permute(1, 0, 2, 3), directory / f"{index:06d}.mp4",
-                fps=c.sampling.fps, ffmpeg=c.model.options["ffmpeg"], ffprobe=c.model.options["ffprobe"]))
-            del raw, decoded
+            frames = decoded[0].permute(1, 0, 2, 3)
+            if pickscore:
+                # UniRL's tensor_frame_to_pil truncates RGB bytes before CLIP preprocessing.
+                first_frames.append(Image.fromarray(quantize_rgb(frames[:1])[0].numpy()))
+            if evaluation or not pickscore:
+                paths.append(encode_video(frames, directory / f"{index:06d}.mp4", fps=c.sampling.fps,
+                    ffmpeg=c.model.options["ffmpeg"], ffprobe=c.model.options["ffprobe"]))
+            del raw, decoded, frames
     finally:
         vae.to("cpu")
         if device.type == "cuda":
             torch.cuda.empty_cache()
     try:
         parts.scorer.to(device).eval()
-        scores = parts.scorer.score_paths(paths, prompts)
+        if pickscore:
+            scores = parts.scorer(first_frames, prompts, microbatch=c.reward.options["microbatch"])
+        else:
+            scores = parts.scorer.score_paths(paths, prompts)
     finally:
         parts.scorer.to("cpu")
         if device.type == "cuda":
@@ -424,7 +485,8 @@ def run(c, *, resume=None, backend=None, resume_rewind=False, evaluate_only=Fals
                             no_signal.skipped()
                             continue
                     else:
-                        objective, windows = backend.prepare_objective(c, parts, cache, predict, scores, scores, device)
+                        objective, windows = backend.prepare_objective(
+                            c, parts, cache, predict, scores, scores, device, attempt=progress.attempts)
                         if c.algorithm.name == "diffusionart" and not objective.has_training_signal:
                             metrics = {**_reward_metrics(scores, "train"), **clock.metrics(),
                                        "system/skipped_zero_guidance": 1}

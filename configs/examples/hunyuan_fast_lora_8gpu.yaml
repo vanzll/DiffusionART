@@ -1,0 +1,14 @@
+extends: hunyuan_art_lora_8gpu.yaml
+name: hunyuan-fast-lora-8gpu
+algorithm:
+  name: flow_grpo_fast
+  options:
+    loss: {ratio_clip: 0.00001, advantage_clip: 5.0}
+    advantage_epsilon: 0.0001
+sampling:
+  options:
+    train_timestep_count: 2
+    train_timestep_pool: [0, 1, 2, 3, 4, 5]
+    noise_level: 0.8
+runtime:
+  output_dir: outputs/hunyuan-fast-lora-8gpu

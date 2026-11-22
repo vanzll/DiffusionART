@@ -128,6 +128,42 @@ def test_exact_zero_for_different_constants_and_cancelled_covariance():
     assert not result["group_directions"].any()
 
 
+def test_source_precision_keeps_tiny_correlated_signal_and_complete_group_statistics():
+    # The cross-moment squared underflows in FP32, yet its correlation is one.
+    tiny = torch.tensor(1e-25, dtype=torch.bfloat16)
+    x = torch.tensor([[0., 0.], [3., 4.], [tiny, -tiny], [3., 4.]], dtype=torch.bfloat16)
+    r = leaf([0., 0.7, 1e-10, 0.8])
+    result = art_scalar_covariance(x, r, torch.tensor([0, 1, 0, 1]), 3,
+                                   zero_signal_mode="source_precision", direction_mode="normalized_aggregate")
+    assert result["group_active"].tolist() == [True, False, False]
+    torch.testing.assert_close(result["group_directions"], torch.tensor([[1., -1.], [0., 0.], [0., 0.]]))
+    torch.testing.assert_close(result["group_counts"], torch.tensor([2., 2., 0.]))
+    torch.testing.assert_close(result["group_guidance_magnitudes"], torch.tensor([1., 0., 0.]))
+    torch.testing.assert_close(result["group_covariance"][0], torch.tensor([1., -1.]) * (tiny.float() * r[2] / 2),
+                               rtol=1e-6, atol=0)
+    torch.testing.assert_close(result["group_reward_stds"], torch.tensor([5e-11, 0.05, 0.]), atol=0, rtol=1e-6)
+    assert all(v.dtype == torch.float32 and not v.requires_grad for k, v in result.items() if k != "group_active")
+
+
+def test_source_precision_gates_cancelled_covariance_at_original_input_precision():
+    x = torch.tensor([[1025.], [1025.], [-1.], [-1.]], dtype=torch.bfloat16)
+    # The two pairs almost cancel: the residual correlation is below BF16
+    # precision but above FP32 precision for exactly the same stored values.
+    r = torch.tensor([1., -1., 1., -1. + 1 / 1024])
+    groups = torch.zeros(4, dtype=torch.long)
+    opts = dict(zero_signal_mode="source_precision", direction_mode="normalized_aggregate")
+    bf16 = art_scalar_covariance(x, r, groups, 1, **opts)
+    fp32 = art_scalar_covariance(x.float(), r, groups, 1, **opts)
+    torch.testing.assert_close(bf16["group_covariance"], fp32["group_covariance"])
+    assert fp32["group_active"].item() and not bf16["group_active"].item()
+    assert fp32["group_directions"].item() == -1.
+    assert bf16["group_directions"].item() == bf16["group_guidance_magnitudes"].item() == 0.
+    cancelled = art_scalar_covariance(x, torch.tensor([1., -1., 1., -1.]), groups, 1, **opts)
+    assert not cancelled["group_active"].item() and not cancelled["group_covariance"].any()
+    with pytest.raises(ValueError, match="normalized_aggregate"):
+        art_scalar_covariance(x, r, groups, 1, zero_signal_mode="source_precision")
+
+
 def test_pairwise_ties_rng_offsets_and_global_anchor():
     x = torch.tensor([[1.0], [3.0], [0.0], [2.0]])
     scores = leaf([2, 2, 0, 9])

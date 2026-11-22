@@ -26,6 +26,7 @@ class HunyuanVideoConfig:
     timestep_scale: float = 1000.0
     embedded_guidance_raw: float = 6018.0
     guidance_dtype: torch.dtype = torch.bfloat16
+    continuous_timesteps: bool = False
 
     def __post_init__(self):
         positive(self.scaling_factor, "scaling_factor")
@@ -66,7 +67,9 @@ class HunyuanVideoAdapter(VelocityAdapter):
             raise ValueError(
                 "native HY prompt must include one pooled token before the masked text tokens"
             )
-        t = (sigma_batch(sigma, latents) * self.config.timestep_scale).long()
+        t = sigma_batch(sigma, latents) * self.config.timestep_scale
+        if not self.config.continuous_timesteps:
+            t = t.long()
         guidance = torch.tensor(
             [self.config.embedded_guidance_raw],
             device=latents.device,

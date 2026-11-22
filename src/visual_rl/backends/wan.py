@@ -162,7 +162,7 @@ def collect_training(c, parts, predict, plan, sigmas, device):
     return wan_video.collect(c.algorithm.name, predict, plan, sigmas, microbatch=c.sampling.microbatch, device=device)
 
 
-def prepare_objective(c, parts, cache, predict, scores, global_scores, device):
+def prepare_objective(c, parts, cache, predict, scores, global_scores, device, *, attempt=0, rank=0):
     if c.algorithm.name in ("flow_grpo_fast", "dancegrpo"):
         result = wan_video.prepare_grpo(c, cache, predict, scores, global_scores, device)
     else:

@@ -15,10 +15,9 @@ from types import SimpleNamespace
 from weakref import WeakSet
 
 import torch
-from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
-from torch.distributed.fsdp._runtime_utils import _reshard
 
 from .fsdp_checkpoint import _FSDPGroup, _layout
+from .sharding import reshard_local_parameters
 
 _ACTIVE_MODELS = WeakSet()
 
@@ -37,8 +36,8 @@ class FSDPPolicyShadow:
         self._group = _FSDPGroup(model)
         self._check_idle()
         self._metadata()  # Validate the supported FSDP configuration before mutation.
-        self._reshard()
-        self._parameters = dict(model.named_parameters())
+        reshard_local_parameters(self.model)
+        self._parameters = {name: p for name, p in model.named_parameters() if p.requires_grad}
         if not self._parameters:
             raise ValueError("policy shadow requires parameters")
         self._layout = self._metadata()
@@ -60,18 +59,10 @@ class FSDPPolicyShadow:
         if any(p.grad is not None for p in self.model.parameters()):
             raise RuntimeError("policy shadow requires cleared gradients")
 
-    def _reshard(self):
-        # Root no-grad forwards retain gathered weights. Merely copying local
-        # shards leaves the next forward using that stale policy unless freed.
-        for module in FSDP.fsdp_modules(self.model):
-            handle = module._handle
-            if handle is not None and hasattr(handle.flat_param, "_local_shard"):
-                _reshard(module, handle, True)
-
     def _prepare(self):
         self._check_gradients()
-        self._reshard()
-        live = dict(self.model.named_parameters())
+        reshard_local_parameters(self.model)
+        live = {name: p for name, p in self.model.named_parameters() if p.requires_grad}
         if (live.keys() != self._parameters.keys()
                 or any(live[name] is not p for name, p in self._parameters.items())
                 or self._metadata() != self._layout):

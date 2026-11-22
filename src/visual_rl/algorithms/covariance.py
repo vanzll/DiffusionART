@@ -5,6 +5,37 @@ import torch
 from ._validation import batch, scalar
 
 
+def _source_precision_moments(x, rewards, groups, group_count, storage_eps):
+    """Center one complete group at a time, keeping only its FP64 samples resident."""
+    numerator = x.new_zeros((group_count, x.shape[1]), dtype=torch.float64)
+    means = numerator.new_zeros(group_count)
+    stds = torch.zeros_like(means)
+    mad = torch.zeros_like(means)
+    resolved = means.new_zeros(group_count, dtype=torch.bool)
+    for group in range(group_count):
+        rows = torch.where(groups == group)[0]
+        if not len(rows):
+            continue
+        values = x[rows].double()
+        labels = rewards[rows].double()
+        means[group] = labels.mean()
+        labels.sub_(means[group])
+        values.sub_(values.mean(0))
+        numerator[group] = (values * labels[:, None]).sum(0)
+        reward_energy = labels.square().sum()
+        endpoint_energy = values.square_().sum()
+        mad[group] = labels.abs().mean()
+        stds[group] = (reward_energy / len(rows)).sqrt()
+
+        # Cauchy-Schwarz bounds the RMS cross-moment by the product of the
+        # within-group spreads. The source dtype limits resolvable correlation.
+        rms = numerator[group].square().mean().sqrt()
+        bound = (endpoint_energy / x.shape[1] * reward_energy).sqrt()
+        tolerance = max(storage_eps, (len(rows) + 4) * torch.finfo(torch.float64).eps)
+        resolved[group] = rms > tolerance * bound
+    return means, stds, mad, numerator, resolved
+
+
 @torch.no_grad()
 def art_scalar_covariance(
     endpoints: torch.Tensor,
@@ -28,6 +59,8 @@ def art_scalar_covariance(
     ``exact`` clears roundoff from exactly constant rewards without a cutoff.
     ``threshold`` zero handling explicitly gates raw covariance and reward range;
     it is not silently applied to the historical fp32 computation.
+    ``source_precision`` centers both inputs in FP64 and gates the aggregate
+    relative to its Cauchy-Schwarz bound at the original input precision.
     """
     batch(endpoints, "endpoints")
     eps = scalar(eps, "eps", positive=True)
@@ -37,12 +70,14 @@ def art_scalar_covariance(
         raise ValueError("reduction must be unbiased or population")
     if direction_mode not in ("historical", "normalized_aggregate"):
         raise ValueError("unknown direction_mode")
-    if zero_signal_mode not in ("historical", "exact", "threshold"):
+    if zero_signal_mode not in ("historical", "exact", "threshold", "source_precision"):
         raise ValueError("unknown zero_signal_mode")
-    if (zero_signal_mode in ("historical", "exact") and atol != 0) or (
+    if zero_signal_mode == "source_precision" and direction_mode != "normalized_aggregate":
+        raise ValueError("source_precision requires normalized_aggregate directions")
+    if (zero_signal_mode != "threshold" and atol != 0) or (
         zero_signal_mode == "threshold" and atol <= 0
     ):
-        raise ValueError("threshold mode requires positive atol; historical/exact require zero")
+        raise ValueError("threshold mode requires positive atol; other modes require zero")
     if scale_mode not in (
         "reward_mad",
         "raw_covariance",
@@ -64,21 +99,27 @@ def art_scalar_covariance(
     if not torch.isfinite(x).all() or not torch.isfinite(r).all():
         raise ValueError("endpoints and rewards must be finite")
     counts = torch.bincount(groups, minlength=group_count).float()
-    sums = x.new_zeros(group_count).index_add_(0, groups, r)
-    square_sums = x.new_zeros(group_count).index_add_(0, groups, r.square())
-    means = sums / counts.clamp_min(1)
-    stds = (square_sums / counts.clamp_min(1) - means.square()).clamp_min(0).sqrt()
-    centered = r - means[groups]
-    if zero_signal_mode == "exact":
-        maxima = r.new_full((group_count,), -torch.inf).scatter_reduce_(0, groups, r, reduce="amax")
-        minima = r.new_full((group_count,), torch.inf).scatter_reduce_(0, groups, r, reduce="amin")
-        constant = maxima == minima
-        # Summing identical FP32 rewards can round their mean away from the reward.
-        centered = torch.where(constant[groups], 0.0, centered)
-        means = torch.where(constant, maxima, means)
-        stds = torch.where(constant, 0.0, stds)
-    mad = x.new_zeros(group_count).index_add_(0, groups, centered.abs()) / counts.clamp_min(1)
-    numerator = x.new_zeros(group_count, x.shape[1]).index_add_(0, groups, centered[:, None] * x)
+    if zero_signal_mode == "source_precision":
+        storage_eps = max(torch.finfo(t.dtype).eps for t in (endpoints, rewards, x) if t.is_floating_point())
+        means, stds, mad, numerator, resolved = _source_precision_moments(
+            x, r, groups, group_count, storage_eps
+        )
+    else:
+        sums = x.new_zeros(group_count).index_add_(0, groups, r)
+        square_sums = x.new_zeros(group_count).index_add_(0, groups, r.square())
+        means = sums / counts.clamp_min(1)
+        stds = (square_sums / counts.clamp_min(1) - means.square()).clamp_min(0).sqrt()
+        centered = r - means[groups]
+        if zero_signal_mode == "exact":
+            maxima = r.new_full((group_count,), -torch.inf).scatter_reduce_(0, groups, r, reduce="amax")
+            minima = r.new_full((group_count,), torch.inf).scatter_reduce_(0, groups, r, reduce="amin")
+            constant = maxima == minima
+            # Summing identical FP32 rewards can round their mean away from the reward.
+            centered = torch.where(constant[groups], 0.0, centered)
+            means = torch.where(constant, maxima, means)
+            stds = torch.where(constant, 0.0, stds)
+        mad = x.new_zeros(group_count).index_add_(0, groups, centered.abs()) / counts.clamp_min(1)
+        numerator = x.new_zeros(group_count, x.shape[1]).index_add_(0, groups, centered[:, None] * x)
     denominator = (counts - int(reduction == "unbiased")).clamp_min(1)
     covariance = numerator / denominator[:, None]
     covariance = torch.where((counts > 1)[:, None], covariance, 0.0)
@@ -89,10 +130,13 @@ def art_scalar_covariance(
         "reward_std_normalized_covariance": rms / (stds + eps),
         "unit_normalized_covariance": torch.ones_like(rms),
     }[scale_mode] * gain
-    signal = covariance / torch.where(mad > 0, mad, 1.0)[:, None]
-    signal_rms = signal.square().mean(1).sqrt()
-    active = (counts > 1) & (mad > 0) & (signal_rms > 0) & (magnitudes > 0)
-    if zero_signal_mode == "exact":
+    if zero_signal_mode == "source_precision":
+        active = (counts > 1) & resolved & (magnitudes > 0)
+    else:
+        signal = covariance / torch.where(mad > 0, mad, 1.0)[:, None]
+        signal_rms = signal.square().mean(1).sqrt()
+        active = (counts > 1) & (mad > 0) & (signal_rms > 0) & (magnitudes > 0)
+    if zero_signal_mode in ("exact", "source_precision"):
         magnitudes = torch.where(active, magnitudes, 0.0)
     if zero_signal_mode == "threshold":
         maxima = r.new_full((group_count,), -torch.inf).scatter_reduce_(0, groups, r, reduce="amax")
@@ -103,20 +147,20 @@ def art_scalar_covariance(
         directions = signal / signal_rms.clamp_min(eps)[:, None]
     else:
         # Float64 norm avoids underflow for tiny but nonzero aggregates.
-        norm = covariance.double().square().mean(1).sqrt()
+        norm = rms if zero_signal_mode == "source_precision" else covariance.double().square().mean(1).sqrt()
         directions = (covariance.double() / torch.where(norm > 0, norm, 1.0)[:, None]).float()
     directions = torch.where(active[:, None], directions, 0.0)
     shape = (group_count, *endpoints.shape[1:])
     return {
-        "group_covariance": covariance.reshape(shape),
+        "group_covariance": covariance.reshape(shape).float(),
         "group_directions": directions.reshape(shape),
-        "group_guidance_magnitudes": magnitudes,
+        "group_guidance_magnitudes": magnitudes.float(),
         "group_active": active,
         "group_counts": counts,
-        "group_reward_means": means,
-        "group_reward_stds": stds,
-        "group_reward_abs_means": mad,
-        "group_covariance_rms": rms,
+        "group_reward_means": means.float(),
+        "group_reward_stds": stds.float(),
+        "group_reward_abs_means": mad.float(),
+        "group_covariance_rms": rms.float(),
     }
 
 

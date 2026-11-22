@@ -47,11 +47,12 @@ def test_checked_native_decode_preserves_finite_values_gradients_and_hook_cleanu
 
 
 @pytest.mark.parametrize("broken", [float("inf"), float("-inf")])
-def test_native_video_scoring_rejects_invalid_pixels_before_codec(tmp_path, monkeypatch, broken):
+@pytest.mark.parametrize("reward", ["video_reward", "pickscore"])
+def test_native_video_scoring_rejects_invalid_pixels_before_codec(tmp_path, monkeypatch, broken, reward):
     vae = ClippingVAE()
     corrupt = vae.decoder.register_forward_hook(lambda *args: torch.full((1, 3, 1, 2, 2), broken))
     parts = SimpleNamespace(adapter=SimpleNamespace(vae=vae, to_vae_latents=lambda x: x))
-    config = SimpleNamespace(training=SimpleNamespace(precision="fp32"))
+    config = SimpleNamespace(training=SimpleNamespace(precision="fp32"), reward=SimpleNamespace(name=reward))
     from visual_rl.backends import hunyuan
 
     monkeypatch.setattr(hunyuan, "encode_video", lambda *args, **kwargs: pytest.fail("invalid pixels reached codec"))

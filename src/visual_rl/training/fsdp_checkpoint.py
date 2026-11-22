@@ -5,7 +5,8 @@ and shard metadata. Dense local shards are copied to CPU for serialization;
 native ShardedTensor CPU offload is deliberately avoided. The ordinary optimizer
 state_dict is already rank-local
 with use_orig_params=False. Neither path gathers model or optimizer weights.
-Caller-owned stateful components must likewise be local/shard-aware; this API
+LoRA stores only dense local trainable shards and verifies the loaded frozen
+base by content digest. Caller-owned stateful components must likewise be local/shard-aware; this API
 does not turn a full-model EMA into a sharded EMA.
 
 Native FSDP phases are collective and failures are terminal: the caller must
@@ -16,6 +17,7 @@ Only rank-local IO/validation/component callbacks use coordinated error voting.
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 from pathlib import Path
 
@@ -39,10 +41,12 @@ from .checkpoint import _atomic_json, _digest, restore_rng, rng_state
 from .checkpoint_retention import enqueue_retention, validate_keep_last
 from .distributed_checkpoint import DistributedCheckpointError as DistributedCheckpointError
 from .distributed_checkpoint import _Group, _write
+from .sharding import reshard_local_parameters
 from .state import Progress
 
 _COUNTS = ("attempts", "completed_rollouts", "optimizer_steps")
 _MODEL_FORMAT = "cpu-local-shards-v1"
+_LORA_FORMAT = "cpu-local-lora-shards-v1"
 
 
 def _shard_getattr(owner, name):
@@ -81,6 +85,7 @@ def _layout(model, optimizer, group):
     exposes no public original-parameter layout query with use_orig_params=False,
     so this deliberately version-locked format also checks its layout metadata.
     """
+    lora = getattr(model, "_visual_rl_lora_shards", False)
     units = []
     for name, module in model.named_modules():
         if not isinstance(module, FSDP):
@@ -90,8 +95,10 @@ def _layout(model, optimizer, group):
                 or module._device_mesh is not None):
             raise ValueError("requires FULL_SHARD, use_orig_params=False, one process group, no device mesh")
         flat = module._handle.flat_param if module._handle is not None else None
-        if flat is not None and flat.dtype != torch.float32:
-            raise ValueError("FSDP master parameters must be FP32")
+        if flat is not None:
+            expected = torch.bfloat16 if lora and not flat.requires_grad else torch.float32
+            if flat.dtype != expected:
+                raise ValueError(f"FSDP master parameters must be {expected}")
         mp = module.mixed_precision
         units.append({
             "name": name,
@@ -137,7 +144,41 @@ def _preflight(model, optimizer, progress, config, stateful, generators, group):
     for components in (stateful, generators):
         if not isinstance(components, dict) or any(not isinstance(k, str) or not k for k in components):
             raise ValueError("checkpoint component names must be nonempty strings")
+    if getattr(model, "_visual_rl_lora_shards", False):
+        optimized = {p for entry in optimizer.param_groups for p in entry["params"]}
+        if optimized != {p for p in model.parameters() if p.requires_grad}:
+            raise ValueError("LoRA optimizer must contain exactly the trainable shards")
+        reshard_local_parameters(model)
     return _layout(model, optimizer, group)
+
+
+def _frozen_digest(model):
+    # Same-topology LoRA checkpoints omit the base. Hash in bounded chunks to
+    # verify the supplied local weights, including when a path is reused.
+    digest = hashlib.sha256()
+    for name, p in model.named_parameters():
+        if not p.requires_grad:
+            digest.update(name.encode() + b"\0")
+            for chunk in p.detach().view(torch.uint8).split(8 << 20):
+                digest.update(memoryview(chunk.cpu().numpy()))
+    return digest.hexdigest()
+
+
+def _lora_shards(model):
+    return {name: p for name, p in model.named_parameters() if p.requires_grad}
+
+
+def _check_lora_model(saved, live, model):
+    if not isinstance(saved, dict) or saved.get("frozen_sha256") != _frozen_digest(model):
+        raise ValueError("checkpoint frozen base shard content differs")
+    values = saved.get("trainable")
+    if not isinstance(values, dict) or values.keys() != live.keys():
+        raise ValueError("checkpoint trainable shard names differ")
+    for name, target in live.items():
+        tensor = values[name]
+        if (not isinstance(tensor, torch.Tensor) or tensor.layout != torch.strided
+                or tensor.shape != target.shape or tensor.dtype != target.dtype):
+            raise ValueError(f"checkpoint trainable shard shape/dtype differs: {name}")
 
 
 def _local_state(model):
@@ -262,18 +303,25 @@ def save_fsdp_checkpoint(
         model, optimizer, progress, config_sha256, stateful, generators, group))
     root = group.local("root path", lambda: Path(root).absolute())
     counts = {key: progress.state_dict()[key] for key in _COUNTS}
+    lora = getattr(model, "_visual_rl_lora_shards", False)
     identity = {"schema_version": 1, "kind": "fsdp-local", "config_sha256": config_sha256,
-                "model_format": _MODEL_FORMAT,
+                "model_format": _LORA_FORMAT if lora else _MODEL_FORMAT,
                 "layout": layout, "counts": counts, "stateful": sorted(stateful),
                 "generators": sorted(generators)}
     group.agree({"root": str(root), "keep_last": keep_last, **identity})
     directory = root / f"step-{progress.optimizer_steps:09d}-{group.token()}"
     group.local("directory creation", lambda: directory.mkdir(parents=True) if group.rank == 0 else None)
-    model_state = _local_state(model)
+    model_state = _lora_shards(model) if lora else _local_state(model)
 
     def write_rank():
+        if lora:
+            model_payload = {"frozen_sha256": _frozen_digest(model),
+                             "trainable": {name: p.detach().to("cpu", copy=True)
+                                           for name, p in model_state.items()}}
+        else:
+            model_payload = _pack_model(model_state)
         payload = {
-            **identity, "rank": group.rank, "model": _pack_model(model_state),
+            **identity, "rank": group.rank, "model": model_payload,
             "optimizer": optimizer.state_dict(), "progress": progress.state_dict(),
             # Includes nonpersistent buffers; mixed precision may have changed
             # their dtype since construction. Preserve the actual runtime state.
@@ -323,10 +371,13 @@ def load_fsdp_checkpoint(
     group.agree({"receipt": str(receipt), "layout": layout, "config": config_sha256,
                  "stateful": sorted(stateful), "generators": sorted(generators)})
 
+    lora = getattr(model, "_visual_rl_lora_shards", False)
+    formats = (_LORA_FORMAT,) if lora else (None, _MODEL_FORMAT)
+
     def read():
         manifest = json.loads(receipt.read_text())
         if (manifest.get("schema_version") != 1 or manifest.get("kind") != "fsdp-local"
-                or manifest.get("model_format") not in (None, _MODEL_FORMAT)
+                or manifest.get("model_format") not in formats
                 or manifest.get("config_sha256") != config_sha256 or manifest.get("layout") != layout
                 or manifest.get("stateful") != sorted(stateful)
                 or manifest.get("generators") != sorted(generators)
@@ -340,7 +391,7 @@ def load_fsdp_checkpoint(
         if (path.is_symlink() or not path.is_file() or path.stat().st_size != record.get("bytes")
                 or _digest(path) != record.get("sha256")):
             raise ValueError("checkpoint integrity check failed")
-        if manifest.get("model_format") == _MODEL_FORMAT:
+        if manifest.get("model_format") is not None:
             payload = torch.load(path, map_location="cpu", weights_only=True)
         else:
             with load_with_process_group(group.group), torch.serialization.safe_globals(_SHARD_TYPES):
@@ -371,21 +422,28 @@ def load_fsdp_checkpoint(
 
     manifest, payload, progress = group.local("integrity validation", read)
     group.agree(manifest)
-    live = _local_state(model)
-    if manifest.get("model_format") == _MODEL_FORMAT:
-        group.local("model validation", lambda live=live: _check_packed_model(payload["model"], live))
-        model_state = group.local("model staging", lambda live=live: _unpack_model(payload["model"], live))
+    if lora:
+        live = _lora_shards(model)
+        group.local("model validation", lambda: _check_lora_model(payload["model"], live, model))
+        with torch.no_grad():
+            for name, p in live.items():
+                p.copy_(payload["model"]["trainable"][name])
     else:
-        group.local("model validation", lambda live=live: _check_model(payload["model"], live))
-        model_state = payload["model"]
-    del live
+        live = _local_state(model)
+        if manifest.get("model_format") == _MODEL_FORMAT:
+            group.local("model validation", lambda live=live: _check_packed_model(payload["model"], live))
+            model_state = group.local("model staging", lambda live=live: _unpack_model(payload["model"], live))
+        else:
+            group.local("model validation", lambda live=live: _check_model(payload["model"], live))
+            model_state = payload["model"]
+        del live
 
-    # Keep native model hooks outside local error voting as well. The stock
-    # LOCAL load hook only selects/pads its local shard, but user model hooks
-    # may communicate. Any model-application failure is terminal.
-    with FSDP.state_dict_type(model, StateDictType.LOCAL_STATE_DICT,
-                              LocalStateDictConfig(offload_to_cpu=False)):
-        model.load_state_dict(model_state, strict=True)
+        # Keep native model hooks outside local error voting as well. The stock
+        # LOCAL load hook only selects/pads its local shard, but user model hooks
+        # may communicate. Any model-application failure is terminal.
+        with FSDP.state_dict_type(model, StateDictType.LOCAL_STATE_DICT,
+                                  LocalStateDictConfig(offload_to_cpu=False)):
+            model.load_state_dict(model_state, strict=True)
 
     def apply():
         optimizer.load_state_dict(payload["optimizer"])
