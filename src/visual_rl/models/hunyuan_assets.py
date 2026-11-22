@@ -97,6 +97,11 @@ def load_adapter(c, device):
 
 
 def load_reward(c):
+    if c.reward.name == "pickscore":
+        from ..rewards.image_factory import load_image_reward
+
+        return load_image_reward(c.reward, device="cpu")
+
     native_checkout(c.model.options["native_root"])
     from fastvideo.models.videoalign.inference import VideoVLMRewardInference
     from fastvideo.models.videoalign.prompt_template import build_prompt

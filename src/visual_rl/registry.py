@@ -89,7 +89,8 @@ register_backend(Backend(
 register_backend(Backend(
     name="hunyuan_public", tasks=frozenset({"t2v"}),
     distributed=frozenset({"none", "fsdp"}),
-    algorithms=frozenset({"diffusionart", "diffusionnft", "refl", "flow_grpo_fast", "dancegrpo"}), rewards=frozenset({"video_reward"}),
+    algorithms=frozenset({"diffusionart", "diffusionnft", "refl", "flow_grpo_fast", "dancegrpo"}),
+    rewards=frozenset({"video_reward", "pickscore"}),
     precisions=frozenset({"bf16"}),
     entrypoint="visual_rl.backends.hunyuan:run", config_validator="visual_rl.backends.hunyuan:validate_config",
     status="native single-device/FSDP ART/NFT/ReFL/Fast/Dance integration; paper/GPU acceptance pending",

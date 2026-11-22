@@ -20,7 +20,7 @@ from ..algorithms import art_loss, art_scalar_covariance, clipped_grpo_loss
 from ..config import ConfigError
 from ..data import PromptDataset, PromptStream
 from ..evaluation import SampleRecord
-from ..evaluation.video import encode_video
+from ..evaluation.video import encode_video, quantize_rgb
 from ..models.base import checked_vae_decode
 from ..models.finetune import FineTuneConfig, parameter_inventory
 from ..models.hunyuan import HunyuanVideoConditioning
@@ -51,9 +51,9 @@ def validate_config(c, *, model_name="hunyuan_public", task="t2v", extra_model_k
     if c.training.allow_tf32 is not None:
         raise ConfigError("native video uses model.options.allow_tf32, not training.allow_tf32")
     if (c.task != task or c.model.name != model_name or c.algorithm.name not in ("diffusionart", "diffusionnft", "refl", *VIDEO_GRPO)
-            or c.reward.name != "video_reward" or c.runtime.distributed not in ("none", "fsdp")
+            or c.runtime.distributed not in ("none", "fsdp")
             or c.training.precision != "bf16"):
-        raise ConfigError("native Hunyuan integrates ART/NFT/ReFL/Fast-SDE/Dance T2V with VideoReward and BF16 autocast")
+        raise ConfigError("native Hunyuan integrates ART/NFT/ReFL/Fast-SDE/Dance T2V with BF16 autocast")
     if not c.data or not c.model.checkpoint or not c.model.revision or not c.reward.checkpoint or not c.reward.revision:
         raise ConfigError("explicit model/reward identities and hashed prompt data are required")
     optional_model_keys = set()
@@ -66,7 +66,19 @@ def validate_config(c, *, model_name="hunyuan_public", task="t2v", extra_model_k
             raise ConfigError("continuous_timesteps must be boolean")
     if set(c.model.options) != {*optional_model_keys, "native_root", "finetune", "gradient_checkpointing", "ffmpeg", "ffprobe", "allow_tf32", *extra_model_keys}:
         raise ConfigError("Hunyuan requires native_root, finetune, gradient_checkpointing, ffmpeg, ffprobe, allow_tf32")
-    if set(c.reward.options) != {"backbone"} or set(c.reward.weights) != {"VQ", "MQ", "TA"}:
+    if c.reward.name == "pickscore":
+        from ..rewards.image_factory import validate_image_reward
+
+        if (c.model.name != "hunyuan_public" or video_pairwise.enabled(c)
+                or c.algorithm.name not in ("diffusionart", "diffusionnft", "flow_grpo_fast")):
+            raise ConfigError("first-frame PickScore supports Hunyuan scalar ART, NFT and Fast")
+        validate_image_reward(c.reward)
+        if (c.reward.normalization != "fixed" or c.reward.options["microbatch"] != 8
+                or set(c.reward.options) != {"processor", "processor_revision", "microbatch"}):
+            raise ConfigError("first-frame PickScore requires fixed normalization and only "
+                              "processor, processor_revision and microbatch=8")
+    elif (c.reward.name != "video_reward" or set(c.reward.options) != {"backbone"}
+          or set(c.reward.weights) != {"VQ", "MQ", "TA"}):
         raise ConfigError("VideoReward requires backbone and explicit VQ/MQ/TA weights")
     if c.algorithm.name == "diffusionart":
         allowed = {"covariance", "loss", "restore_zero_signal"}
@@ -271,27 +283,41 @@ def prepare_objective(c, parts, cache, predict, scores, global_scores, device):
 @torch.no_grad()
 def score_videos(c, parts, endpoints, prompts, directory, device, *, evaluation=False, decode_bf16=True):
     directory.mkdir(parents=True, exist_ok=False)
-    paths = []
+    pickscore = c.reward.name == "pickscore"
+    if pickscore:
+        from PIL import Image
+
+    paths, first_frames = [], []
     vae = parts.adapter.vae
+    # UniRL decodes Hunyuan PickScore inputs in FP32. The native adapter loads FP32 VAE weights.
+    autocast_vae = decode_bf16 and not pickscore and c.training.precision == "bf16"
     try:
         vae.to(device).eval()
         for index, endpoint in enumerate(endpoints):
-            with torch.autocast(device.type, dtype=torch.bfloat16, enabled=decode_bf16 and c.training.precision == "bf16"):
+            with torch.autocast(device.type, dtype=torch.bfloat16, enabled=autocast_vae):
                 raw = parts.adapter.to_vae_latents(endpoint[None].to(device))
                 decoded = checked_vae_decode(vae, raw).clamp(-1, 1)
             expected = _shape(c, 1, evaluation=evaluation)
             if decoded.shape != (1, 3, c.sampling.frames, expected[-2] * 8, expected[-1] * 8):
                 raise ValueError("VAE output differs from configured video geometry")
-            paths.append(encode_video(decoded[0].permute(1, 0, 2, 3), directory / f"{index:06d}.mp4",
-                fps=c.sampling.fps, ffmpeg=c.model.options["ffmpeg"], ffprobe=c.model.options["ffprobe"]))
-            del raw, decoded
+            frames = decoded[0].permute(1, 0, 2, 3)
+            if pickscore:
+                # UniRL's tensor_frame_to_pil truncates RGB bytes before CLIP preprocessing.
+                first_frames.append(Image.fromarray(quantize_rgb(frames[:1])[0].numpy()))
+            if evaluation or not pickscore:
+                paths.append(encode_video(frames, directory / f"{index:06d}.mp4", fps=c.sampling.fps,
+                    ffmpeg=c.model.options["ffmpeg"], ffprobe=c.model.options["ffprobe"]))
+            del raw, decoded, frames
     finally:
         vae.to("cpu")
         if device.type == "cuda":
             torch.cuda.empty_cache()
     try:
         parts.scorer.to(device).eval()
-        scores = parts.scorer.score_paths(paths, prompts)
+        if pickscore:
+            scores = parts.scorer(first_frames, prompts, microbatch=c.reward.options["microbatch"])
+        else:
+            scores = parts.scorer.score_paths(paths, prompts)
     finally:
         parts.scorer.to("cpu")
         if device.type == "cuda":
