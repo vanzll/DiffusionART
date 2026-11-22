@@ -20,6 +20,7 @@
 
 <p align="center">
   <a href="#method">Method</a> &nbsp;/&nbsp;
+  <a href="#training-recipes-by-gpu-count">Training Recipes</a> &nbsp;/&nbsp;
   <a href="#quick-start">Quick Start</a> &nbsp;/&nbsp;
   <a href="docs/faq.md">FAQ</a> &nbsp;/&nbsp;
   <a href="docs/README.md">Documentation</a>
@@ -32,7 +33,7 @@
 
 - ⚡ **[2026.10.25]** **[Diffusion-ART-Flash](#diffusionart-flash) is supported.** Training only high-noise timesteps achieves comparable performance to all-timesteps training with substantially less training time cost.
 
-- 🎉 **[2026.10.22]** [MiniMax-H3](#minimax-h3) is now supported for **text-to-audio/video (omni)** training, with [DiffusionART post-training recipes](#minimax-h3-recipes).
+- 🎉 **[2026.10.22]** [MiniMax-H3](#minimax-h3) is now supported for **text-to-audio/video (omni)** training, with [DiffusionART post-training recipes](#training-recipes-by-gpu-count).
 
 - 🥇 **[2026.10.12]** DiffusionART ranked **#1 on [Hugging Face Daily Papers](#paper)**!
 
@@ -193,7 +194,25 @@ Each model card includes its inference setup, base-model requirements and exampl
 | **Feedback** | ✅ Scalar rewards<br>✅ Pairwise preferences (Hunyuan ART)<br>✅ Configurable rollout groups: K = 2, 4, 8 |
 | **Training** | ✅ LoRA / full-parameter tuning<br>✅ DDP / FSDP<br>✅ Checkpoint resume / local evaluation artifacts |
 
-Train **HunyuanVideo-13B on one 8-GPU node** with LoRA and first-frame PickScore. Choose [DiffusionART](configs/examples/hunyuan_art_lora_8gpu.yaml), [DiffusionNFT](configs/examples/hunyuan_nft_lora_8gpu.yaml) or [Flow-GRPO-Fast](configs/examples/hunyuan_fast_lora_8gpu.yaml). [Setup and training commands](docs/hunyuan-runner.md#single-node-hunyuanvideo-lora)
+## Training recipes by GPU count
+
+Choose a row for your hardware and task. **Each recipe link opens the YAML you pass to `visual-rl --config`.** The YAML sets the model, reward, sampler and optimizer. The launcher sets the number of GPUs and nodes.
+
+| GPUs | Model and task | Training setup | Recipe YAML |
+| --- | --- | --- | --- |
+| 1 | SD3.5-M or FLUX.1-dev · image | LoRA · PickScore starter | [SD3.5-M ART](configs/examples/sd3_pickscore.yaml) · [FLUX ART](configs/examples/flux_pickscore.yaml) |
+| 8 (1 × 8) | SD3.5-M · image | LoRA · ART on four reward settings | [PickScore](configs/paper/image/sd3_pickscore_art.yaml) · [OCR](configs/paper/image/sd3_ocr_art.yaml) · [GenEval](configs/paper/image/sd3_geneval_art.yaml) · [Multi-reward](configs/paper/image/sd3_multireward_art.yaml) |
+| 8 (1 × 8) | FLUX.1-dev · image | LoRA · GenEval | [ART](configs/paper/image/flux_geneval_art.yaml) · [NFT](configs/paper/image/flux_geneval_nft_ema.yaml) · [Flow-GRPO-Fast](configs/paper/image/flux_geneval_fast.yaml) · [Flow-DPPO](configs/paper/image/flux_geneval_dppo.yaml) |
+| **8 (1 × 8)** | **HunyuanVideo-13B · text to video** | LoRA r64 · 1280×720, 5 frames · first-frame PickScore | [ART](configs/examples/hunyuan_art_lora_8gpu.yaml) · [NFT](configs/examples/hunyuan_nft_lora_8gpu.yaml) · [Flow-GRPO-Fast](configs/examples/hunyuan_fast_lora_8gpu.yaml) |
+| 8 (1 × 8) | MiniMax-H3 · text to audio/video | LoRA r32 · 480p, 124 frames · six rewards | [ART-Flash](configs/examples/minimax_h3_art_posttrain_lora_8gpu.yaml) |
+| 8 (1 × 8) | MiniMax-H3 · text to audio/video | Full · 768p, 124 frames · 8-update integration example | [ART](configs/examples/minimax_h3_art_full_8gpu.yaml) |
+| 32 (4 × 8) | HunyuanVideo-13B · text to video | Full · 480×480, 53 frames · VideoReward | [ART](configs/paper/video/hunyuan_art_721.yaml) · [NFT](configs/paper/video/hunyuan_nft_ema_721.yaml) · [Flow-GRPO-Fast](configs/paper/video/hunyuan_fast_721.yaml) · [DanceGRPO](configs/paper/video/hunyuan_dance_721.yaml) |
+| 32 (4 × 8) | HunyuanVideo-13B · preference training | Full · visual quality · K samples per prompt | [Scalar K=8](configs/paper/video/hunyuan_scalar_vq_k8.yaml) · Pairwise [K=2](configs/paper/video/hunyuan_pairwise_vq_k2.yaml) / [K=4](configs/paper/video/hunyuan_pairwise_vq_k4.yaml) / [K=8](configs/paper/video/hunyuan_pairwise_vq_k8.yaml) |
+| 32 (4 × 8) | Wan2.1-I2V-14B · image to video | Full · 640×400, 53 frames · VideoReward · generated evaluation references | [ART](configs/examples/wan_art_online_eval.yaml) · [NFT](configs/examples/wan_nft_online_eval.yaml) · [Flow-GRPO-Fast](configs/examples/wan_fast_online_eval.yaml) · [DanceGRPO](configs/examples/wan_dance_online_eval.yaml) · [ReFL](configs/examples/wan_refl_online_eval.yaml) |
+| 32 (4 × 8) | MiniMax-H3 · text to audio/video | Full · 480p, 124 frames · six rewards | [ART-Flash](configs/examples/minimax_h3_art_posttrain_full_32gpu.yaml) · [Flow-GRPO-Fast](configs/examples/minimax_h3_fast_routed_480p_full_32gpu.yaml) |
+| 64 (8 × 8) | MiniMax-H3 · text to audio/video | Full · context parallelism 2 · 480p, 124 frames · six rewards | [ART-Flash](configs/examples/minimax_h3_art_posttrain_full_64gpu_cp2.yaml) |
+
+GPU counts describe launch layouts. Check per-GPU memory for the listed resolution, clip length and microbatch size. All three 8-GPU HunyuanVideo recipes completed a full rollout and optimizer updates on 8×H800. For model-specific setup, see [HunyuanVideo](docs/hunyuan-runner.md#single-node-hunyuanvideo-lora), [Wan](docs/wan-runner.md) and [MiniMax-H3](docs/minimax-h3.md#480p-ten-step-art-post-training). Additional baselines and ablations are listed in the [image](docs/paper-image.md) and [video](docs/paper-video.md) guides.
 
 ## Quick Start
 
@@ -256,16 +275,13 @@ uv run --locked --extra diffusers visual-rl \
   --resume latest --max-updates 1500
 ```
 
-Video recipes use the same entrypoint inside the video environment.
-For shared multi-node preparation, generate a fresh launch ID once:
+For video, activate the model's environment and pass its recipe to the same command. This example runs ART on one 8-GPU node.
 
 ```bash
-python -c 'import uuid; print(uuid.uuid4().hex)'
+visual-rl --config configs/examples/hunyuan_art_lora_8gpu.yaml --nproc-per-node 8
 ```
 
-Export that **same value** as `PREPARATION_RUN_ID` on every node. This lets
-peers reuse one full asset validation within this launch; use a new ID on restart.
-T2V (400 updates):
+For a multi-node run, launch once per node. Set `NODE_RANK` per node and share `MASTER_ADDR`, the asset/output directories and a fresh `PREPARATION_RUN_ID` across nodes. Generate the ID once with `python -c 'import uuid; print(uuid.uuid4().hex)'`. This example runs HunyuanVideo on four 8-GPU nodes.
 
 ```bash
 visual-rl --config configs/paper/video/hunyuan_art_721.yaml \
@@ -274,24 +290,7 @@ visual-rl --config configs/paper/video/hunyuan_art_721.yaml \
   --rendezvous-timeout-seconds 7200
 ```
 
-I2V (400 updates, automatically generated evaluation references):
-
-```bash
-visual-rl --config configs/examples/wan_art_online_eval.yaml \
-  --nproc-per-node 8 --nnodes 4 --node-rank "$NODE_RANK" \
-  --master-addr "$MASTER_ADDR" --preparation-run-id "$PREPARATION_RUN_ID" \
-  --rendezvous-timeout-seconds 7200
-```
-
-Run on each node with its rank and a shared asset/output root. Models and
-prompt data are prepared from HF automatically. I2V generates FLUX evaluation
-images on first use and caches them for later evaluations and resume; no
-pre-existing image manifest is needed. See the
-[I2V guide](docs/wan-runner.md#automatic-evaluation-references) for baseline
-recipes and shared reference caches.
-Add `--prepare-only` to prepare without training, or `--validate` for network-free checks. See
-[distributed execution](docs/distributed-execution.md) for multi-node launches and
-[checkpoint/resume](docs/checkpoint-resume.md) for recovery and evaluation.
+Use `--prepare-only` to stage assets or `--validate` to check a configuration offline. See [distributed execution](docs/distributed-execution.md) and [checkpoint/resume](docs/checkpoint-resume.md).
 
 #### MiniMax-H3
 
@@ -311,19 +310,13 @@ Each reward is centered and divided by its own prompt-group standard deviation, 
 
 <p align="center"><em>Full-parameter training. Six individual reward components before prompt-group normalization.</em></p>
 
-The curves above use **Full64 (CP2)**. Full32 uses a smaller update microbatch.
+The curves above use **Full64 (CP2)**.
 
 **Note:** Open-source reward models cannot fully capture human preferences for visual outputs. As a result, reward scores can improve even when the generated videos remain visually unsatisfactory. For research purposes, we suggest using reward scores as the primary evaluation metric; for industrial applications, we recommend using higher-quality reward models.
 
 <a id="minimax-h3-recipes"></a>
 
-See [setup and launch instructions](docs/minimax-h3.md#480p-ten-step-art-post-training):
-
-| GPUs | Training | Rollout / update microbatch | Recipe |
-|---:|---|---:|---|
-| 32 | Full parameters | 8 / 4 | [Full32](configs/examples/minimax_h3_art_posttrain_full_32gpu.yaml) |
-| 64 | Full parameters, CP2 | 8 / 8 | [Full64](configs/examples/minimax_h3_art_posttrain_full_64gpu_cp2.yaml) |
-| 8 | LoRA (rank 32) | 1 / 1 | [LoRA8](configs/examples/minimax_h3_art_posttrain_lora_8gpu.yaml) |
+Choose the 8-, 32- or 64-GPU YAML in [Training recipes by GPU count](#training-recipes-by-gpu-count). Rollout/update microbatches are 1/1 for LoRA8, 8/4 for Full32 and 8/8 for Full64. [MiniMax-H3 setup and launch instructions](docs/minimax-h3.md#480p-ten-step-art-post-training)
 
 ## Configure Your Experiment
 
@@ -379,8 +372,8 @@ the training data. Both disjoint update batches contain K/2 trajectories from
 every prompt: for example, two batches of 32 prompts with K/2 trajectories each,
 rather than 16 prompts with K trajectories each. Two-update ART requires even K.
 Each trajectory keeps all its selected training timesteps; zero-guidance and
-masked rows remain in the original loss denominator. Images use a random split
-within each prompt; videos retain trajectory order. This changes older image
+masked rows remain in the original loss denominator. Images and the 8-GPU HunyuanVideo LoRA recipe shuffle within each prompt.
+The full-parameter video paper recipes retain trajectory order. This changes older image
 splits and multi-prompt-per-rank video splits, not the historical video split
 with one prompt per rank. It is not a claim that this split is empirically optimal.
 

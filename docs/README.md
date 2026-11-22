@@ -9,6 +9,7 @@ development-status documents are listed separately.
 
 | Goal | Guide |
 | --- | --- |
+| Choose a training recipe for your GPUs | [Recipes by GPU count](../README.md#training-recipes-by-gpu-count) |
 | Install and check the framework | [Quick start](../README.md#quick-start) |
 | Train SD3.5 | [SD3 setup and training](sd3-runner.md) |
 | Train FLUX | [FLUX setup and training](flux-runner.md) |
