@@ -14,7 +14,7 @@ import torch
 from ..evaluation.manifest import file_sha256
 from ..rewards.video_reward import VideoReward
 from .finetune import FineTuneConfig, prepare_policy
-from .hunyuan import HunyuanVideoAdapter
+from .hunyuan import HunyuanVideoAdapter, HunyuanVideoConfig
 
 NATIVE_REVISION = "15cc71d53cc2e6e18a68ee607d5fb6ba9a99e344"
 
@@ -71,16 +71,26 @@ def load_adapter(c, device):
     from fastvideo.utils.parallel_states import initialize_sequence_parallel_state
 
     initialize_sequence_parallel_state(1)
-    common = dict(revision=c.model.revision, local_files_only=True, torch_dtype=torch.float32)
-    transformer = HunyuanVideoTransformer3DModel.from_pretrained(c.model.checkpoint, subfolder="transformer", **common)
+    common = dict(revision=c.model.revision, local_files_only=True)
+    finetune = FineTuneConfig(**c.model.options["finetune"])
+    sharded_lora = c.runtime.distributed == "fsdp" and finetune.mode == "lora"
+    transformer = HunyuanVideoTransformer3DModel.from_pretrained(
+        c.model.checkpoint, subfolder="transformer",
+        torch_dtype=torch.bfloat16 if sharded_lora else torch.float32, **common,
+    )
     if c.model.options["gradient_checkpointing"] and c.runtime.distributed != "fsdp":
         # This pinned native model owns its non-reentrant checkpoint calls;
         # newer Diffusers enable_gradient_checkpointing uses an incompatible hook.
         transformer.gradient_checkpointing = True
-    transformer = prepare_policy(transformer, FineTuneConfig(**c.model.options["finetune"]))
-    vae = AutoencoderKLHunyuanVideo.from_pretrained(c.model.checkpoint, subfolder="vae", **common)
+    transformer = prepare_policy(transformer, finetune)
+    vae = AutoencoderKLHunyuanVideo.from_pretrained(
+        c.model.checkpoint, subfolder="vae", torch_dtype=torch.float32, **common)
     vae.enable_tiling()
-    adapter = HunyuanVideoAdapter(transformer, vae).eval()
+    config = HunyuanVideoConfig(
+        embedded_guidance_raw=c.model.options.get("embedded_guidance_raw", HunyuanVideoConfig.embedded_guidance_raw),
+        continuous_timesteps=c.model.options.get("continuous_timesteps", False),
+    )
+    adapter = HunyuanVideoAdapter(transformer, vae, config).eval()
     if c.runtime.distributed != "fsdp":
         adapter.transformer.to(device)
     return adapter
