@@ -27,7 +27,7 @@
 </p>
 
 ## News
-- 📰 **[2026.11.13]** Diffusion-ART is now supported by [RLinf](https://github.com/RLinf/RLinf)!
+- 📰 **[2026.11.13]** Diffusion-ART is now supported by [RLinf](https://github.com/RLinf/RLinf) and [Flow-Factory](https://github.com/X-GenGroup/Flow-Factory)!
 
 - 📰 **[2026.10.30]** Diffusion-ART is reported by [机器之心](https://mp.weixin.qq.com/s/i7VJo2lvycS6jppsJMcWjQ).
 
